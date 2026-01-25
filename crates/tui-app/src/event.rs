@@ -4,7 +4,7 @@
 
 use crossterm::event::{KeyEvent, KeyEventKind};
 use futures::StreamExt;
-use mdns::{ManagedDiscoveryEvent, MdnsError};
+use mdns::{ManagedDiscoveryEvent, MdnsError, ChatEvent};
 use std::time::Duration;
 
 /// 应用事件
@@ -14,6 +14,8 @@ pub enum Event {
     Input(KeyEvent),
     /// 发现事件
     Discovery(ManagedDiscoveryEvent),
+    /// 聊天事件
+    Chat(ChatEvent),
     /// 定时刷新事件
     Tick,
 }

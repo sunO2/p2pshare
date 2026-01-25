@@ -7,10 +7,11 @@
 3. [项目结构](#项目结构)
 4. [架构设计](#架构设计)
 5. [核心模块](#核心模块)
-6. [API 参考](#api-参考)
-7. [配置说明](#配置说明)
-8. [使用示例](#使用示例)
-9. [故障排查](#故障排查)
+6. [TUI 应用](#tui-应用)
+7. [API 参考](#api-参考)
+8. [配置说明](#配置说明)
+9. [使用示例](#使用示例)
+10. [故障排查](#故障排查)
 
 ---
 
@@ -28,6 +29,8 @@
 - **节点管理器**: 集中管理验证通过的节点，支持超时清理
 - **事件去重**: 智能去重重复的发现和验证事件
 - **日志系统**: 支持文件和控制台双重输出，按天滚动
+- **TUI 图形界面**: 基于 ratatui 的现代化终端用户界面，支持三面板焦点切换
+- **P2P 聊天功能**: 局域网内点对点聊天，支持一对一和一对多群聊，消息左右分栏显示
 
 ### 技术栈
 
@@ -38,6 +41,8 @@
 | tokio | 1.x | 异步运行时 |
 | tracing | 0.1 | 日志记录 |
 | tracing-appender | 0.2 | 日志文件输出 |
+| ratatui | 0.29 | TUI 框架 |
+| crossterm | 0.28 | 终端后端 |
 
 ---
 
@@ -60,10 +65,14 @@ cargo run -- "我的设备"
 # 查看帮助
 cargo run -- --help
 
-# 运行并指定设备名称
+# 控制台模式运行
 cargo run -- "客厅电视"
 cargo run -- "卧室 NAS"
 cargo run -- "我的开发机"
+
+# TUI 模式运行
+cargo run -- "客厅电视" --tui
+cargo run -- "卧室 NAS" -t
 ```
 
 ### 运行多个实例
@@ -121,23 +130,41 @@ localp2p/
 │   ├── main.rs             # 示例程序入口
 │   └── logging.rs          # 日志配置模块
 └── crates/
-    └── mdns/               # mdns crate（独立库）
-        ├── Cargo.toml      # mdns crate 配置
+    ├── mdns/               # mdns crate（独立库）
+    │   ├── Cargo.toml      # mdns crate 配置
+    │   └── src/
+    │       ├── lib.rs                  # 库入口
+    │       ├── config.rs               # 配置模块
+    │       ├── discovery.rs            # 基础服务发现
+    │       ├── publisher.rs            # 服务发布
+    │       ├── node.rs                 # 节点管理
+    │       ├── user_info.rs            # 用户信息协议
+    │       ├── managed_discovery.rs    # 管理式服务发现（核心）
+    │       └── chat/                   # 聊天模块
+    │           ├── mod.rs              # 模块入口
+    │           ├── message.rs          # 消息类型定义
+    │           ├── traits.rs           # ChatExtension trait
+    │           ├── manager.rs          # ChatManager
+    │           └── codec.rs            # ChatCodec
+    └── tui-app/            # TUI 应用 crate
+        ├── Cargo.toml      # tui-app crate 配置
         └── src/
             ├── lib.rs                  # 库入口
-            ├── config.rs               # 配置模块
-            ├── discovery.rs            # 基础服务发现
-            ├── publisher.rs            # 服务发布
-            ├── node.rs                 # 节点管理
-            ├── user_info.rs            # 用户信息协议
-            └── managed_discovery.rs    # 管理式服务发现（核心）
+            ├── app.rs                  # 主应用逻辑
+            ├── event.rs                # 事件处理
+            ├── ui.rs                   # UI 渲染
+            └── components/
+                ├── mod.rs              # 组件模块
+                ├── node_list.rs        # 节点列表组件
+                ├── chat_panel.rs       # 聊天面板组件
+                └── file_picker.rs      # 文件选择组件（占位）
 ```
 
 ### Workspace 配置
 
 ```toml
 [workspace]
-members = ["crates/mdns"]
+members = ["crates/mdns", "crates/tui-app"]
 resolver = "2"
 
 [workspace.package]
@@ -512,6 +539,246 @@ pub struct UserInfoCodec;
 [4 bytes: 长度][JSON 数据: UserInfo/UserInfoRequest]
 ```
 
+### 5. chat/ - 聊天模块
+
+聊天模块提供局域网内的点对点聊天功能，支持一对一和一对多群聊。
+
+#### ChatMessage - 聊天消息类型
+
+```rust
+pub enum ChatMessage {
+    Text(TextMessage),           // 文本消息
+    TypingIndicator(TypingIndicator),  // 正在输入提示
+    Ack(MessageAck),              // 消息确认
+}
+```
+
+#### TextMessage - 文本消息
+
+```rust
+pub struct TextMessage {
+    pub id: String,               // 消息唯一 ID（UUID）
+    pub sender_peer_id: String,   // 发送者的 Peer ID
+    pub content: String,          // 消息内容
+    pub timestamp: i64,           // Unix 时间戳（毫秒）
+    pub reply_to: Option<String>, // 回复的消息 ID（可选）
+}
+```
+
+**方法**:
+- `ChatMessage::text(content)` - 创建文本消息
+- `with_sender(peer_id)` - 设置发送者 Peer ID
+- `with_reply_to(message_id)` - 设置为回复消息
+
+#### ChatManager - 聊天管理器
+
+```rust
+pub struct ChatManager {
+    node_manager: Arc<NodeManager>,
+    local_peer_id: PeerId,
+    sessions: RwLock<HashMap<PeerId, ChatSession>>,
+    event_tx: mpsc::UnboundedSender<ChatEvent>,
+}
+```
+
+**主要方法**:
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `send(target, message)` | 发送消息给单个节点 | `Result<(), ChatError>` |
+| `broadcast(targets, message)` | 广播消息给多个节点 | `Result<(), ChatError>` |
+| `handle_received_message(from, message)` | 处理收到的消息 | `()` |
+| `get_history(peer_id)` | 获取会话的消息历史 | `Vec<ChatMessage>` |
+| `available_peers()` | 获取可聊天节点 | `Vec<VerifiedNode>` |
+
+#### ChatExtension - 聊天扩展 Trait
+
+为 `ManagedDiscovery` 提供可选的聊天能力扩展。
+
+```rust
+#[async_trait::async_trait]
+pub trait ChatExtension {
+    /// 启用聊天功能
+    async fn enable_chat(&mut self) -> Result<(), ChatError>;
+
+    /// 发送消息给指定节点
+    async fn send_message(&mut self, target: PeerId, message: ChatMessage) -> Result<(), ChatError>;
+
+    /// 广播消息给多个节点
+    async fn broadcast_message(&mut self, targets: Vec<PeerId>, message: ChatMessage) -> Result<(), ChatError>;
+
+    /// 获取聊天管理器
+    fn chat_manager(&self) -> Option<Arc<ChatManager>>;
+}
+```
+
+**使用示例**:
+
+```rust
+use mdns::{ManagedDiscovery, ChatExtension, ChatMessage};
+
+// 启用聊天功能
+discovery.enable_chat().await?;
+
+// 发送消息
+let peer_id: PeerId = "12D3KooW...".parse()?;
+let message = ChatMessage::text("Hello!".to_string());
+discovery.send_message(peer_id, message).await?;
+
+// 广播消息（一对多）
+let targets = vec![peer_id1, peer_id2];
+discovery.broadcast_message(targets, message).await?;
+```
+
+#### ChatEvent - 聊天事件
+
+```rust
+pub enum ChatEvent {
+    MessageReceived { from: PeerId, message: ChatMessage },
+    MessageSent { to: PeerId, message_id: String },
+    MessageAcknowledged { from: PeerId, message_id: String },
+    PeerTyping { from: PeerId, is_typing: bool },
+    MessageFailed { to: PeerId, message_id: String, error: String },
+    SessionEstablished { peer_id: PeerId },
+    SessionClosed { peer_id: PeerId },
+}
+```
+
+---
+
+## TUI 应用
+
+### TUI 界面布局
+
+TUI 应用采用三面板布局，同时显示三个功能区域：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Header: Local P2P - 设备名称                            │
+├─────────────┬──────────────────────────┬────────────────┤
+│ [1] 设备列表 │ [2] 聊天                 │ [3] 文件选择   │
+│ (上列表)    │                          │                │
+│ (下信息)    │                          │                │
+│             │                          │                │
+├─────────────┴──────────────────────────┴────────────────┤
+│ [Tab] 切换焦点 | 当前焦点: 设备列表 | [q] 退出           │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 面板功能
+
+| 面板 | 功能 | 操作 |
+|------|------|------|
+| **[1] 设备列表** | 显示已验证的节点，支持单选/多选 | ↑↓ 选择，Enter 确认，Space 多选 |
+| **[2] 聊天** | 与选中节点进行聊天，消息左右分栏显示 | 在面板1选择后切换到面板2即可输入消息 |
+| **[3] 文件选择** | 选择文件分享给选中节点（占位） | 待实现 |
+
+### 焦点切换
+
+- 按 `Tab` 键在三个面板间切换焦点
+- 焦点面板显示绿色边框和 `*` 标记
+- 非焦点面板显示灰色边框
+- 方向键仅在焦点在面板1时有效
+
+### TuiApp 结构
+
+```rust
+pub struct TuiApp {
+    node_manager: Arc<NodeManager>,
+    node_list_state: NodeListState,
+    user_info_map: HashMap<PeerId, UserInfo>,
+    device_name: String,
+    local_peer_id: PeerId,
+    current_tab: AppTab,      // 当前焦点面板
+    running: bool,
+}
+```
+
+### AppTab 枚举
+
+```rust
+pub enum AppTab {
+    Panel1,     // 设备列表
+    Panel2,     // 聊天
+    Panel3,     // 文件选择
+}
+```
+
+### 组件说明
+
+#### NodeList - 节点列表组件
+
+```rust
+pub struct NodeList<'a> {
+    pub state: &'a NodeListState,
+    pub title: String,
+    pub detailed: bool,
+    pub border_style: Style,
+}
+```
+
+**方法**:
+- `new(state)` - 创建列表
+- `title(title)` - 设置标题
+- `detailed(bool)` - 是否显示详细信息
+- `border_style(style)` - 设置边框样式
+
+#### ChatComponent - 聊天组件（占位）
+
+```rust
+pub struct ChatComponent<'a> {
+    pub message: &'a str,
+    pub title: String,
+    pub border_style: Style,
+}
+```
+
+#### FilePickerComponent - 文件选择组件（占位）
+
+```rust
+pub struct FilePickerComponent<'a> {
+    pub message: &'a str,
+    pub title: String,
+    pub border_style: Style,
+}
+```
+
+### 运行 TUI 模式
+
+```bash
+# 启动 TUI 界面
+cargo run -- "设备名称" --tui
+
+# 或使用简写
+cargo run -- "设备名称" -t
+```
+
+### TUI 依赖
+
+```toml
+[dependencies]
+# 依赖 mdns crate
+mdns = { path = "../mdns" }
+
+# libp2p
+libp2p = { version = "0.56", features = ["identify"] }
+
+# TUI 相关依赖
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# 日志
+tracing = "0.1"
+
+# 其他依赖
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+```
+
 ---
 
 ## API 参考
@@ -579,6 +846,7 @@ async-trait = "0.1"     # async trait
 ```toml
 [dependencies]
 mdns = { path = "crates/mdns" }
+tui-app = { path = "crates/tui-app" }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -736,6 +1004,25 @@ if let Some(health) = discovery.get_health(&peer_id) {
     }
 }
 ```
+
+### 示例 6: TUI 模式运行
+
+```bash
+# 启动 TUI 界面
+cargo run -- "我的设备" --tui
+```
+
+**TUI 操作说明**:
+- `Tab` - 切换焦点到下一个面板
+- `↑↓` - 在设备列表中移动光标（仅在面板1有效）
+- `Enter` - 确认选择（仅在面板1有效）
+- `Space` - 多选切换（仅在面板1有效）
+- `q` 或 `Ctrl+C` - 退出
+
+**面板说明**:
+- 面板1（设备列表）：显示已验证的节点，上部分显示列表，下部分显示当前选中节点的详细信息
+- 面板2（聊天）：与选中节点进行聊天（占位，功能待实现）
+- 面板3（文件选择）：选择文件分享给选中节点（占位，功能待实现）
 
 ---
 

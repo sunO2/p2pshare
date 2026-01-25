@@ -104,6 +104,15 @@ impl NodeListState {
             .collect()
     }
 
+    /// 获取选中节点的 Peer ID 列表
+    pub fn get_selected_peer_ids(&self) -> Vec<PeerId> {
+        self.selected
+            .iter()
+            .filter_map(|&i| self.items.get(i))
+            .map(|node| node.peer_id)
+            .collect()
+    }
+
     /// 获取当前光标项
     pub fn get_current(&self) -> Option<&NodeItem> {
         self.items.get(self.cursor)

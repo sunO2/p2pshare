@@ -2,14 +2,14 @@
 //!
 //! 管理应用状态和主事件循环。
 
-use crate::components::{NodeItem, NodeListState, NodeStatus, AppTab};
+use crate::components::{NodeItem, NodeListState, NodeStatus, AppTab, ChatPanelState};
 use crate::event::{AppResult, Event};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use futures::StreamExt;
 use libp2p::PeerId;
 use mdns::{
     ManagedDiscovery, ManagedDiscoveryEvent, NodeManager, NodeManagerConfig,
-    HealthCheckConfig, UserInfo,
+    HealthCheckConfig, UserInfo, ChatExtension, ChatMessage, ChatEvent,
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -33,6 +33,10 @@ pub struct TuiApp {
     local_peer_id: PeerId,
     /// 当前选中的 Tab
     current_tab: AppTab,
+    /// 聊天面板状态
+    chat_panel_state: ChatPanelState,
+    /// 发送消息的命令发送器
+    cmd_tx: Option<mpsc::Sender<(Vec<PeerId>, ChatMessage)>>,
     /// 运行状态
     running: bool,
 }
@@ -83,6 +87,8 @@ impl TuiApp {
             device_name,
             local_peer_id,
             current_tab: AppTab::Panel1,
+            chat_panel_state: ChatPanelState::new(local_peer_id),
+            cmd_tx: None,
             running: true,
         })
     }
@@ -106,6 +112,12 @@ impl TuiApp {
 
         // 创建事件通道
         let (event_tx, mut event_rx) = mpsc::channel(100);
+
+        // 创建发送消息的命令通道 (PeerId, ChatMessage)
+        let (cmd_tx, mut cmd_rx) = mpsc::channel::<(Vec<PeerId>, ChatMessage)>(100);
+
+        // 保存 cmd_tx 到 TuiApp
+        self.cmd_tx = Some(cmd_tx.clone());
 
         // 创建发现器并启动发现任务
         let discovery_tx = event_tx.clone();
@@ -143,17 +155,51 @@ impl TuiApp {
 
             let mut discovery = discovery.unwrap();
 
-            // 持续处理发现事件
+            // 启用聊天功能
+            if let Err(err) = discovery.enable_chat().await {
+                tracing::error!("启用聊天功能失败: {:?}", err);
+                return;
+            }
+
+            // 获取聊天事件接收器
+            let mut chat_event_rx = match discovery.take_chat_events() {
+                Some(rx) => rx,
+                None => {
+                    tracing::error!("无法获取聊天事件接收器");
+                    return;
+                }
+            };
+
+            // 使用 select! 同时监听发现事件、发送命令和聊天事件
             loop {
-                match discovery.run().await {
-                    Ok(event) => {
-                        if discovery_tx.send(Event::Discovery(event)).await.is_err() {
-                            break;
+                tokio::select! {
+                    // 处理发现事件
+                    event_result = discovery.run() => {
+                        match event_result {
+                            Ok(event) => {
+                                if discovery_tx.send(Event::Discovery(event)).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(err) => {
+                                tracing::error!("发现事件错误: {:?}", err);
+                                // 继续运行，不中断
+                            }
                         }
                     }
-                    Err(err) => {
-                        tracing::error!("发现事件错误: {:?}", err);
-                        // 继续运行，不中断
+                    // 处理发送消息命令
+                    Some((targets, message)) = cmd_rx.recv() => {
+                        tracing::info!("发送消息给 {} 个目标", targets.len());
+                        if let Err(err) = discovery.broadcast_message(targets, message).await {
+                            tracing::error!("发送消息失败: {:?}", err);
+                        }
+                    }
+                    // 处理聊天事件
+                    Some(chat_event) = chat_event_rx.recv() => {
+                        tracing::debug!("转发聊天事件: {:?}", chat_event);
+                        if discovery_tx.send(Event::Chat(chat_event)).await.is_err() {
+                            break;
+                        }
                     }
                 }
             }
@@ -206,6 +252,9 @@ impl TuiApp {
                 Some(Event::Discovery(discovery_event)) => {
                     self.handle_discovery_event(discovery_event).await;
                 }
+                Some(Event::Chat(chat_event)) => {
+                    self.handle_chat_event(chat_event).await;
+                }
                 Some(Event::Tick) => {
                     self.update();
                 }
@@ -238,6 +287,13 @@ impl TuiApp {
             // Tab 切换焦点
             KeyCode::Tab => {
                 self.current_tab = self.current_tab.next();
+                // 如果从面板1切换到面板2，设置选中的节点为聊天对象
+                if self.current_tab == AppTab::Panel2 {
+                    let selected_peers = self.node_list_state.get_selected_peer_ids();
+                    if !selected_peers.is_empty() {
+                        self.chat_panel_state.set_active_chats(selected_peers);
+                    }
+                }
             }
             // 方向键操作（仅在焦点在面板1时有效）
             KeyCode::Up if self.current_tab == AppTab::Panel1 => {
@@ -251,6 +307,47 @@ impl TuiApp {
             }
             KeyCode::Char(' ') if self.current_tab == AppTab::Panel1 => {
                 self.node_list_state.toggle_selection();
+            }
+            // 聊天面板输入处理（当焦点在面板2时）
+            KeyCode::Enter if self.current_tab == AppTab::Panel2 => {
+                // 发送消息
+                let input = self.chat_panel_state.take_input();
+                if !input.is_empty() {
+                    let message = ChatMessage::text(input.clone());
+                    let targets = self.chat_panel_state.active_chats().to_vec();
+
+                    if !targets.is_empty() {
+                        // 先添加到聊天历史（用于立即显示），使用本地 Peer ID
+                        self.chat_panel_state.add_message(self.local_peer_id, message.clone());
+
+                        // 通过 cmd_tx 发送消息到 discovery 任务
+                        if let Some(ref cmd_tx) = self.cmd_tx {
+                            if let Err(err) = cmd_tx.try_send((targets, message)) {
+                                tracing::error!("发送消息失败: {:?}", err);
+                            }
+                        }
+                    } else {
+                        tracing::warn!("没有选择聊天对象");
+                    }
+                }
+            }
+            KeyCode::Backspace if self.current_tab == AppTab::Panel2 => {
+                self.chat_panel_state.handle_backspace();
+            }
+            KeyCode::Left if self.current_tab == AppTab::Panel2 => {
+                self.chat_panel_state.move_cursor_left();
+            }
+            KeyCode::Right if self.current_tab == AppTab::Panel2 => {
+                self.chat_panel_state.move_cursor_right();
+            }
+            KeyCode::Up if self.current_tab == AppTab::Panel2 => {
+                self.chat_panel_state.scroll_up();
+            }
+            KeyCode::Down if self.current_tab == AppTab::Panel2 => {
+                self.chat_panel_state.scroll_down();
+            }
+            KeyCode::Char(c) if self.current_tab == AppTab::Panel2 => {
+                self.chat_panel_state.handle_input_char(c);
             }
             _ => {}
         }
@@ -306,6 +403,25 @@ impl TuiApp {
                 tracing::info!("节点离线: {}", peer_id);
                 self.node_list_state.remove_node(&peer_id);
                 self.user_info_map.remove(&peer_id);
+            }
+        }
+    }
+
+    /// 处理聊天事件
+    async fn handle_chat_event(&mut self, event: ChatEvent) {
+        match event {
+            ChatEvent::MessageReceived { from, message } => {
+                tracing::info!("收到来自 {} 的消息", from);
+                self.chat_panel_state.add_message(from, message);
+            }
+            ChatEvent::MessageSent { to, message_id } => {
+                tracing::info!("消息 {} 已发送给 {}", message_id, to);
+            }
+            ChatEvent::PeerTyping { from, is_typing } => {
+                self.chat_panel_state.set_peer_typing(from, is_typing);
+            }
+            _ => {
+                tracing::debug!("未处理的聊天事件: {:?}", event);
             }
         }
     }
@@ -369,6 +485,11 @@ impl TuiApp {
     /// 获取用户信息
     pub fn get_user_info(&self, peer_id: &PeerId) -> Option<&mdns::UserInfo> {
         self.user_info_map.get(peer_id)
+    }
+
+    /// 获取聊天面板状态
+    pub fn chat_panel_state(&self) -> &ChatPanelState {
+        &self.chat_panel_state
     }
 }
 

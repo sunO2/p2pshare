@@ -10,6 +10,7 @@ pub mod publisher;
 pub mod node;
 pub mod managed_discovery;
 pub mod user_info;
+pub mod chat;
 
 pub use config::{MdnsConfig, ServiceInfo};
 pub use discovery::{MdnsDiscovery, DiscoveredPeer, DiscoveredEvent};
@@ -23,6 +24,12 @@ pub use managed_discovery::{
     HealthCheckConfig,
 };
 pub use user_info::UserInfo;
+
+// 聊天模块公共 API
+pub use chat::{
+    ChatMessage, TextMessage, TypingIndicator, MessageAck,
+    ChatExtension, ChatEvent, ChatError, ChatManager, ChatSession,
+};
 
 /// mDNS 相关错误
 #[derive(Error, Debug)]

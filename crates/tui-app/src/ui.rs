@@ -2,7 +2,7 @@
 //!
 //! 负责整个应用的 UI 渲染。
 
-use crate::components::{ChatComponent, FilePickerComponent, NodeList, AppTab};
+use crate::components::{ChatPanel, FilePickerComponent, NodeList, AppTab};
 use crate::TuiApp;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -149,40 +149,19 @@ fn draw_current_node_info(f: &mut Frame, area: Rect, app: &TuiApp, has_focus: bo
 
 /// 绘制面板 2：聊天
 fn draw_panel_2_chat(f: &mut Frame, area: Rect, app: &TuiApp) {
-    let selected_node = app.node_list_state().get_current();
     let has_focus = app.current_tab() == AppTab::Panel2;
-    let border_style = if has_focus {
-        Style::default().fg(Color::Green)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
 
-    if selected_node.is_some() {
-        let node = selected_node.unwrap();
-        let msg = format!("与 {} 的聊天", node.display_name);
-        let title = if has_focus { "[2] 聊天 *" } else { "[2] 聊天" };
-        let chat = ChatComponent::new().message(msg.as_str()).title(title).border_style(border_style);
-        f.render_widget(chat, area);
-    } else {
-        let hint_text = vec![
-            Line::from("聊天"),
-            Line::from(""),
-            Line::from("请先在设备列表中选择要聊天的设备"),
-        ];
+    // 使用 ChatPanel 组件（包含消息列表和输入框）
+    let chat_panel = ChatPanel::new(app.chat_panel_state(), app.local_peer_id())
+        .title(if has_focus { "[2] 聊天 *" } else { "[2] 聊天" })
+        .border_style(if has_focus {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        })
+        .focused(has_focus);
 
-        let title = if has_focus { "[2] 聊天 *" } else { "[2] 聊天" };
-        let hint_paragraph = Paragraph::new(hint_text)
-            .block(
-                Block::default()
-                    .title(title)
-                    .borders(Borders::ALL)
-                    .border_style(border_style),
-            )
-            .style(Style::default().fg(Color::White))
-            .alignment(Alignment::Center);
-
-        f.render_widget(hint_paragraph, area);
-    }
+    f.render_widget(chat_panel, area);
 }
 
 /// 绘制面板 3：文件选择
@@ -225,12 +204,15 @@ fn draw_panel_3_file_picker(f: &mut Frame, area: Rect, app: &TuiApp) {
 
 /// 绘制 Footer
 fn draw_footer(f: &mut Frame, area: Rect, app: &TuiApp) {
-    let focus_indicator = match app.current_tab() {
-        AppTab::Panel1 => "设备列表",
-        AppTab::Panel2 => "聊天",
-        AppTab::Panel3 => "文件选择",
+    let (focus_indicator, help_keys) = match app.current_tab() {
+        AppTab::Panel1 => ("设备列表", "[↑↓] 选择 [Space/Enter] 选中"),
+        AppTab::Panel2 => ("聊天", "[输入文字] 打字 [Enter] 发送 [↑↓] 滚动"),
+        AppTab::Panel3 => ("文件选择", "[↑↓] 选择 [Enter] 打开"),
     };
-    let help_text = format!("[Tab] 切换焦点 | 当前焦点: {} | [q] 退出", focus_indicator);
+    let help_text = format!(
+        "[Tab] 切换焦点 | 当前焦点: {} | {} | [q] 退出",
+        focus_indicator, help_keys
+    );
 
     let footer = Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))

@@ -3,6 +3,7 @@
 //! 集成 mDNS 发现、identify 验证、用户信息交换和 ping 心跳，自动管理验证通过的节点。
 
 use super::{node::{NodeManager, VerifiedNode}, user_info, MdnsError};
+use super::chat::{ChatExtension, ChatManager, ChatMessage, ChatError};
 use futures::StreamExt;
 use libp2p::{
     identify, mdns, ping, request_response, Swarm, SwarmBuilder, identity::Keypair, Multiaddr, PeerId,
@@ -10,6 +11,7 @@ use libp2p::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
 
 /// 健康状态
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,6 +124,10 @@ pub struct ManagedDiscovery {
     active_connections: HashMap<PeerId, u32>,
     /// 已收到的用户信息
     peer_user_info: HashMap<PeerId, user_info::UserInfo>,
+    /// 可选的聊天管理器
+    chat_manager: Option<Arc<ChatManager>>,
+    /// 聊天事件接收器（用于处理聊天消息）
+    chat_event_rx: Option<mpsc::UnboundedReceiver<super::chat::ChatEvent>>,
 }
 
 /// 组合的 Behaviour，包含 mDNS、identify、ping 和 request_response
@@ -133,6 +139,8 @@ struct ManagedBehaviour {
     identify: identify::Behaviour,
     ping: ping::Behaviour,
     request_response: request_response::Behaviour<user_info::UserInfoCodec>,
+    /// 聊天协议（使用 request_response 模式）
+    chat: request_response::Behaviour<crate::chat::ChatCodec>,
 }
 
 impl ManagedDiscovery {
@@ -178,7 +186,13 @@ impl ManagedDiscovery {
                     request_response::Config::default(),
                 );
 
-                Ok(ManagedBehaviour { mdns, identify, ping, request_response })
+                // 创建 request_response Behaviour 用于聊天
+                let chat = request_response::Behaviour::new(
+                    [(crate::chat::ChatProtocol, request_response::ProtocolSupport::Full)],
+                    request_response::Config::default(),
+                );
+
+                Ok(ManagedBehaviour { mdns, identify, ping, request_response, chat })
             })
             .map_err(|e| MdnsError::SwarmBuild(e.to_string()))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
@@ -199,6 +213,8 @@ impl ManagedDiscovery {
             health_config,
             active_connections: HashMap::new(),
             peer_user_info: HashMap::new(),
+            chat_manager: None,
+            chat_event_rx: None,
         })
     }
 
@@ -342,19 +358,20 @@ impl ManagedDiscovery {
                     tracing::info!("开始监听: {}", address);
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    tracing::info!("✓ 与 {} 建立新连接", peer_id);
                     let conn_count = self.active_connections.entry(peer_id).or_insert(0);
                     let is_first_connection = *conn_count == 0;
                     *conn_count += 1;
 
                     if is_first_connection {
-                        tracing::debug!("与 {} 建立首个连接，请求用户信息", peer_id);
+                        tracing::info!("与 {} 建立首个连接，请求用户信息", peer_id);
                         // 仅在首个连接建立时请求用户信息
                         let _ = self.swarm.behaviour_mut().request_response.send_request(
                             &peer_id,
                             user_info::UserInfoRequest,
                         );
                     } else {
-                        tracing::debug!("与 {} 建立额外连接 (当前连接数: {})", peer_id, *conn_count);
+                        tracing::info!("与 {} 建立额外连接 (当前连接数: {})", peer_id, *conn_count);
                     }
                 }
                 libp2p::swarm::SwarmEvent::ConnectionClosed { peer_id, .. } => {
@@ -426,6 +443,46 @@ impl ManagedDiscovery {
                         }
                     }
                 }
+                libp2p::swarm::SwarmEvent::Behaviour(ManagedBehaviourEvent::Chat(event)) => {
+                    tracing::info!("收到聊天事件: {:?}", std::mem::discriminant(&event));
+                    match event {
+                        request_response::Event::Message { peer, connection_id: _, message } => match message {
+                            request_response::Message::Request {
+                                request_id: _,
+                                channel,
+                                request,
+                            } => {
+                                tracing::info!("📨 收到来自 {} 的聊天消息: {:?}", peer, request);
+
+                                // 处理收到的聊天消息
+                                if let Some(ref chat_manager) = self.chat_manager {
+                                    chat_manager.handle_received_message(peer, request.clone()).await;
+                                } else {
+                                    tracing::warn!("聊天管理器未初始化，无法处理消息");
+                                }
+
+                                // 发送确认响应
+                                let response = crate::chat::ChatResponse::received();
+                                tracing::info!("发送确认响应给 {}", peer);
+                                let _ = self.swarm.behaviour_mut().chat.send_response(
+                                    channel,
+                                    response,
+                                );
+                            }
+                            request_response::Message::Response {
+                                request_id: _,
+                                response: _,
+                            } => {
+                                tracing::info!("✓ 收到来自 {} 的聊天消息确认", peer);
+                                // 可以在这里更新消息发送状态
+                            }
+                        },
+                        _ => {
+                            // 忽略其他事件类型
+                            tracing::debug!("其他聊天事件");
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -480,6 +537,13 @@ impl ManagedDiscovery {
     pub fn local_user_info(&self) -> &user_info::UserInfo {
         &self.local_user_info
     }
+
+    /// 获取聊天事件接收器
+    ///
+    /// 这是一个 consuming 操作，调用后 `chat_event_rx` 将被移除。
+    pub fn take_chat_events(&mut self) -> Option<mpsc::UnboundedReceiver<super::chat::ChatEvent>> {
+        self.chat_event_rx.take()
+    }
 }
 
 /// 发现事件
@@ -505,4 +569,102 @@ pub enum DiscoveryEvent {
 
     /// 收到用户信息
     UserInfoReceived(PeerId, user_info::UserInfo),
+}
+
+/// 为 ManagedDiscovery 实现 ChatExtension trait
+///
+/// 提供可选的聊天功能扩展。
+#[async_trait::async_trait]
+impl ChatExtension for ManagedDiscovery {
+    /// 启用聊天功能
+    async fn enable_chat(&mut self) -> Result<(), ChatError> {
+        // 检查是否已经启用
+        if self.chat_manager.is_some() {
+            return Err(ChatError::SendFailed("聊天功能已经启用".to_string()));
+        }
+
+        // 创建 ChatManager
+        let (chat_manager, event_rx) = ChatManager::new(
+            self.node_manager.clone(),
+            self.local_peer_id(),
+        );
+
+        // 保存管理器和事件接收器
+        self.chat_manager = Some(Arc::new(chat_manager));
+        self.chat_event_rx = Some(event_rx);
+
+        tracing::info!("✓ 聊天功能已启用");
+        Ok(())
+    }
+
+    /// 发送消息给指定节点
+    async fn send_message(&mut self, target: PeerId, message: ChatMessage) -> Result<(), ChatError> {
+        if let Some(ref chat_manager) = self.chat_manager {
+            // 1. 先通过 ChatManager 验证和设置消息元数据
+            chat_manager.send(target, message.clone()).await?;
+
+            // 2. 实际通过 Swarm 的 chat behaviour 发送消息
+            let _request_id = self.swarm.behaviour_mut().chat.send_request(&target, message);
+
+            Ok(())
+        } else {
+            Err(ChatError::NotEnabled)
+        }
+    }
+
+    /// 广播消息给多个节点（一对多）
+    async fn broadcast_message(&mut self, targets: Vec<PeerId>, message: ChatMessage) -> Result<(), ChatError> {
+        if let Some(ref chat_manager) = self.chat_manager {
+            // 1. 先通过 ChatManager 验证和设置消息元数据
+            chat_manager.broadcast(targets.clone(), message.clone()).await?;
+
+            // 2. 为每个目标实际发送消息
+            for target in targets {
+                tracing::info!("尝试向 {} 发送聊天消息", target);
+
+                // 检查连接状态
+                let has_connection = self.swarm.is_connected(&target);
+                tracing::info!("与 {} 的连接状态: {}", target, if has_connection { "已连接" } else { "未连接" });
+
+                if !has_connection {
+                    tracing::warn!("没有与 {} 的活跃连接，尝试拨号...", target);
+                    // 尝试从已知的地址拨号
+                    if let Some(node) = self.node_manager.get_node(&target).await {
+                        for addr in &node.addresses {
+                            tracing::info!("正在向 {} 拨号: {}", target, addr);
+                            match self.swarm.dial(addr.clone()) {
+                                Ok(_) => tracing::info!("拨号请求已发送"),
+                                Err(e) => tracing::error!("拨号失败: {:?}", e),
+                            }
+                        }
+                        // 等待连接建立
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+
+                        // 再次检查连接状态
+                        let still_not_connected = !self.swarm.is_connected(&target);
+                        if still_not_connected {
+                            tracing::error!("拨号后仍未与 {} 建立连接", target);
+                            continue;
+                        }
+                    } else {
+                        tracing::error!("找不到节点 {} 的地址信息", target);
+                        continue;
+                    }
+                }
+
+                // 发送请求
+                let request_id = self.swarm.behaviour_mut().chat.send_request(&target, message.clone());
+                tracing::info!("消息发送请求已接受，ID: {:?}", request_id);
+            }
+
+            Ok(())
+        } else {
+            Err(ChatError::NotEnabled)
+        }
+    }
+
+    /// 获取聊天管理器
+    fn chat_manager(&self) -> Option<Arc<ChatManager>> {
+        self.chat_manager.clone()
+    }
 }
