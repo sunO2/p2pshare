@@ -20,11 +20,14 @@
 
 - **mDNS 服务发现**: 自动发现局域网内的 libp2p 节点
 - **Identify 身份验证**: 通过协议版本和代理版本验证节点
+- **用户信息交换**: 通过自定义 request_response 协议交换用户信息（设备名、昵称、头像等）
 - **设备名称支持**: 支持设置友好的设备名称，便于识别
 - **自过滤机制**: 自动过滤掉自己的信息，防止误加入管理器
 - **Ping 心跳检测**: 自动维护节点连接健康
 - **即时离线检测**: 通过连接状态跟踪快速检测节点离线
 - **节点管理器**: 集中管理验证通过的节点，支持超时清理
+- **事件去重**: 智能去重重复的发现和验证事件
+- **日志系统**: 支持文件和控制台双重输出，按天滚动
 
 ### 技术栈
 
@@ -34,6 +37,7 @@
 | libp2p | 0.56.0 | P2P 网络库 |
 | tokio | 1.x | 异步运行时 |
 | tracing | 0.1 | 日志记录 |
+| tracing-appender | 0.2 | 日志文件输出 |
 
 ---
 
@@ -111,8 +115,11 @@ localp2p/
 ├── Cargo.toml              # Workspace 配置
 ├── develop.md              # 开发文档（本文件）
 ├── study.md                # 开发历史记录
+├── logs/                   # 日志文件目录（自动创建）
+│   └── localp2p.YYYY-MM-DD.log  # 按天滚动的日志文件
 ├── src/
-│   └── main.rs             # 示例程序入口
+│   ├── main.rs             # 示例程序入口
+│   └── logging.rs          # 日志配置模块
 └── crates/
     └── mdns/               # mdns crate（独立库）
         ├── Cargo.toml      # mdns crate 配置
@@ -122,6 +129,7 @@ localp2p/
             ├── discovery.rs            # 基础服务发现
             ├── publisher.rs            # 服务发布
             ├── node.rs                 # 节点管理
+            ├── user_info.rs            # 用户信息协议
             └── managed_discovery.rs    # 管理式服务发现（核心）
 ```
 
@@ -153,16 +161,17 @@ edition = "2021"
 │                    ManagedDiscovery                              │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │              Swarm<ManagedBehaviour>                       │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐               │  │
-│  │  │  mDNS    │  │ Identify │  │   Ping   │               │  │
-│  │  │  发现    │  │  验证    │  │  心跳    │               │  │
-│  │  └──────────┘  └──────────┘  └──────────┘               │  │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │  │
+│  │  │  mDNS    │  │ Identify │  │   Ping   │  │Request  │ │  │
+│  │  │  发现    │  │  验证    │  │  心跳    │  │Response │ │  │
+│  │  └──────────┘  └──────────┘  └──────────┘  └─────────┘ │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │                    状态跟踪                                │  │
 │  │  - active_connections: HashMap<PeerId, u32>               │  │
 │  │  - health_status: HashMap<PeerId, NodeHealth>             │  │
+│  │  - peer_user_info: HashMap<PeerId, UserInfo>              │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
@@ -190,9 +199,10 @@ edition = "2021"
    └─> DiscoveryEvent::Discovered(peer_id, addr)
        └─> 主动连接 swarm.dial(addr)
 
-2. 连接建立
+2. 连接建立（首个连接）
    └─> ConnectionEstablished
-       └─> 增加连接计数
+       ├─> 增加连接计数
+       └─> 发送用户信息请求（仅首个连接）
 
 3. Identify 验证
    └─> IdentifyEvent::Received { peer_id, info, .. }
@@ -201,6 +211,11 @@ edition = "2021"
        ├─> 验证 protocol_version
        ├─> 验证 agent_version（包括设备名称解析）
        └─> 验证通过 → 添加到 NodeManager
+
+4. 用户信息交换（request_response）
+   └─> 用户信息请求
+       └─> 返回本地 UserInfo（设备名、昵称、状态等）
+       └─> 存储到 peer_user_info（首次收到才触发事件）
 
 ┌────────────────────────────────────────────────────────────────┐
 │                        节点离线检测                              │
@@ -214,6 +229,24 @@ edition = "2021"
        └─> 计数为 0？
            └─> 是 → 立即判定离线，从管理器移除
 ```
+
+### 事件去重机制
+
+由于多网卡环境会产生多个连接，系统实现了智能去重：
+
+1. **Identify 验证去重**
+   - 首次验证：记录日志并返回 `Verified` 事件
+   - 后续验证：静默更新，不返回事件
+
+2. **用户信息去重**
+   - 首次收到：记录日志并返回 `UserInfoReceived` 事件
+   - 后续收到：静默更新，不返回事件
+
+3. **用户信息请求去重**
+   - 仅在首个连接建立时发送请求
+   - 后续连接不重复发送
+
+这样避免了一个节点被多次发现导致的事件泛滥。
 
 ### 自过滤机制
 
@@ -277,6 +310,7 @@ struct ManagedBehaviour {
     mdns: mdns::tokio::Behaviour,
     identify: identify::Behaviour,
     ping: ping::Behaviour,
+    request_response: request_response::Behaviour<user_info::UserInfoCodec>,
 }
 ```
 
@@ -287,6 +321,7 @@ struct ManagedBehaviour {
 | **mdns** | 局域网服务发现 | `mdns::Config::default()` |
 | **identify** | 节点身份验证 | 30秒间隔更新 |
 | **ping** | 自动心跳检测 | 默认 15秒间隔 |
+| **request_response** | 用户信息交换 | 自定义 UserInfoCodec |
 
 #### DiscoveryEvent
 
@@ -298,6 +333,7 @@ pub enum DiscoveryEvent {
     VerificationFailed(PeerId, String),    // 节点验证失败
     NodeRecovered(PeerId, Duration),       // 节点恢复健康
     NodeOffline(PeerId),                   // 节点离线
+    UserInfoReceived(PeerId, UserInfo),    // 收到用户信息（新增）
 }
 ```
 
@@ -432,6 +468,50 @@ pub struct HealthCheckConfig {
 
 **注意**: libp2p ping 自动管理心跳间隔（默认 15 秒），此配置仅用于失败阈值判断。
 
+### 4. user_info.rs - 用户信息交换协议
+
+#### UserInfo
+
+```rust
+pub struct UserInfo {
+    pub device_name: String,              // 设备名称（如："我的电脑"）
+    pub nickname: Option<String>,          // 用户昵称（可选）
+    pub avatar_url: Option<String>,        // 头像 URL（可选）
+    pub status: Option<String>,            // 用户状态（如："在线"、"忙碌"）
+    pub custom_data: HashMap<String, String>,  // 自定义扩展数据
+}
+```
+
+**方法**:
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `new(device_name)` | 创建用户信息 | `Self` |
+| `with_nickname(nickname)` | 设置昵称 | `Self` |
+| `with_avatar_url(url)` | 设置头像 URL | `Self` |
+| `with_status(status)` | 设置状态 | `Self` |
+| `with_custom_data(key, value)` | 添加自定义数据 | `Self` |
+| `display_name()` | 获取显示名称（优先昵称） | `String` |
+
+#### UserInfoCodec
+
+```rust
+pub struct UserInfoCodec;
+```
+
+实现了 `request_response::Codec` trait，使用 JSON 序列化和长度前缀分帧。
+
+**特点**:
+- 使用 async_trait 支持异步读写
+- JSON 序列化（serde_json）
+- u32 big endian 长度前缀
+- 自动处理请求/响应
+
+**协议格式**:
+```
+[4 bytes: 长度][JSON 数据: UserInfo/UserInfoRequest]
+```
+
 ---
 
 ## API 参考
@@ -441,6 +521,9 @@ pub struct HealthCheckConfig {
 ```rust
 // 节点管理
 pub use node::{VerifiedNode, NodeManager, NodeManagerConfig};
+
+// 用户信息
+pub use user_info::UserInfo;
 
 // 管理式服务发现
 pub use managed_discovery::{
@@ -466,24 +549,40 @@ pub enum MdnsError {
 
 ### 依赖说明
 
+#### mdns crate 依赖
+
 ```toml
 [dependencies]
 libp2p = { version = "0.56.0", features = [
-    "mdns",      # mDNS 服务发现
-    "tokio",     # 异步运行时
-    "tcp",       # TCP 传输
-    "noise",     # 加密协议
-    "yamux",     # 多路复用
-    "identify",  # 身份验证
-    "ping",      # 心跳检测
-    "macros",    # Behaviour 组合宏
+    "mdns",             # mDNS 服务发现
+    "tokio",            # 异步运行时
+    "tcp",              # TCP 传输
+    "noise",            # 加密协议
+    "yamux",            # 多路复用
+    "identify",         # 身份验证
+    "ping",             # 心跳检测
+    "macros",           # Behaviour 组合宏
+    "request-response", # 请求-响应协议
+    "cbor",             # CBOR 编码支持
 ] }
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 thiserror = "2.0"
 tracing = "0.1"
 serde = { version = "1.0", features = ["derive"] }
-async-trait = "0.1"
+serde_json = "1.0"      # JSON 序列化
+async-trait = "0.1"     # async trait
+```
+
+#### 主项目依赖
+
+```toml
+[dependencies]
+mdns = { path = "crates/mdns" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+tracing-appender = "0.2"  # 日志文件输出
 ```
 
 ---
@@ -513,30 +612,37 @@ async-trait = "0.1"
 
 ## 使用示例
 
-### 示例 1: 基础用法（带设备名称）
+### 示例 1: 基础用法（带用户信息交换）
 
 ```rust
-use mdns::{ManagedDiscovery, NodeManager, NodeManagerConfig, ManagedDiscoveryEvent};
+use mdns::{ManagedDiscovery, NodeManager, NodeManagerConfig, ManagedDiscoveryEvent, UserInfo};
 use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 初始化日志（输出到文件和控制台）
+    logging::init_logging_with_console(logging::LogLevel::Info)?;
+
     // 从命令行获取设备名称
     let device_name = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "未命名设备".to_string());
 
-    // 创建节点管理器（包含设备名称）
+    // 创建用户信息
+    let user_info = UserInfo::new(device_name.clone())
+        .with_status("在线".to_string());
+
+    // 创建节点管理器
     let config = NodeManagerConfig::new()
         .with_protocol_version("/localp2p/1.0.0".to_string())
         .with_agent_prefix(Some("localp2p-rust/".to_string()))
-        .with_device_name(device_name);  // 设置设备名称
+        .with_device_name(device_name);
 
     let node_manager = Arc::new(NodeManager::new(config));
     node_manager.clone().spawn_cleanup_task();
 
-    // 创建发现器
+    // 创建发现器（传入用户信息）
     let health_config = HealthCheckConfig {
         heartbeat_interval: Duration::from_secs(10),
         max_failures: 3,
@@ -546,23 +652,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         node_manager,
         vec!["/ip4/0.0.0.0/tcp/0".parse()?],
         health_config,
+        user_info,
     ).await?;
 
     println!("本地 Peer ID: {}", discovery.local_peer_id());
-    println!("代理版本: {}", discovery.agent_version());
 
     // 处理事件
     loop {
         match discovery.run().await? {
             ManagedDiscoveryEvent::Verified(peer_id) => {
-                // 获取节点详细信息（包括设备名称）
-                if let Some(node) = discovery.node_manager().get_node(&peer_id).await {
-                    println!("✅ 节点验证通过");
-                    println!("   显示名称: {}", node.display_name());
-                    if let Some(ref name) = node.name {
-                        println!("   设备名称: {}", name);
-                    }
-                    println!("   Peer ID: {}", node.peer_id);
+                println!("✅ 节点验证通过: {}", peer_id);
+            }
+            ManagedDiscoveryEvent::UserInfoReceived(peer_id, user_info) => {
+                println!("📝 收到用户信息: {}", user_info.display_name());
+                println!("   设备名: {}", user_info.device_name);
+                if let Some(ref status) = user_info.status {
+                    println!("   状态: {}", status);
                 }
             }
             ManagedDiscoveryEvent::NodeOffline(peer_id) => {
@@ -737,11 +842,15 @@ libp2p = { version = "0.56.0", features = ["mdns", "tokio", "tcp", "noise", "yam
 
 ### Q: 如何设置设备名称？
 
-A: 通过 `NodeManagerConfig::with_device_name()` 方法设置设备名称，该名称会被包含在 `agent_version` 中，格式为 `localp2p-rust/1.0.0 (设备名称)`。其他节点发现后会解析并显示该名称。
+A: 通过 `UserInfo::new()` 创建用户信息，然后传递给 `ManagedDiscovery::new()`。系统会通过 request_response 协议自动交换用户信息。
 
 ### Q: 为什么要自过滤？
 
 A: mDNS 是广播协议，每个节点都会收到包括自己在内的广播。如果没有自过滤，节点会将自己也加入管理器，导致显示错误。自过滤通过比较 Peer ID 来跳过自己的信息。
+
+### Q: 为什么有重复的发现和验证事件？
+
+A: 多网卡环境下，同一节点可能在多个网络接口上被多次发现。系统已实现事件去重机制，确保每个节点只触发一次 `Verified` 和 `UserInfoReceived` 事件。
 
 ### Q: mDNS 过期需要多久？
 
@@ -754,6 +863,14 @@ A: libp2p ping 默认 15 秒发送一次，这是 libp2p 内部管理，无需�
 ### Q: 如何调整离线检测速度？
 
 A: 离线检测通过 `ConnectionClosed` 事件即时完成，无需调整。如需调整失败阈值，修改 `HealthCheckConfig.max_failures`。
+
+### Q: 日志文件存放在哪里？
+
+A: 日志文件默认存放在 `logs/` 目录，文件名格式为 `localp2p.YYYY-MM-DD.log`，按天自动滚动。
+
+### Q: 如何只输出日志到文件？
+
+A: 使用 `logging::init_logging()` 或 `logging::init_logging_with_level()`，这些函数只会输出到文件，不会输出到控制台。
 
 ### Q: 支持跨网段发现吗？
 

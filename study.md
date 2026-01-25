@@ -368,6 +368,225 @@ if *conn_count == 0 {
 
 ---
 
+## 第六阶段：用户信息交换协议
+
+### 需求背景
+
+**问题**：通过 identify 的 `agent_version` 传递设备名称存在以下限制：
+1. 只能传递简单的字符串信息
+2. 无法传递复杂的用户信息（昵称、头像、状态等）
+3. 需要解析字符串来提取设备名称
+
+**解决方案**：实现自定义 request_response 协议交换用户信息
+
+### 实现 UserInfo 数据结构
+
+**创建 user_info.rs 模块**:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub device_name: String,
+    pub nickname: Option<String>,
+    pub avatar_url: Option<String>,
+    pub status: Option<String>,
+    #[serde(flatten)]
+    pub custom_data: HashMap<String, String>,
+}
+```
+
+### 实现 Codec trait
+
+**问题 8: libp2p 0.56 Codec trait 复杂性**
+
+**挑战**: libp2p 0.56 的 request_response Codec trait 需要 async_trait 支持
+
+**解决方案**:
+
+```rust
+#[async_trait]
+impl request_response::Codec for UserInfoCodec {
+    type Protocol = UserInfoProtocol;
+    type Request = UserInfoRequest;
+    type Response = UserInfoResponse;
+
+    async fn read_request<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> std::io::Result<Self::Request>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        // 读取长度前缀（u32 big endian）
+        let mut len_bytes = [0u8; 4];
+        io.read_exact(&mut len_bytes).await?;
+        let len = u32::from_be_bytes(len_bytes) as usize;
+
+        // 读取 JSON 数据
+        let mut buffer = vec![0u8; len];
+        io.read_exact(&mut buffer).await?;
+
+        serde_json::from_slice::<UserInfoRequest>(&buffer)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    }
+
+    // ... 其他方法类似
+}
+```
+
+**协议格式**:
+- 使用长度前缀（u32 big endian）
+- JSON 序列化数据
+- 支持 serde 序列化/反序列化
+
+### 集成 request_response Behaviour
+
+**更新 ManagedBehaviour**:
+
+```rust
+#[derive(libp2p::swarm::NetworkBehaviour)]
+struct ManagedBehaviour {
+    mdns: mdns::tokio::Behaviour,
+    identify: identify::Behaviour,
+    ping: ping::Behaviour,
+    request_response: request_response::Behaviour<user_info::UserInfoCodec>,
+}
+```
+
+**初始化**:
+
+```rust
+let request_response = request_response::Behaviour::new(
+    [(user_info::UserInfoProtocol, request_response::ProtocolSupport::Full)],
+    request_response::Config::default(),
+);
+```
+
+### 事件处理
+
+**发送用户信息请求**:
+
+```rust
+libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+    let conn_count = self.active_connections.entry(peer_id).or_insert(0);
+    let is_first_connection = *conn_count == 0;
+    *conn_count += 1;
+
+    if is_first_connection {
+        // 仅在首个连接建立时请求用户信息
+        self.swarm.behaviour_mut().request_response.send_request(
+            &peer_id,
+            user_info::UserInfoRequest,
+        );
+    }
+}
+```
+
+**处理用户信息响应**:
+
+```rust
+request_response::Event::Message { peer, message } => match message {
+    request_response::Message::Response { response, .. } => {
+        // 检查是否已经收到过该节点的用户信息
+        let is_new_info = !self.peer_user_info.contains_key(&peer);
+
+        // 存储或更新用户信息
+        self.peer_user_info.insert(peer, response.clone());
+
+        if is_new_info {
+            // 首次收到，记录日志并返回事件
+            tracing::info!("📝 收到来自 {} 的用户信息: {}", peer, response.display_name());
+            return Ok(DiscoveryEvent::UserInfoReceived(peer, response));
+        } else {
+            // 已收到过，只更新不返回事件（静默更新）
+            tracing::debug!("更新来自 {} 的用户信息: {}", peer, response.display_name());
+        }
+    }
+    // ...
+}
+```
+
+---
+
+## 第七阶段：日志系统优化
+
+### 需求背景
+
+**问题**：
+1. 默认日志只输出到终端，无法保存历史记录
+2. 开发调试时需要查看历史日志
+3. 生产环境需要持久化日志
+
+**解决方案**：实现日志到文件的输出功能
+
+### 创建 logging 模块
+
+**src/logging.rs**:
+
+```rust
+use tracing_appender::{non_blocking, rolling};
+use tracing_subscriber::{
+    fmt,
+    layer::{Layer, SubscriberExt},
+    util::SubscriberInitExt,
+    filter::LevelFilter,
+};
+
+pub enum LogLevel {
+    Trace, Debug, Info, Warn, Error,
+}
+
+pub struct LoggingConfig {
+    pub log_dir: PathBuf,
+    pub level: LogLevel,
+    pub console_output: bool,
+    pub ansi: bool,
+}
+```
+
+**滚动日志文件**:
+
+```rust
+// 创建滚动文件 appender（每天一个文件）
+let file_appender = rolling::daily(self.log_dir, LOG_FILE_PREFIX);
+let (non_blocking_file, _guard) = non_blocking(file_appender);
+
+// 文件层
+let file_layer = fmt::layer()
+    .with_writer(non_blocking_file)
+    .with_ansi(false)
+    .with_filter(LevelFilter::from(self.level.to_tracing_level()));
+```
+
+### 主要特性
+
+1. **按天滚动**: 每天创建一个新的日志文件
+2. **异步写入**: 使用 non-blocking appender 避免阻塞
+3. **双输出**: 可同时输出到文件和控制台
+4. **级别过滤**: 支持不同日志级别（Trace/Debug/Info/Warn/Error）
+
+### 使用方式
+
+```rust
+// 只输出到文件
+logging::init_logging()?;
+
+// 指定日志级别
+logging::init_logging_with_level(logging::LogLevel::Debug)?;
+
+// 同时输出到文件和控制台
+logging::init_logging_with_console(logging::LogLevel::Info)?;
+```
+
+### 日志文件位置
+
+- **目录**: `logs/`
+- **文件名格式**: `localp2p.YYYY-MM-DD.log`
+- **示例**: `logs/localp2p.2025-01-25.log`
+
+---
+
 ## 关键问题与解决方案
 
 ### 问题汇总表
@@ -385,6 +604,10 @@ if *conn_count == 0 {
 | IPv6 地址格式 | - | `UnknownProtocolString("ip6::")` | 移除 IPv6 监听或使用 `/ip6:///` |
 | mDNS 过期延迟 | - | 2-5分钟延迟 | 使用 ConnectionClosed 事件检测 |
 | Ping 不触发 | - | 连接断开后无 ping 事件 | 跟踪活跃连接数 |
+| request_response feature | 0.56 | `request_response` feature 不存在 | 使用 `request-response`（带连字符） |
+| Codec trait 实现 | 0.56 | async_trait 复杂性 | 使用 `#[async_trait]` 宏，实现 4 个异步方法 |
+| Message::Request 字段 | 0.56 | `response_channel` vs `request_id` | 使用 `channel` 字段发送响应 |
+| 重复消息 | - | 多网卡导致大量重复事件 | 实现 event 去重逻辑 |
 
 ### libp2p 版本选择建议
 
@@ -413,12 +636,14 @@ if *conn_count == 0 {
 │  │  - mdns: 服务发现                                    │   │
 │  │  - identify: 身份验证                                │   │
 │  │  - ping: 自动心跳                                    │   │
+│  │  - request_response: 用户信息交换                     │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  连接状态跟踪                                         │   │
+│  │  状态跟踪                                             │   │
 │  │  - active_connections: HashMap<PeerId, u32>          │   │
 │  │  - health_status: HashMap<PeerId, NodeHealth>        │   │
+│  │  - peer_user_info: HashMap<PeerId, UserInfo>        │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -432,6 +657,18 @@ if *conn_count == 0 {
 │  │  - 自动清理超时节点                                   │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
+                              ↓
+                              ↓ 日志系统
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      日志输出                                │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  文件输出: logs/localp2p.YYYY-MM-DD.log            │   │
+│  │  - 按天滚动                                           │   │
+│  │  - 异步非阻塞                                         │   │
+│  │  - 可选控制台输出                                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### 事件流程
@@ -443,7 +680,7 @@ mDNS DiscoveryEvent::Discovered
     ↓
 主动连接 (swarm.dial)
     ↓
-ConnectionEstablished (增加连接计数)
+ConnectionEstablished (首个连接时发送用户信息请求)
     ↓
 Identify Event::Received
     ↓
@@ -451,6 +688,16 @@ Identify Event::Received
     ↓
     ├─ 验证通过 → 添加到 NodeManager
     └─ 验证失败 → 记录日志
+
+用户信息交换 (request_response)
+    ↓
+收到 UserInfoRequest
+    ↓
+返回本地 UserInfo (设备名、昵称、状态等)
+    ↓
+    首次收到 → 触发 UserInfoReceived 事件
+    ↓
+    存储到 peer_user_info
 
 节点离线
     ↓
@@ -471,6 +718,15 @@ ConnectionClosed (减少连接计数)
 - [libp2p::ping::Behaviour](https://docs.rs/libp2p/latest/libp2p/ping/struct.Behaviour.html)
 - [libp2p::ping::Event](https://docs.rs/libp2p/latest/libp2p/ping/struct.Event.html)
 - [libp2p::identify](https://docs.rs/libp2p/latest/libp2p/identify/index.html)
+- [libp2p::request_response::Codec](https://docs.rs/libp2p/latest/libp2p/request_response/trait.Codec.html)
+- [libp2p::request_response](https://docs.rs/libp2p/latest/libp2p/request_response/index.html)
+
+### 依赖文档
+
+- [tracing-appender](https://docs.rs/tracing-appender/latest/tracing_appender/)
+- [tracing-subscriber](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/)
+- [serde_json](https://docs.rs/serde_json/latest/serde_json/)
+- [async-trait](https://docs.rs/async-trait/latest/async_trait/)
 
 ### 关键 API
 

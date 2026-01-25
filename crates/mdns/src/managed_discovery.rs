@@ -1,11 +1,11 @@
 //! 管理式服务发现模块
 //!
-//! 集成 mDNS 发现、identify 验证和 ping 心跳，自动管理验证通过的节点。
+//! 集成 mDNS 发现、identify 验证、用户信息交换和 ping 心跳，自动管理验证通过的节点。
 
-use super::{node::{NodeManager, VerifiedNode}, MdnsError};
+use super::{node::{NodeManager, VerifiedNode}, user_info, MdnsError};
 use futures::StreamExt;
 use libp2p::{
-    identify, mdns, ping, Swarm, SwarmBuilder, identity::Keypair, Multiaddr, PeerId,
+    identify, mdns, ping, request_response, Swarm, SwarmBuilder, identity::Keypair, Multiaddr, PeerId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -100,7 +100,7 @@ impl Default for HealthCheckConfig {
 
 /// 管理式服务发现器
 ///
-/// 通过 mDNS 发现节点，使用 identify 协议验证，验证通过后添加到节点管理器。
+/// 通过 mDNS 发现节点，使用 identify 协议验证，交换用户信息，验证通过后添加到节点管理器。
 ///
 /// ## 组合 Behaviour 说明
 ///
@@ -108,19 +108,23 @@ impl Default for HealthCheckConfig {
 /// 这里我们组合了：
 /// - `mdns`: 用于局域网内节点发现
 /// - `identify`: 用于节点身份验证和信息交换
+/// - `request_response`: 用于用户信息交换（自定义协议）
 /// - `ping`: 用于心跳检测（自动发送）
 pub struct ManagedDiscovery {
     swarm: Swarm<ManagedBehaviour>,
     node_manager: Arc<NodeManager>,
+    local_user_info: user_info::UserInfo,
     protocol_version: String,
     agent_version: String,
     health_status: HashMap<PeerId, NodeHealth>,
     health_config: HealthCheckConfig,
     /// 跟踪每个节点的活跃连接数
     active_connections: HashMap<PeerId, u32>,
+    /// 已收到的用户信息
+    peer_user_info: HashMap<PeerId, user_info::UserInfo>,
 }
 
-/// 组合的 Behaviour，包含 mDNS、identify 和 ping
+/// 组合的 Behaviour，包含 mDNS、identify、ping 和 request_response
 ///
 /// 使用 libp2p 的 `#[derive(NetworkBehaviour)]` 宏组合多个 behaviour
 #[derive(libp2p::swarm::NetworkBehaviour)]
@@ -128,6 +132,7 @@ struct ManagedBehaviour {
     mdns: mdns::tokio::Behaviour,
     identify: identify::Behaviour,
     ping: ping::Behaviour,
+    request_response: request_response::Behaviour<user_info::UserInfoCodec>,
 }
 
 impl ManagedDiscovery {
@@ -136,6 +141,7 @@ impl ManagedDiscovery {
         node_manager: Arc<NodeManager>,
         listen_addresses: Vec<Multiaddr>,
         health_config: HealthCheckConfig,
+        local_user_info: user_info::UserInfo,
     ) -> std::result::Result<Self, MdnsError> {
         let local_key = Keypair::generate_ed25519();
 
@@ -166,7 +172,13 @@ impl ManagedDiscovery {
 
                 let ping = ping::Behaviour::new(ping::Config::default());
 
-                Ok(ManagedBehaviour { mdns, identify, ping })
+                // 创建 request_response Behaviour 用于用户信息交换
+                let request_response = request_response::Behaviour::new(
+                    [(user_info::UserInfoProtocol, request_response::ProtocolSupport::Full)],
+                    request_response::Config::default(),
+                );
+
+                Ok(ManagedBehaviour { mdns, identify, ping, request_response })
             })
             .map_err(|e| MdnsError::SwarmBuild(e.to_string()))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
@@ -180,11 +192,13 @@ impl ManagedDiscovery {
         Ok(Self {
             swarm,
             node_manager,
+            local_user_info,
             protocol_version,
             agent_version,
             health_status: HashMap::new(),
             health_config,
             active_connections: HashMap::new(),
+            peer_user_info: HashMap::new(),
         })
     }
 
@@ -222,10 +236,6 @@ impl ManagedDiscovery {
                 libp2p::swarm::SwarmEvent::Behaviour(ManagedBehaviourEvent::Identify(event)) => {
                     match event {
                         identify::Event::Received { peer_id, info, .. } => {
-                            tracing::info!("收到来自 {} 的 identify 信息", peer_id);
-                            tracing::debug!("  协议版本: {}", info.protocol_version);
-                            tracing::debug!("  代理版本: {}", info.agent_version);
-
                             // 验证节点信息
                             match self.node_manager.verify_node_info(
                                 &info.protocol_version,
@@ -258,10 +268,13 @@ impl ManagedDiscovery {
                                     self.node_manager.add_or_update_node(node).await;
 
                                     if is_already_verified {
-                                        // 已验证过，只更新不返回事件
+                                        // 已验证过，只更新不返回事件（静默更新）
                                         tracing::debug!("更新已验证节点: {}", peer_id);
                                     } else {
-                                        // 首次验证，返回事件
+                                        // 首次验证，记录日志并返回事件
+                                        tracing::info!("收到来自 {} 的 identify 信息", peer_id);
+                                        tracing::debug!("  协议版本: {}", info.protocol_version);
+                                        tracing::debug!("  代理版本: {}", info.agent_version);
                                         tracing::info!("✓ 节点 {} 验证通过，已添加到管理器", peer_id);
                                         return Ok(DiscoveryEvent::Verified(peer_id));
                                     }
@@ -285,7 +298,7 @@ impl ManagedDiscovery {
                     }
                 }
                 libp2p::swarm::SwarmEvent::Behaviour(ManagedBehaviourEvent::Ping(event)) => {
-                    let ping::Event { peer, connection: _, result } = event;
+                    let ping::Event { peer, result, .. } = event;
                     match result {
                         Ok(rtt) => {
                             tracing::debug!("收到 {} 的 pong，RTT: {:?}", peer, rtt);
@@ -329,8 +342,20 @@ impl ManagedDiscovery {
                     tracing::info!("开始监听: {}", address);
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    tracing::debug!("与 {} 建立连接", peer_id);
-                    *self.active_connections.entry(peer_id).or_insert(0) += 1;
+                    let conn_count = self.active_connections.entry(peer_id).or_insert(0);
+                    let is_first_connection = *conn_count == 0;
+                    *conn_count += 1;
+
+                    if is_first_connection {
+                        tracing::debug!("与 {} 建立首个连接，请求用户信息", peer_id);
+                        // 仅在首个连接建立时请求用户信息
+                        let _ = self.swarm.behaviour_mut().request_response.send_request(
+                            &peer_id,
+                            user_info::UserInfoRequest,
+                        );
+                    } else {
+                        tracing::debug!("与 {} 建立额外连接 (当前连接数: {})", peer_id, *conn_count);
+                    }
                 }
                 libp2p::swarm::SwarmEvent::ConnectionClosed { peer_id, .. } => {
                     tracing::debug!("与 {} 的连接关闭", peer_id);
@@ -349,6 +374,56 @@ impl ManagedDiscovery {
                         }
 
                         return Ok(DiscoveryEvent::NodeOffline(peer_id));
+                    }
+                }
+                libp2p::swarm::SwarmEvent::Behaviour(ManagedBehaviourEvent::RequestResponse(event)) => {
+                    match event {
+                        request_response::Event::Message { peer, connection_id: _, message } => match message {
+                            request_response::Message::Request {
+                                request_id: _,
+                                channel,
+                                request: _,
+                            } => {
+                                tracing::debug!("收到来自 {} 的用户信息请求", peer);
+
+                                // 响应用户信息请求
+                                let response = user_info::UserInfoResponse {
+                                    device_name: self.local_user_info.device_name.clone(),
+                                    nickname: self.local_user_info.nickname.clone(),
+                                    avatar_url: self.local_user_info.avatar_url.clone(),
+                                    status: self.local_user_info.status.clone(),
+                                    custom_data: self.local_user_info.custom_data.clone(),
+                                };
+
+                                let _ = self.swarm.behaviour_mut().request_response.send_response(
+                                    channel,
+                                    response,
+                                );
+                            }
+                            request_response::Message::Response {
+                                request_id: _,
+                                response,
+                            } => {
+                                // 检查是否已经收到过该节点的用户信息
+                                let is_new_info = !self.peer_user_info.contains_key(&peer);
+
+                                // 存储或更新用户信息
+                                self.peer_user_info.insert(peer, response.clone());
+
+                                if is_new_info {
+                                    // 首次收到用户信息，记录日志并返回事件
+                                    tracing::info!("📝 收到来自 {} 的用户信息: {}", peer, response.display_name());
+                                    return Ok(DiscoveryEvent::UserInfoReceived(peer, response));
+                                } else {
+                                    // 已收到过，只更新不返回事件（静默更新）
+                                    tracing::debug!("更新来自 {} 的用户信息: {}", peer, response.display_name());
+                                }
+                            }
+                        },
+                        _ => {
+                            // 忽略其他事件类型
+                            tracing::debug!("其他 request_response 事件");
+                        }
                     }
                 }
                 _ => {}
@@ -390,6 +465,21 @@ impl ManagedDiscovery {
     pub fn health_config(&self) -> &HealthCheckConfig {
         &self.health_config
     }
+
+    /// 获取节点的用户信息
+    pub fn get_user_info(&self, peer_id: &PeerId) -> Option<&user_info::UserInfo> {
+        self.peer_user_info.get(peer_id)
+    }
+
+    /// 获取所有用户信息
+    pub fn list_user_info(&self) -> HashMap<PeerId, user_info::UserInfo> {
+        self.peer_user_info.clone()
+    }
+
+    /// 获取本地用户信息
+    pub fn local_user_info(&self) -> &user_info::UserInfo {
+        &self.local_user_info
+    }
 }
 
 /// 发现事件
@@ -412,4 +502,7 @@ pub enum DiscoveryEvent {
 
     /// 节点离线
     NodeOffline(PeerId),
+
+    /// 收到用户信息
+    UserInfoReceived(PeerId, user_info::UserInfo),
 }

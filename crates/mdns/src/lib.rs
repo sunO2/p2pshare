@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod publisher;
 pub mod node;
 pub mod managed_discovery;
+pub mod user_info;
 
 pub use config::{MdnsConfig, ServiceInfo};
 pub use discovery::{MdnsDiscovery, DiscoveredPeer, DiscoveredEvent};
@@ -21,6 +22,7 @@ pub use managed_discovery::{
     HealthStatus,
     HealthCheckConfig,
 };
+pub use user_info::UserInfo;
 
 /// mDNS 相关错误
 #[derive(Error, Debug)]

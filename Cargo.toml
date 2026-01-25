@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/mdns"]
+members = ["crates/mdns", "crates/tui-app"]
 resolver = "2"
 
 [workspace.package]
@@ -13,6 +13,8 @@ edition.workspace = true
 
 [dependencies]
 mdns = { path = "crates/mdns" }
+tui-app = { path = "crates/tui-app" }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+tracing-appender = "0.2"
