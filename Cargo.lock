@@ -1773,6 +1773,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "localp2p-ffi"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "libp2p",
+ "mdns",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -12,6 +12,8 @@ use std::time::Duration;
 pub enum Event {
     /// 键盘输入事件
     Input(KeyEvent),
+    /// 字符粘贴/输入事件（用于处理中文输入法等）
+    Paste(String),
     /// 发现事件
     Discovery(ManagedDiscoveryEvent),
     /// 聊天事件
@@ -43,6 +45,10 @@ impl EventHandler {
                     if key_event.kind == KeyEventKind::Press {
                         self.tx.send(Event::Input(key_event)).await?;
                     }
+                }
+                Ok(crossterm::event::Event::Paste(content)) => {
+                    // 处理粘贴事件（包括中文输入法的输入）
+                    self.tx.send(Event::Paste(content)).await?;
                 }
                 Ok(_) => {
                     // 忽略其他事件（如鼠标、调整大小等）

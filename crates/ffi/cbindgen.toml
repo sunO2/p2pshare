@@ -1,0 +1,22 @@
+# cbindgen configuration for localp2p-ffi
+
+language = "C"
+cpp_compat = true
+
+[fn]
+prefix = "localp2p_"
+
+[struct]
+derive_eq = true
+
+[enum]
+rename_variants = "ScreamingSnakeCase"
+enum_class = true
+
+[const]
+allow_static_const = true
+
+[parse]
+parse_deps = true
+include = []
+exclude = []

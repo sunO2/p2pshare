@@ -106,7 +106,14 @@ impl ChatPanelState {
 
     /// 处理输入字符
     pub fn handle_input_char(&mut self, c: char) {
-        self.input_buffer.insert(self.cursor_position, c);
+        // 计算字节位置
+        let byte_pos = self.input_buffer
+            .chars()
+            .take(self.cursor_position)
+            .map(|c| c.len_utf8())
+            .sum::<usize>();
+
+        self.input_buffer.insert(byte_pos, c);
         self.cursor_position += 1;
         self.is_typing = true;
     }
@@ -114,15 +121,32 @@ impl ChatPanelState {
     /// 处理退格键
     pub fn handle_backspace(&mut self) {
         if self.cursor_position > 0 {
-            self.input_buffer.remove(self.cursor_position - 1);
-            self.cursor_position -= 1;
+            // 找到要删除的字符的字节范围
+            let mut byte_pos = 0;
+            for (i, c) in self.input_buffer.chars().enumerate() {
+                if i == self.cursor_position - 1 {
+                    // 删除这个字符
+                    self.input_buffer.replace_range(byte_pos..byte_pos + c.len_utf8(), "");
+                    self.cursor_position -= 1;
+                    return;
+                }
+                byte_pos += c.len_utf8();
+            }
         }
     }
 
     /// 处理删除键
     pub fn handle_delete(&mut self) {
-        if self.cursor_position < self.input_buffer.len() {
-            self.input_buffer.remove(self.cursor_position);
+        if self.cursor_position < self.input_buffer.chars().count() {
+            // 找到要删除的字符
+            let mut byte_pos = 0;
+            for (i, c) in self.input_buffer.chars().enumerate() {
+                if i == self.cursor_position {
+                    self.input_buffer.replace_range(byte_pos..byte_pos + c.len_utf8(), "");
+                    return;
+                }
+                byte_pos += c.len_utf8();
+            }
         }
     }
 

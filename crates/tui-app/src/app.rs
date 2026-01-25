@@ -249,6 +249,9 @@ impl TuiApp {
                 Some(Event::Input(key_event)) => {
                     self.handle_key_event(key_event)?;
                 }
+                Some(Event::Paste(content)) => {
+                    self.handle_paste_event(content)?;
+                }
                 Some(Event::Discovery(discovery_event)) => {
                     self.handle_discovery_event(discovery_event).await;
                 }
@@ -278,10 +281,6 @@ impl TuiApp {
     fn handle_key_event(&mut self, key_event: KeyEvent) -> AppResult<()> {
         match key_event.code {
             KeyCode::Char('q') | KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.running = false;
-            }
-            KeyCode::Char('q') => {
-                // 单独的 q 键也退出
                 self.running = false;
             }
             // Tab 切换焦点
@@ -346,10 +345,27 @@ impl TuiApp {
             KeyCode::Down if self.current_tab == AppTab::Panel2 => {
                 self.chat_panel_state.scroll_down();
             }
+            // 字符输入：在面板2时允许所有字符（包括 q），在面板1时按 q 退出
             KeyCode::Char(c) if self.current_tab == AppTab::Panel2 => {
                 self.chat_panel_state.handle_input_char(c);
             }
+            KeyCode::Char('q') => {
+                // 只在非聊天面板时，q 键退出
+                self.running = false;
+            }
             _ => {}
+        }
+        Ok(())
+    }
+
+    /// 处理粘贴/输入法输入事件
+    fn handle_paste_event(&mut self, content: String) -> AppResult<()> {
+        // 只在聊天面板且当前是面板2时处理
+        if self.current_tab == AppTab::Panel2 {
+            // 将每个字符添加到输入缓冲区
+            for c in content.chars() {
+                self.chat_panel_state.handle_input_char(c);
+            }
         }
         Ok(())
     }
