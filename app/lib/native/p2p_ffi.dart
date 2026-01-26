@@ -210,7 +210,7 @@ typedef CleanupDart = void Function(P2PHandle handle);
 
 typedef GetLocalPeerIdDart = int Function(P2PHandle handle, ffi.Pointer<ffi.Char> out, int outLen);
 typedef GetDeviceNameDart = int Function(P2PHandle handle, ffi.Pointer<ffi.Char> out, int outLen);
-typedef GetVerifiedNodesDart = int Function(P2PHandle handle, ffi.Pointer<ffi.Pointer<NodeInfo>> out, ffi.Pointer<ffi.Uint64> outLen);
+typedef GetVerifiedNodesDart = int Function(P2PHandle handle, ffi.Pointer<ffi.Pointer<NodeInfo>> out, ffi.Pointer<ffi.Size> outLen);
 typedef FreeNodeListDart = void Function(ffi.Pointer<NodeInfo> nodes, int len);
 
 typedef SendMessageDart = int Function(
@@ -369,7 +369,7 @@ class P2PService {
     if (_handle == null) throw Exception('Not initialized');
 
     final out = calloc<ffi.Pointer<NodeInfo>>();
-    final outLen = calloc<ffi.Uint64>();
+    final outLen = calloc<ffi.Size>();
 
     try {
       final result = _getVerifiedNodes(_handle!, out, outLen);

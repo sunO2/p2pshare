@@ -1,0 +1,325 @@
+import 'package:flutter/material.dart';
+import '../native/p2p_ffi.dart';
+import '../widgets/chat_bubble_sent.dart';
+import '../widgets/chat_bubble_received.dart';
+
+class ChatScreen extends StatefulWidget {
+  final P2PService p2p;
+  final String peerId;
+  final String deviceName;
+
+  const ChatScreen({
+    super.key,
+    required this.p2p,
+    required this.peerId,
+    this.deviceName = 'Unknown',
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _messageController = TextEditingController();
+  final List<ChatMessageData> _messages = [];
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToEvents();
+  }
+
+  void _listenToEvents() {
+    widget.p2p.eventStream.listen((event) {
+      if (!mounted) return;
+
+      if (event is MessageReceivedEvent && event.from == widget.peerId) {
+        setState(() {
+          _messages.add(ChatMessageData(
+            message: event.message,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(event.timestamp),
+            isSelf: false,
+          ));
+        });
+        _scrollToBottom();
+      } else if (event is MessageSentEvent && event.to == widget.peerId) {
+        setState(() {
+          _messages.add(ChatMessageData(
+            message: '(sent)',
+            timestamp: DateTime.now(),
+            isSelf: true,
+          ));
+        });
+        _scrollToBottom();
+      }
+    });
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    return Scaffold(
+      body: Column(
+        children: [
+          // Status Bar
+          _buildStatusBar(timeString),
+
+          // Header
+          _buildHeader(),
+
+          // Messages
+          Expanded(
+            child: _buildMessagesArea(),
+          ),
+
+          // Input Area
+          _buildInputArea(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBar(String time) {
+    return Container(
+      height: 62,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 21),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            time,
+            style: const TextStyle(
+              fontSize: 17,
+              color: Color(0xFF000000),
+            ),
+          ),
+          Container(
+            width: 60,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE5E4E1)),
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEDECEA),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_back,
+                size: 18,
+                color: Color(0xFF6D6C6A),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.deviceName,
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 2),
+                _buildStatusIndicator(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFC8F0D8),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Color(0xFF3D8A5A),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '在线',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: const Color(0xFF3D8A5A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessagesArea() {
+    return Container(
+      color: const Color(0xFFF5F4F1),
+      padding: const EdgeInsets.all(16),
+      child: ListView.separated(
+        controller: _scrollController,
+        itemCount: _messages.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final message = _messages[index];
+          if (message.isSelf) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ChatBubbleSent(message: message),
+              ],
+            );
+          } else {
+            return ChatBubbleReceived(message: message);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 34),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Color(0xFFE5E4E1)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F4F1),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _messageController,
+                decoration: const InputDecoration(
+                  hintText: '输入消息...',
+                  hintStyle: TextStyle(
+                    fontSize: 15,
+                    color: Color(0xFF9C9B99),
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                onSubmitted: _sendMessage,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: () => _sendMessage(_messageController.text),
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3D8A5A),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0x403D8A5A),
+                    offset: const Offset(0, 2),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.send,
+                size: 20,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _sendMessage(String text) {
+    if (text.trim().isEmpty) return;
+
+    widget.p2p.sendMessage(widget.peerId, text);
+    _messageController.clear();
+
+    // Add to local messages immediately for better UX
+    setState(() {
+      _messages.add(ChatMessageData(
+        message: text,
+        timestamp: DateTime.now(),
+        isSelf: true,
+      ));
+    });
+    _scrollToBottom();
+  }
+}
+
+class ChatMessageData {
+  final String message;
+  final DateTime timestamp;
+  final bool isSelf;
+
+  ChatMessageData({
+    required this.message,
+    required this.timestamp,
+    required this.isSelf,
+  });
+}
