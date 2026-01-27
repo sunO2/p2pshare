@@ -1,43 +1,30 @@
 //! 回调函数管理
 //!
-//! 处理从 Rust 到 Dart/Flutter 的回调
+//! 使用线程安全的方式从 Rust 后台线程向 Dart isolate 发送事件
 
 use std::sync::{Mutex, OnceLock};
 use std::ffi::c_void;
-use libc::c_char;
 
 use crate::types::*;
 
-/// 事件回调函数类型
+/// 事件回调函数类型（线程安全）
 ///
 /// # Parameters
-/// * `event` - 事件数据
-/// * `user_data` - 用户提供的上下文数据
-pub type EventCallback = extern "C" fn(event: P2PEventData, user_data: *mut c_void);
+/// * `event_type` - 事件类型
+/// * `data_json` - 事件数据的 JSON 字符串
+pub type EventCallbackSimple = extern "C" fn(event_type: i32, data_json: *const i8);
 
-/// 线程安全的回调数据
-struct CallbackData {
-    callback: EventCallback,
-    user_data: *mut c_void,
-}
+/// 全局回调函数
+static CALLBACK: Mutex<OnceLock<EventCallbackSimple>> = Mutex::new(OnceLock::new());
 
-// 实现 Send（裸指针不是 Send，但我们只在同一线程中使用）
-unsafe impl Send for CallbackData {}
-
-/// 全局回调函数和用户数据
-static CALLBACK: Mutex<OnceLock<CallbackData>> = Mutex::new(OnceLock::new());
-
-/// 设置事件回调
+/// 设置事件回调（从 Dart 调用）
 ///
 /// # Safety
-/// user_data 必须是有效的指针，直到回调被清除
-pub unsafe fn set_event_callback(callback: EventCallback, user_data: *mut c_void) {
+/// callback 必须是有效的函数指针
+pub unsafe fn set_event_callback_simple(callback: EventCallbackSimple) {
     let cb = CALLBACK.lock().unwrap();
-    let data = CallbackData {
-        callback,
-        user_data,
-    };
-    let _ = cb.set(data);
+    let _ = cb.set(callback);
+    tracing::info!("Event callback set");
 }
 
 /// 清除事件回调
@@ -46,31 +33,50 @@ pub fn clear_event_callback() {
     *cb = OnceLock::new();
 }
 
-/// 触发事件回调
-pub fn trigger_event_callback(event: P2PEventData) {
+/// 发送事件到 Dart（线程安全）
+pub fn send_event_to_dart(event_type: i32, data_json: &str) {
     let cb = CALLBACK.lock().unwrap();
-    if let Some(data) = cb.get() {
-        (data.callback)(event, data.user_data);
+    if let Some(callback) = cb.get() {
+        // 将 JSON 字符串转换为 C 字符串
+        if let Ok(c_str) = std::ffi::CString::new(data_json) {
+            let ptr = c_str.as_ptr();
+            // 调用回调（转换 *const u8 为 *const i8）
+            callback(event_type, ptr as *const i8);
+            // c_str 会在作用域结束时自动释放
+        } else {
+            tracing::error!("Failed to create CString: invalid UTF-8");
+        }
+    } else {
+        tracing::warn!("Event callback not set, skipping event type {}", event_type);
     }
 }
 
-/// 创建 P2PEventData（用于触发回调）
-pub fn create_event_data(
-    event_type: P2PEventType,
-    peer_id: Option<&str>,
-    display_name: Option<&str>,
-    message: Option<&str>,
-    message_id: Option<&str>,
-    is_typing: bool,
-    timestamp: i64,
-) -> P2PEventData {
-    P2PEventData {
-        event_type,
-        peer_id: peer_id.map(|s| s.as_ptr() as *const c_char).unwrap_or(std::ptr::null()),
-        display_name: display_name.map(|s| s.as_ptr() as *const c_char).unwrap_or(std::ptr::null()),
-        message: message.map(|s| s.as_ptr() as *const c_char).unwrap_or(std::ptr::null()),
-        message_id: message_id.map(|s| s.as_ptr() as *const c_char).unwrap_or(std::ptr::null()),
-        is_typing,
-        timestamp,
-    }
+/// 触发事件回调（兼容旧接口）
+pub fn trigger_event_callback(event: P2PEventData) {
+    use crate::types::P2PEventType;
+    use std::ffi::CStr;
+
+    // 将事件转换为 JSON 字符串
+    let peer_id = unsafe {
+        if !event.peer_id.is_null() {
+            CStr::from_ptr(event.peer_id).to_string_lossy().to_string()
+        } else {
+            String::new()
+        }
+    };
+
+    let display_name = unsafe {
+        if !event.display_name.is_null() {
+            CStr::from_ptr(event.display_name).to_string_lossy().to_string()
+        } else {
+            String::new()
+        }
+    };
+
+    let data_json = format!(
+        r#"{{"peer_id":"{}","display_name":"{}"}}"#,
+        peer_id, display_name
+    );
+
+    send_event_to_dart(event.event_type as i32, &data_json);
 }

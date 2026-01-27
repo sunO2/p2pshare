@@ -132,7 +132,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 编译好的 .so 文件会被复制到：
 
 ```
-app/android/src/main/jniLibs/
+app/android/app/src/main/jniLibs/
 ├── arm64-v8a/
 │   └── liblocalp2p_ffi.so    (~6.2 MB)
 ├── armeabi-v7a/
@@ -331,7 +331,7 @@ Could not find liblocalp2p_ffi.so
 
 **解决方案:**
 
-1. 确认 .so 文件已正确生成到 `app/android/src/main/jniLibs/` 目录
+1. 确认 .so 文件已正确生成到 `app/android/app/src/main/jniLibs/` 目录
 2. 清理 Flutter 缓存：`flutter clean`
 3. 重新获取依赖：`flutter pub get`
 4. 重新构建：`flutter build apk`
@@ -354,20 +354,20 @@ Could not find liblocalp2p_ffi.so
 
 ```bash
 # 仅编译 ARM 64 位
-cargo ndk --target arm64-v8a --platform 21 -o app/android/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
+cargo ndk --target arm64-v8a --platform 21 -o app/android/app/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
 
 # 仅编译 ARM 32 位
-cargo ndk --target armeabi-v7a --platform 21 -o app/android/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
+cargo ndk --target armeabi-v7a --platform 21 -o app/android/app/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
 
 # 编译模拟器架构
-cargo ndk --target x86_64 --target x86 --platform 21 -o app/android/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
+cargo ndk --target x86_64 --target x86 --platform 21 -o app/android/app/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
 ```
 
 ### 使用不同的 API Level
 
 ```bash
 # 使用 API 28
-cargo ndk --target arm64-v8a --platform 28 -o app/android/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
+cargo ndk --target arm64-v8a --platform 28 -o app/android/app/src/main/jniLibs --manifest-path crates/ffi/Cargo.toml -- build
 ```
 
 ## 相关链接

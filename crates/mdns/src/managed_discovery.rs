@@ -165,7 +165,10 @@ impl ManagedDiscovery {
                 libp2p::noise::Config::new,
                 libp2p::yamux::Config::default,
             )
-            .map_err(|e| MdnsError::SwarmBuild(e.to_string()))?
+            .map_err(|e| {
+                tracing::error!("TCP transport build failed: {:?}", e);
+                MdnsError::SwarmBuild(format!("TCP: {}", e))
+            })?
             .with_behaviour(|_key| {
                 let mdns = mdns::tokio::Behaviour::new(
                     mdns::Config::default(),
@@ -194,7 +197,10 @@ impl ManagedDiscovery {
 
                 Ok(ManagedBehaviour { mdns, identify, ping, request_response, chat })
             })
-            .map_err(|e| MdnsError::SwarmBuild(e.to_string()))?
+            .map_err(|e| {
+                tracing::error!("Behaviour build failed: {:?}", e);
+                MdnsError::SwarmBuild(format!("Behaviour: {}", e))
+            })?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 

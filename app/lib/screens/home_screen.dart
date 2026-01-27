@@ -21,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _localPeerId;
   String? _deviceName;
   int _currentIndex = 0;
+  String? _initError;  // 添加错误信息字段
 
   // Tab pages
   final List<Widget> _pages = [];
@@ -33,24 +34,47 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initP2P() async {
     try {
+      debugPrint('开始初始化 P2P...');
+      debugPrint('库路径: ${_getLibraryPath()}');
+
       final lib = ffi.DynamicLibrary.open(_getLibraryPath());
+      debugPrint('✓ 库加载成功');
       _p2p = P2PService(lib);
 
+      debugPrint('开始调用 init...');
       final success = _p2p!.init('我的设备');
+      debugPrint('init 结果: $success');
+
       if (success) {
+        debugPrint('✓ init 成功，获取节点信息...');
+
         setState(() {
           _isInitialized = true;
           _localPeerId = _p2p!.getLocalPeerId();
           _deviceName = _p2p!.getDeviceName();
+          _initError = null;
         });
 
+        debugPrint('✓ Peer ID: $_localPeerId');
+        debugPrint('✓ Device Name: $_deviceName');
+        debugPrint('开始调用 start...');
         _p2p!.start();
+        debugPrint('✓ start 调用完成');
+      } else {
+        debugPrint('✗ init 返回 false');
+        if (mounted) {
+          setState(() {
+            _initError = '初始化失败：init 返回 false';
+          });
+        }
       }
-    } catch (e) {
-      debugPrint('Failed to initialize P2P: $e');
+    } catch (e, stackTrace) {
+      debugPrint('✗ 初始化异常: $e');
+      debugPrint('Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
           _isInitialized = false;
+          _initError = '初始化失败：$e';
         });
       }
     }
@@ -110,18 +134,83 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_isInitialized) {
       return Scaffold(
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '正在初始化...',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_initError == null) ...[
+                  const CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '正在初始化...',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    '正在加载 P2P 模块，请稍候...',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ] else ...[
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '初始化失败',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red[200]!),
+                    ),
+                    child: Text(
+                      _initError!,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.red[700],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    '请确保:\n'
+                    '• 设备已授予必要权限\n'
+                    '• 库文件正确安装\n'
+                    '• 网络连接正常',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _initError = null;
+                      });
+                      _initP2P();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重试'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3D8A5A),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       );

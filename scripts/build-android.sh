@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 FFI_CRATE_DIR="$PROJECT_ROOT/crates/ffi"
-ANDROID_JNI_DIR="$PROJECT_ROOT/app/android/src/main/jniLibs"
+ANDROID_JNI_DIR="$PROJECT_ROOT/app/android/app/src/main/jniLibs"
 
 # 目标架构
 TARGETS=(

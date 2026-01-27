@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ffi' as ffi;
+import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 
 // ============================================================
@@ -33,56 +34,6 @@ abstract final class P2PEventType {
 base class P2PHandle extends ffi.Struct {
   @ffi.Int32()
   external int _private;
-}
-
-/// P2P 事件数据
-base class P2PEventData extends ffi.Struct {
-  @ffi.Int32()
-  external int eventType;
-
-  external ffi.Pointer<ffi.Char> peerId;
-  external ffi.Pointer<ffi.Char> displayName;
-  external ffi.Pointer<ffi.Char> message;
-  external ffi.Pointer<ffi.Char> messageId;
-
-  @ffi.Bool()
-  external bool isTyping;
-
-  @ffi.Int64()
-  external int timestamp;
-
-  /// 获取 Peer ID
-  String get peerIdString {
-    final ptr = peerId;
-    if (ptr == ffi.nullptr) return '';
-    return ptr.cast<Utf8>().toDartString();
-  }
-
-  /// 获取显示名称
-  String get displayNameString {
-    final ptr = displayName;
-    if (ptr == ffi.nullptr) return '';
-    return ptr.cast<Utf8>().toDartString();
-  }
-
-  /// 获取消息内容
-  String get messageString {
-    final ptr = message;
-    if (ptr == ffi.nullptr) return '';
-    return ptr.cast<Utf8>().toDartString();
-  }
-
-  /// 获取消息 ID
-  String get messageIdString {
-    final ptr = messageId;
-    if (ptr == ffi.nullptr) return '';
-    return ptr.cast<Utf8>().toDartString();
-  }
-
-  /// 获取时间戳
-  DateTime get timestampDateTime {
-    return DateTime.fromMillisecondsSinceEpoch(timestamp);
-  }
 }
 
 /// 节点信息结构
@@ -166,17 +117,12 @@ class PeerTypingEvent extends P2PEvent {
 }
 
 // ============================================================
-// 全局事件控制器（用于回调）
-// ============================================================
-
-final _globalEventController = StreamController<P2PEvent>.broadcast();
-
-// ============================================================
 // FFI 函数签名
 // ============================================================
 
 typedef InitNative = P2PHandle Function(ffi.Pointer<ffi.Char> deviceName, ffi.Pointer<ffi.Pointer<ffi.Char>> errorOut);
-typedef StartNative = ffi.Int32 Function(P2PHandle handle, ffi.Pointer<ffi.NativeFunction<EventCallbackNative>> callback, ffi.Pointer<ffi.Void> userData);
+typedef SetEventCallbackNative = ffi.Void Function(ffi.Pointer<ffi.NativeFunction<EventCallbackNative>> callback);
+typedef StartNative = ffi.Int32 Function(P2PHandle handle);
 typedef StopNative = ffi.Int32 Function(P2PHandle handle);
 typedef CleanupNative = ffi.Void Function(P2PHandle handle);
 
@@ -204,7 +150,8 @@ typedef FreeErrorNative = ffi.Void Function(ffi.Pointer<ffi.Char> error);
 
 // Dart 类型定义
 typedef InitDart = P2PHandle Function(ffi.Pointer<ffi.Char> deviceName, ffi.Pointer<ffi.Pointer<ffi.Char>> errorOut);
-typedef StartDart = int Function(P2PHandle handle, ffi.Pointer<ffi.NativeFunction<EventCallbackNative>> callback, ffi.Pointer<ffi.Void> userData);
+typedef SetEventCallbackDart = void Function(ffi.Pointer<ffi.NativeFunction<EventCallbackNative>> callback);
+typedef StartDart = int Function(P2PHandle handle);
 typedef StopDart = int Function(P2PHandle handle);
 typedef CleanupDart = void Function(P2PHandle handle);
 
@@ -230,8 +177,9 @@ typedef BroadcastMessageDart = int Function(
 
 typedef FreeErrorDart = void Function(ffi.Pointer<ffi.Char> error);
 
-// 回调函数类型
-typedef EventCallbackNative = ffi.Void Function(P2PEventData eventData, ffi.Pointer<ffi.Void> userData);
+// 回调函数类型（从 Rust 调用）
+// Rust: extern "C" fn(i32, *const i8)
+typedef EventCallbackNative = ffi.Void Function(ffi.Int32 eventType, ffi.Pointer<ffi.Int8> dataJson);
 
 // ============================================================
 // P2P Service
@@ -241,6 +189,7 @@ class P2PService {
   final ffi.DynamicLibrary _lib;
 
   late final InitDart _init;
+  late final SetEventCallbackDart _setEventCallback;
   late final StartDart _start;
   late final StopDart _stop;
   late final CleanupDart _cleanup;
@@ -254,14 +203,17 @@ class P2PService {
 
   P2PHandle? _handle;
   final _eventController = StreamController<P2PEvent>.broadcast();
-  ffi.Pointer<ffi.NativeFunction<EventCallbackNative>>? _callbackPointer;
-  StreamSubscription<P2PEvent>? _globalSubscription;
+
+  // 使用 NativeCallable 而不是 Pointer.fromFunction
+  ffi.NativeCallable<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>? _nativeCallback;
+  ReceivePort? _receivePort;
 
   Stream<P2PEvent> get eventStream => _eventController.stream;
 
   P2PService(this._lib) {
     // 加载函数
     _init = _lib.lookup<ffi.NativeFunction<InitNative>>('localp2p_init').asFunction();
+    _setEventCallback = _lib.lookup<ffi.NativeFunction<SetEventCallbackNative>>('localp2p_set_event_callback').asFunction();
     _start = _lib.lookup<ffi.NativeFunction<StartNative>>('localp2p_start').asFunction();
     _stop = _lib.lookup<ffi.NativeFunction<StopNative>>('localp2p_stop').asFunction();
     _cleanup = _lib.lookup<ffi.NativeFunction<CleanupNative>>('localp2p_cleanup').asFunction();
@@ -272,11 +224,6 @@ class P2PService {
     _sendMessage = _lib.lookup<ffi.NativeFunction<SendMessageNative>>('localp2p_send_message').asFunction();
     _broadcastMessage = _lib.lookup<ffi.NativeFunction<BroadcastMessageNative>>('localp2p_broadcast_message').asFunction();
     _freeError = _lib.lookup<ffi.NativeFunction<FreeErrorNative>>('localp2p_free_error').asFunction();
-
-    // 订阅全局事件流
-    _globalSubscription = _globalEventController.stream.listen((event) {
-      _eventController.add(event);
-    });
   }
 
   /// 初始化 P2P 模块
@@ -307,12 +254,70 @@ class P2PService {
       throw Exception('Not initialized');
     }
 
-    // 创建回调闭包
-    _callbackPointer = ffi.Pointer.fromFunction<EventCallbackNative>(
-      _eventCallback,
+    // 创建 ReceivePort 来接收事件
+    _receivePort = ReceivePort();
+
+    // 监听 ReceivePort
+    _receivePort!.listen((rawData) {
+      if (rawData is List<dynamic> && rawData.length == 2) {
+        final eventType = rawData[0] as int;
+        final dataJson = rawData[1] as String;
+        _handleEvent(eventType, dataJson);
+      }
+    });
+
+    // 获取 SendPort 用于从原生代码发送消息
+    final sendPort = _receivePort!.sendPort;
+
+    // 创建 isolate-local 的回调函数
+    _nativeCallback = ffi.NativeCallable<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>.isolateLocal(
+      (int eventType, ffi.Pointer<ffi.Int8> dataJson) {
+        // 这个回调会在 isolate 中被调用
+        try {
+          if (dataJson != ffi.nullptr) {
+            final jsonStr = dataJson.cast<Utf8>().toDartString();
+            // 通过 SendPort 发送到 Dart isolate
+            sendPort.send([eventType, jsonStr]);
+          }
+        } catch (e) {
+          // 忽略错误
+        }
+      },
     );
 
-    return _start(_handle!, _callbackPointer!, ffi.nullptr) == 0;
+    // 设置回调到 Rust
+    _setEventCallback(_nativeCallback!.nativeFunction);
+
+    return _start(_handle!) == 0;
+  }
+
+  /// 处理事件
+  void _handleEvent(int eventType, String jsonStr) {
+    try {
+      // 解析 JSON 事件
+      final typeMatch = RegExp(r'"peer_id":"([^"]*)"').firstMatch(jsonStr);
+      final displayNameMatch = RegExp(r'"display_name":"([^"]*)"').firstMatch(jsonStr);
+
+      final peerId = typeMatch?.group(1) ?? '';
+      final displayName = displayNameMatch?.group(1) ?? '';
+
+      switch (eventType) {
+        case P2PEventType.nodeDiscovered:
+          _eventController.add(NodeDiscoveredEvent(peerId));
+          break;
+        case P2PEventType.nodeVerified:
+          _eventController.add(NodeVerifiedEvent(peerId, displayName));
+          break;
+        case P2PEventType.nodeOffline:
+          _eventController.add(NodeOfflineEvent(peerId));
+          break;
+        case P2PEventType.messageSent:
+          _eventController.add(MessageSentEvent(peerId, ''));
+          break;
+      }
+    } catch (e) {
+      // 忽略解析错误
+    }
   }
 
   /// 停止 P2P 服务
@@ -324,7 +329,9 @@ class P2PService {
 
   /// 清理资源
   void cleanup() {
-    _globalSubscription?.cancel();
+    _receivePort?.close();
+    _nativeCallback?.close();
+    stop();
     if (_handle != null) {
       _cleanup(_handle!);
       _handle = null;
@@ -459,56 +466,6 @@ class P2PService {
       calloc.free(targets);
       calloc.free(messageC);
       calloc.free(errorOut);
-    }
-  }
-
-  /// 事件回调（C 调用）
-  static void _eventCallback(P2PEventData eventData, ffi.Pointer<ffi.Void> userData) {
-    final eventType = eventData.eventType;
-
-    switch (eventType) {
-      case P2PEventType.nodeDiscovered:
-        final peerId = eventData.peerIdString;
-        _globalEventController.add(NodeDiscoveredEvent(peerId));
-        break;
-
-      case P2PEventType.nodeExpired:
-        final peerId = eventData.peerIdString;
-        _globalEventController.add(NodeExpiredEvent(peerId));
-        break;
-
-      case P2PEventType.nodeVerified:
-        final peerId = eventData.peerIdString;
-        final displayName = eventData.displayNameString;
-        _globalEventController.add(NodeVerifiedEvent(peerId, displayName));
-        break;
-
-      case P2PEventType.nodeOffline:
-        final peerId = eventData.peerIdString;
-        _globalEventController.add(NodeOfflineEvent(peerId));
-        break;
-
-      case P2PEventType.messageReceived:
-        final from = eventData.peerIdString;
-        final message = eventData.messageString;
-        final timestamp = eventData.timestamp;
-        _globalEventController.add(MessageReceivedEvent(from, message, timestamp));
-        break;
-
-      case P2PEventType.messageSent:
-        final to = eventData.peerIdString;
-        final messageId = eventData.messageIdString;
-        _globalEventController.add(MessageSentEvent(to, messageId));
-        break;
-
-      case P2PEventType.peerTyping:
-        final from = eventData.peerIdString;
-        final isTyping = eventData.isTyping;
-        _globalEventController.add(PeerTypingEvent(from, isTyping));
-        break;
-
-      default:
-        break;
     }
   }
 }

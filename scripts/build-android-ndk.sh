@@ -80,7 +80,7 @@ echo -e "${BLUE}开始编译...${NC}"
 echo ""
 
 cd "$PROJECT_ROOT"
-cargo ndk --target arm64-v8a --target armeabi-v7a --target x86_64 --target x86 --platform 21 -o "$ANDROID_JNI_DIR" -- --release
+cargo ndk --target arm64-v8a --target armeabi-v7a --target x86_64 --target x86 --platform 21 -o "$ANDROID_JNI_DIR" -- build --release
 
 echo ""
 echo -e "${GREEN}✓ 编译完成${NC}"

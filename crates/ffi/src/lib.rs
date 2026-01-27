@@ -1,10 +1,13 @@
 //! Local P2P FFI 层
 //!
 //! 提供 C ABI 兼容的接口，供 Flutter/Dart 调用
+//!
+//! 使用事件队列模式：Rust 将事件放入队列，Dart 通过轮询获取事件
+//! 这样避免了从 Rust 后台线程直接调用 Dart 回调的问题
 
 #![allow(clippy::missing_safety_doc)]
 
-use std::ffi::{CStr, CString, c_char, c_void};
+use std::ffi::{CStr, CString, c_char};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use libc::size_t;
@@ -16,10 +19,8 @@ use mdns::{
 
 mod types;
 mod error;
-mod callbacks;
 
 use types::*;
-use callbacks::*;
 
 // ============================================================================
 // 全局运行时和状态管理
@@ -41,12 +42,21 @@ struct GlobalDiscoveryResources {
 
 static mut DISCOVERY_RESOURCES: Option<GlobalDiscoveryResources> = None;
 
+/// 事件队列（线程安全，Rust 写入，Dart 轮询读取）
+static EVENT_QUEUE: Mutex<Vec<EventData>> = Mutex::new(Vec::new());
+
+/// 事件数据（可序列化到 Dart）
+#[derive(Clone)]
+struct EventData {
+    event_type: i32,
+    data: String,
+}
+
 /// P2P 实例（包含所有核心组件）
 struct P2PInstance {
     node_manager: Arc<NodeManager>,
     local_peer_id: String,
     device_name: String,
-    event_tx: tokio::sync::mpsc::UnboundedSender<P2PEvent>,
     /// 命令通道，用于向 discovery 线程发送命令
     command_tx: tokio::sync::mpsc::UnboundedSender<P2PCommand>,
     /// Discovery 线程句柄
@@ -177,103 +187,54 @@ pub unsafe extern "C" fn localp2p_init(
         // 获取 chat 事件接收器
         let chat_event_rx = discovery.take_chat_events();
 
-        // 将 discovery 移到闭包外，在线程中运行
-        let event_tx_clone = event_tx.clone();
-
         // 创建实例
         let instance = P2PInstance {
             node_manager,
             local_peer_id: local_peer_id.clone(),
             device_name,
-            event_tx: event_tx.clone(),
             command_tx,
             discovery_thread: None,
         };
 
-        // 启动事件处理任务（处理 P2P 事件并触发回调）
+        // 启动事件处理任务（将事件放入队列）
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
-                // 触发回调
-                match &event {
-                    P2PEvent::NodeDiscovered { peer_id, .. } => {
-                        let event_data = create_event_data(
-                            P2PEventType::NodeDiscovered,
-                            Some(peer_id),
-                            None,
-                            None,
-                            None,
-                            false,
-                            0,
-                        );
-                        trigger_event_callback(event_data);
-                    }
-                    P2PEvent::NodeVerified { peer_id, display_name } => {
-                        let event_data = create_event_data(
-                            P2PEventType::NodeVerified,
-                            Some(peer_id),
-                            Some(display_name),
-                            None,
-                            None,
-                            false,
-                            0,
-                        );
-                        trigger_event_callback(event_data);
-                    }
-                    P2PEvent::NodeOffline { peer_id } => {
-                        let event_data = create_event_data(
-                            P2PEventType::NodeOffline,
-                            Some(peer_id),
-                            None,
-                            None,
-                            None,
-                            false,
-                            0,
-                        );
-                        trigger_event_callback(event_data);
-                    }
-                    P2PEvent::MessageReceived { from, message } => {
-                        let event_data = create_event_data(
-                            P2PEventType::MessageReceived,
-                            Some(from),
-                            None,
-                            Some(&message.content),
-                            None,
-                            false,
-                            message.timestamp,
-                        );
-                        trigger_event_callback(event_data);
-                    }
-                    P2PEvent::MessageSent { to, message_id } => {
-                        let event_data = create_event_data(
-                            P2PEventType::MessageSent,
-                            Some(to),
-                            None,
-                            None,
-                            Some(message_id),
-                            false,
-                            0,
-                        );
-                        trigger_event_callback(event_data);
-                    }
-                    P2PEvent::PeerTyping { from, is_typing } => {
-                        let event_data = create_event_data(
-                            P2PEventType::PeerTyping,
-                            Some(from),
-                            None,
-                            None,
-                            None,
-                            *is_typing,
-                            0,
-                        );
-                        trigger_event_callback(event_data);
-                    }
-                    _ => {}
-                }
+                let event_data = match event {
+                    P2PEvent::NodeDiscovered { peer_id, .. } => EventData {
+                        event_type: types::P2PEventType::NodeDiscovered as i32,
+                        data: format!(r#"{{"peer_id":"{}"}}"#, peer_id),
+                    },
+                    P2PEvent::NodeVerified { peer_id, display_name } => EventData {
+                        event_type: types::P2PEventType::NodeVerified as i32,
+                        data: format!(r#"{{"peer_id":"{}","display_name":"{}"}}"#, peer_id, display_name),
+                    },
+                    P2PEvent::NodeOffline { peer_id } => EventData {
+                        event_type: types::P2PEventType::NodeOffline as i32,
+                        data: format!(r#"{{"peer_id":"{}"}}"#, peer_id),
+                    },
+                    P2PEvent::MessageReceived { from, message } => EventData {
+                        event_type: types::P2PEventType::MessageReceived as i32,
+                        data: format!(r#"{{"peer_id":"{}","message":"{}"}}"#, from, message.content),
+                    },
+                    P2PEvent::MessageSent { to, message_id } => EventData {
+                        event_type: types::P2PEventType::MessageSent as i32,
+                        data: format!(r#"{{"peer_id":"{}","message_id":"{}"}}"#, to, message_id),
+                    },
+                    P2PEvent::PeerTyping { from, is_typing } => EventData {
+                        event_type: types::P2PEventType::PeerTyping as i32,
+                        data: format!(r#"{{"peer_id":"{}","is_typing":{}}}"#, from, is_typing),
+                    },
+                    _ => continue,
+                };
+
+                // 将事件放入队列（线程安全）
+                let mut queue = EVENT_QUEUE.lock().unwrap();
+                queue.push(event_data);
             }
         });
 
         // 保存 discovery 和相关资源，供 localp2p_start 使用
-        (Some((instance, discovery, chat_event_rx, command_rx, event_tx_clone)), Ok(()))
+        (Some((instance, discovery, chat_event_rx, command_rx, event_tx)), Ok(()))
     });
 
     match result {
@@ -304,15 +265,10 @@ pub unsafe extern "C" fn localp2p_init(
 #[no_mangle]
 pub unsafe extern "C" fn localp2p_start(
     _handle: P2PHandle,
-    event_callback: EventCallback,
-    user_data: *mut c_void,
 ) -> P2PErrorCode {
     if P2P_INSTANCE.is_none() {
         return P2PErrorCode::NotInitialized;
     }
-
-    // 设置全局回调
-    set_event_callback(event_callback, user_data);
 
     // 从全局变量取出资源
     let resources = if let Some(ref mut res) = DISCOVERY_RESOURCES {
@@ -514,6 +470,68 @@ pub unsafe extern "C" fn localp2p_start(
     P2PErrorCode::Success
 }
 
+/// 轮询事件队列（Dart 调用此函数获取事件）
+///
+/// # Safety
+/// 调用者负责释放返回的字符串
+#[no_mangle]
+pub unsafe extern "C" fn localp2p_poll_events(
+    _handle: P2PHandle,
+    out_events: *mut *mut EventRaw,
+    out_count: *mut size_t,
+) -> size_t {
+    if out_events.is_null() || out_count.is_null() {
+        return 0;
+    }
+
+    // 从队列中取出所有事件
+    let mut queue = EVENT_QUEUE.lock().unwrap();
+    let count = queue.len();
+
+    if count == 0 {
+        *out_count = 0;
+        return 0;
+    }
+
+    // 转换为 C 数组
+    let events: Vec<EventRaw> = queue.drain(..).map(|event| {
+        let data_ptr = string_to_cstring(event.data).into_raw();
+        EventRaw {
+            event_type: event.event_type,
+            data: data_ptr,
+        }
+    }).collect();
+
+    let ptr = events.as_ptr() as *mut EventRaw;
+    let len = events.len();
+    std::mem::forget(events);
+
+    *out_events = ptr;
+    *out_count = len;
+
+    len
+}
+
+/// 释放事件数组
+///
+/// # Safety
+#[no_mangle]
+pub unsafe extern "C" fn localp2p_free_events(
+    events: *mut EventRaw,
+    count: size_t,
+) {
+    if events.is_null() || count == 0 {
+        return;
+    }
+
+    let slice = std::slice::from_raw_parts_mut(events, count);
+    for event in slice {
+        if !event.data.is_null() {
+            let _ = CString::from_raw(event.data);
+        }
+    }
+}
+
 /// 停止 P2P 服务
 ///
 /// # Safety
@@ -530,7 +548,10 @@ pub unsafe extern "C" fn localp2p_stop(_handle: P2PHandle) -> P2PErrorCode {
 pub unsafe extern "C" fn localp2p_cleanup(_handle: P2PHandle) {
     localp2p_stop(P2PHandle { _private: 0 });
     RUNTIME = None;
-    clear_event_callback();
+
+    // 清空事件队列
+    let mut queue = EVENT_QUEUE.lock().unwrap();
+    queue.clear();
 }
 
 // ============================================================================
