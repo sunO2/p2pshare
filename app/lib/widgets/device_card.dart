@@ -39,13 +39,6 @@ class DeviceCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x08000000),
-            offset: const Offset(0, 2),
-            blurRadius: 12,
-          ),
-        ],
       ),
       child: Material(
         color: Colors.transparent,

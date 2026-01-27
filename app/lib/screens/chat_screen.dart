@@ -79,16 +79,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final timeString =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
     return Scaffold(
       body: Column(
         children: [
-          // Status Bar
-          _buildStatusBar(timeString),
-
           // Header
           _buildHeader(),
 
@@ -97,30 +90,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
           // Input Area
           _buildInputArea(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusBar(String time) {
-    return Container(
-      height: 62,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 21),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            time,
-            style: const TextStyle(fontSize: 17, color: Color(0xFF000000)),
-          ),
-          Container(
-            width: 60,
-            height: 24,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
         ],
       ),
     );
@@ -263,13 +232,6 @@ class _ChatScreenState extends State<ChatScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF3D8A5A),
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0x403D8A5A),
-                    offset: const Offset(0, 2),
-                    blurRadius: 8,
-                  ),
-                ],
               ),
               child: const Icon(Icons.send, size: 20, color: Colors.white),
             ),

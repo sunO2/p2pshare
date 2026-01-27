@@ -81,8 +81,11 @@ class P2PManager {
 
   /// 初始化 P2P 模块
   Future<void> init(String deviceName) async {
-    if (_initialized) {
-      throw Exception('Already initialized');
+    // 先检查 Rust 端是否已初始化
+    if (_isRustInitialized()) {
+      debugPrint('Rust 已初始化，同步状态...');
+      _syncState();
+      return;
     }
 
     // 初始化 flutter_rust_bridge
@@ -97,6 +100,30 @@ class P2PManager {
     }
   }
 
+  /// 检查 Rust 端是否已初始化
+  bool _isRustInitialized() {
+    try {
+      // 尝试调用新的检查函数
+      // 如果函数不存在（旧版本），捕获异常并返回 false
+      return RustLib.instance.api.localp2PFfiBridgeP2PIsInitialized();
+    } catch (e) {
+      // 函数可能不存在，假设未初始化
+      debugPrint('p2pIsInitialized 调用失败: $e');
+      return false;
+    }
+  }
+
+  /// 同步 Rust 端状态到 Dart
+  void _syncState() {
+    debugPrint('同步 Rust 状态到 Dart...');
+    _initialized = true;
+
+    // 恢复轮询（如果未运行）
+    if (_pollTimer == null || !_pollTimer!.isActive) {
+      _startPolling();
+    }
+  }
+
   /// 事件流
   Stream<P2PEvent> get eventStream => _eventController.stream;
 
@@ -106,12 +133,29 @@ class P2PManager {
       throw Exception('Not initialized');
     }
 
+    // 检查是否已在运行
+    if (_isRustRunning()) {
+      debugPrint('Rust 服务已在运行，仅恢复轮询');
+      _startPolling();
+      return;
+    }
+
     try {
       RustLib.instance.api.localp2PFfiBridgeP2PStart();
       // 启动轮询以模拟事件（临时方案）
       _startPolling();
     } catch (e) {
       throw Exception('Failed to start P2P: $e');
+    }
+  }
+
+  /// 检查 Rust 端是否已运行
+  bool _isRustRunning() {
+    try {
+      return RustLib.instance.api.localp2PFfiBridgeP2PIsRunning();
+    } catch (e) {
+      debugPrint('p2pIsRunning 调用失败: $e');
+      return false;
     }
   }
 

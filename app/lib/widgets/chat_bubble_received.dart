@@ -23,13 +23,6 @@ class ChatBubbleReceived extends StatelessWidget {
           bottomRight: Radius.circular(20),
         ),
         border: Border.all(color: const Color(0xFFE5E4E1)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x08000000),
-            offset: const Offset(0, 1),
-            blurRadius: 6,
-          ),
-        ],
       ),
       padding: const EdgeInsets.all(16),
       child: Column(

@@ -48,7 +48,12 @@ fi
 
 # 自动修复生成代码中的路径问题（localp2p_ffi:: -> crate::）
 echo -e "  ${BLUE}修复生成代码中的路径引用...${NC}"
+# 修复 use 语句中的路径
 sed -i 's/use localp2p_ffi::bridge::\*/use crate::bridge::*;/g' crates/ffi/src/frb_generated.rs
+# 修复所有函数调用中的路径
+sed -i 's/localp2p_ffi::bridge::/crate::bridge::/g' crates/ffi/src/frb_generated.rs
+# 修复双分号问题
+sed -i 's/;;/;/g' crates/ffi/src/frb_generated.rs
 
 echo -e "${GREEN}✓ FRB 代码生成完成${NC}"
 echo ""

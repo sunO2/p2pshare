@@ -66,15 +66,8 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final timeString =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
     return Column(
       children: [
-        // Status Bar
-        _buildStatusBar(timeString),
-
         // Header Section
         _buildHeaderSection(),
 
@@ -88,34 +81,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
         // Tab Bar Spacer
         const SizedBox(height: 84),
       ],
-    );
-  }
-
-  Widget _buildStatusBar(String time) {
-    return Container(
-      height: 62,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 21),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            time,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.normal,
-              color: Color(0xFF000000),
-            ),
-          ),
-          Container(
-            width: 60,
-            height: 24,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -142,16 +107,9 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0x08000000),
-                      offset: Offset(0, 2),
-                      blurRadius: 12,
-                    ),
-                  ],
                 ),
                 child: Material(
                   color: Colors.transparent,

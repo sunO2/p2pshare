@@ -9,6 +9,13 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
 
+/// 检查 P2P 是否已初始化
+bool p2PIsInitialized() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PIsInitialized();
+
+/// 检查 P2P 服务是否正在运行
+bool p2PIsRunning() => RustLib.instance.api.localp2PFfiBridgeP2PIsRunning();
+
 /// 初始化 P2P 模块
 ///
 /// # Arguments

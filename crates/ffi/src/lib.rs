@@ -58,6 +58,9 @@ struct GlobalDiscoveryResources {
 
 static mut DISCOVERY_RESOURCES: Option<GlobalDiscoveryResources> = None;
 
+/// P2P 服务运行标志（用于 internal_is_running 检查）
+static mut P2P_IS_RUNNING: bool = false;
+
 /// 事件队列（线程安全，Rust 写入，Dart 轮询读取）
 static EVENT_QUEUE: Mutex<Vec<EventData>> = Mutex::new(Vec::new());
 
@@ -1182,6 +1185,9 @@ pub fn internal_start() -> Result<(), String> {
             return Err("Discovery resources not available".to_string());
         }
 
+        // 设置运行标志
+        P2P_IS_RUNNING = true;
+
         Ok(())
     }
 }
@@ -1304,6 +1310,9 @@ pub fn internal_stop() -> Result<(), String> {
             let _ = inst.command_tx.send(P2PCommand::Stop);
         }
 
+        // 清除运行标志
+        P2P_IS_RUNNING = false;
+
         P2P_INSTANCE = None;
         Ok(())
     }
@@ -1313,6 +1322,7 @@ pub fn internal_stop() -> Result<(), String> {
 pub fn internal_cleanup() {
     unsafe {
         P2P_INSTANCE = None;
+        P2P_IS_RUNNING = false;
         RUNTIME = None;
         DISCOVERY_RESOURCES = None;
 
@@ -1333,6 +1343,20 @@ pub fn internal_cleanup() {
     // 清空 FRB 事件队列
     let mut frb_queue = FRB_EVENT_QUEUE.lock().unwrap();
     frb_queue.clear();
+}
+
+// ============================================================================
+// 状态检查函数
+// ============================================================================
+
+/// 检查 P2P 是否已初始化
+pub fn internal_is_initialized() -> bool {
+    unsafe { P2P_INSTANCE.is_some() }
+}
+
+/// 检查 P2P 服务是否正在运行
+pub fn internal_is_running() -> bool {
+    unsafe { P2P_IS_RUNNING }
 }
 
 // ============================================================================

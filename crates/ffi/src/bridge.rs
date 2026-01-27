@@ -78,6 +78,18 @@ pub type InternalNodeInfo = P2PBridgeNodeInfo;
 // 初始化和生命周期
 // ============================================================================
 
+/// 检查 P2P 是否已初始化
+#[frb(sync)]
+pub fn p2p_is_initialized() -> bool {
+    crate::internal_is_initialized()
+}
+
+/// 检查 P2P 服务是否正在运行
+#[frb(sync)]
+pub fn p2p_is_running() -> bool {
+    crate::internal_is_running()
+}
+
 /// 初始化 P2P 模块
 ///
 /// # Arguments

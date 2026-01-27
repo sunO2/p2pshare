@@ -10,7 +10,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isInitialized = false;
   String? _localPeerId;
   String? _deviceName;
@@ -20,7 +20,57 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // 监听应用生命周期
+    WidgetsBinding.instance.addObserver(this);
     _initP2P();
+  }
+
+  @override
+  void dispose() {
+    // 移除生命周期监听
+    WidgetsBinding.instance.removeObserver(this);
+    // 不再清理 P2P，保持后台运行
+    // P2P 服务将在应用真正退出时（detached）清理
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('应用生命周期变化: $state');
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // 应用恢复 - 确保 UI 同步状态
+        debugPrint('应用恢复，检查 P2P 状态...');
+        _syncP2PState();
+        break;
+      case AppLifecycleState.detached:
+        // 应用真正退出时才清理
+        debugPrint('应用退出，清理 P2P 资源...');
+        P2PManager.instance.cleanup();
+        break;
+      default:
+        // 其他状态不做处理
+        // paused: 应用退入后台，保持 P2P 运行以接收消息
+        // inactive: 应用切换中，保持状态
+        break;
+    }
+  }
+
+  /// 同步 P2P 状态
+  void _syncP2PState() {
+    try {
+      if (P2PManager.instance.isInitialized) {
+        setState(() {
+          _isInitialized = true;
+          _localPeerId = P2PManager.instance.getLocalPeerId();
+          _deviceName = P2PManager.instance.getDeviceName();
+          _initError = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('同步 P2P 状态失败: $e');
+    }
   }
 
   Future<void> _initP2P() async {
@@ -55,12 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     }
-  }
-
-  @override
-  void dispose() {
-    P2PManager.instance.cleanup();
-    super.dispose();
   }
 
   @override
@@ -168,13 +212,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x08000000),
-            offset: Offset(0, -1),
-            blurRadius: 8,
-          ),
-        ],
       ),
       child: SafeArea(
         top: false,
