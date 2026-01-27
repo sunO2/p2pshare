@@ -1522,6 +1522,81 @@ print('Current directory: ${Directory.current.path}');
 
 ---
 
+#### 问题 6：后台恢复后 mDNS 发现失效
+
+**症状**:
+应用退入后台后再恢复，无法发现新设备，`_isRustRunning()` 返回 `false`
+
+**原因**:
+`internal_is_running()` 检查 `DISCOVERY_RESOURCES.is_some()`，但 `internal_start()` 使用 `.take()` 移出了资源，导致检查永远返回 `false`
+
+**相关代码** (`crates/ffi/src/lib.rs`):
+```rust
+// 问题代码
+pub fn internal_is_running() -> bool {
+    unsafe {
+        // ❌ 错误：检查 DISCOVERY_RESOURCES 是否存在
+        DISCOVERY_RESOURCES.is_some()
+    }
+}
+
+pub fn internal_start() -> Result<(), String> {
+    unsafe {
+        // 这里 .take() 会移出资源，导致 DISCOVERY_RESOURCES 变为 None
+        let discovery = resources.discovery.take();
+        // ...
+    }
+}
+```
+
+**解决方法**:
+使用专门的运行标志而不是依赖资源状态：
+
+```rust
+// ✅ 正确：添加专门的运行标志
+static mut P2P_IS_RUNNING: bool = false;
+
+pub fn internal_is_running() -> bool {
+    unsafe { P2P_IS_RUNNING }
+}
+
+pub fn internal_start() -> Result<(), String> {
+    unsafe {
+        // ... 启动逻辑 ...
+
+        // 设置运行标志
+        P2P_IS_RUNNING = true;
+        Ok(())
+    }
+}
+
+pub fn internal_stop() -> Result<(), String> {
+    unsafe {
+        // ... 停止逻辑 ...
+
+        // 清除运行标志
+        P2P_IS_RUNNING = false;
+        Ok(())
+    }
+}
+
+pub fn internal_cleanup() {
+    unsafe {
+        P2P_IS_RUNNING = false;
+        // ... 其他清理 ...
+    }
+}
+```
+
+**相关文件**:
+- `crates/ffi/src/lib.rs:59-62` - 定义 `P2P_IS_RUNNING` 标志
+- `crates/ffi/src/lib.rs:1348-1353` - 修复 `internal_is_running()` 实现
+- `crates/ffi/src/lib.rs:1189` - 在 `internal_start()` 中设置标志
+- `crates/ffi/src/lib.rs:1314` - 在 `internal_stop()` 中清除标志
+- `crates/ffi/src/lib.rs:1325` - 在 `internal_cleanup()` 中清除标志
+
+---
+
 ## 相关文档
 
 - [study.md](study.md) - 开发历史记录和问题解决过程
