@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../p2p_manager.dart';
+import '../services/log_service.dart';
 import 'device_list_screen.dart';
 import 'settings_screen.dart';
 
@@ -22,7 +23,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     // 监听应用生命周期
     WidgetsBinding.instance.addObserver(this);
+    // 初始化日志服务
+    _initLogService();
     _initP2P();
+  }
+
+  /// 初始化日志服务
+  Future<void> _initLogService() async {
+    try {
+      await LogService.instance.init();
+      debugPrint('日志服务已初始化');
+    } catch (e) {
+      debugPrint('日志服务初始化失败: $e');
+    }
   }
 
   @override

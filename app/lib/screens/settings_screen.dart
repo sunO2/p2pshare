@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../p2p_manager.dart';
+import '../services/log_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -13,11 +15,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoScanEnabled = false;
   String _localPeerId = '';
   String _deviceName = '';
+  int _logFileSize = 0;
 
   @override
   void initState() {
     super.initState();
     _loadDeviceInfo();
+    _loadLogInfo();
   }
 
   Future<void> _loadDeviceInfo() async {
@@ -32,6 +36,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       debugPrint('Failed to load device info: $e');
+    }
+  }
+
+  Future<void> _loadLogInfo() async {
+    final size = await LogService.instance.getLogFileSize();
+    if (mounted) {
+      setState(() {
+        _logFileSize = size;
+      });
     }
   }
 
@@ -84,6 +97,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text('应用设置', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 12),
           _buildAppSettingsCard(),
+          const SizedBox(height: 20),
+
+          // Debug Settings
+          Text('调试', style: Theme.of(context).textTheme.displaySmall),
+          const SizedBox(height: 12),
+          _buildDebugCard(),
         ],
       ),
     );
@@ -192,6 +211,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildDebugCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          _buildSettingsRow(
+            '日志文件大小',
+            _formatFileSize(_logFileSize),
+            showArrow: false,
+          ),
+          _buildDivider(),
+          _buildSettingsRow(
+            '导出日志',
+            '导出所有日志',
+            onTap: _exportLogs,
+          ),
+          _buildDivider(),
+          _buildSettingsRow(
+            '查看日志',
+            '最近 500 条',
+            onTap: _showLogs,
+          ),
+          _buildDivider(),
+          _buildSettingsRow(
+            '清空日志',
+            '清空所有日志',
+            onTap: _clearLogs,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSettingsRow(
     String label,
     String value, {
@@ -294,6 +349,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return peerId;
   }
 
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+  }
+
   void _showEditDialog(String title, String currentValue) {
     final controller = TextEditingController(text: currentValue);
 
@@ -324,5 +389,163 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  /// 导出日志
+  Future<void> _exportLogs() async {
+    try {
+      final logs = await LogService.instance.getAllLogs();
+
+      if (logs.isEmpty || logs == '日志文件不存在') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('没有可导出的日志')),
+          );
+        }
+        return;
+      }
+
+      // 使用 share_plus 分享日志
+      await Share.share(
+        logs,
+        subject: 'LocalP2P Logs',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('日志已导出')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 查看日志
+  Future<void> _showLogs() async {
+    try {
+      final logs = await LogService.instance.getRecentLogs(lines: 500);
+
+      if (!mounted) return;
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => _LogsViewerScreen(logs: logs),
+        ),
+      );
+
+      // 刷新日志大小
+      _loadLogInfo();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('读取日志失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 清空日志
+  Future<void> _clearLogs() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认清空'),
+        content: const Text('确定要清空所有日志吗？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('清空', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await LogService.instance.clearLogs();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('日志已清空')),
+          );
+          _loadLogInfo();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('清空失败: $e')),
+          );
+        }
+      }
+    }
+  }
+}
+
+/// 日志查看器页面
+class _LogsViewerScreen extends StatefulWidget {
+  final String logs;
+
+  const _LogsViewerScreen({required this.logs});
+
+  @override
+  State<_LogsViewerScreen> createState() => _LogsViewerScreenState();
+}
+
+class _LogsViewerScreenState extends State<_LogsViewerScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('日志'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: _shareLogs,
+            tooltip: '分享',
+          ),
+        ],
+      ),
+      body: Container(
+        color: const Color(0xFF1E1E1E),
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Text(
+            widget.logs,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: Color(0xFFD4D4D4),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareLogs() async {
+    try {
+      await Share.share(
+        widget.logs,
+        subject: 'LocalP2P Logs',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('分享失败: $e')),
+        );
+      }
+    }
   }
 }
