@@ -229,11 +229,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 34),
+          padding: const EdgeInsets.only(top: 12, bottom: 12),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildTabItem(0, Icons.devices_outlined, '设备'),
+              _buildTabItem(0, Icons.devices_outlined, '设F备'),
               _buildTabItem(1, Icons.chat_bubble_outline, '聊天'),
               _buildTabItem(2, Icons.folder_outlined, '文件'),
               _buildTabItem(3, Icons.settings_outlined, '设置'),
