@@ -156,6 +156,8 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                         color: Color(0xFF9C9B99),
                       ),
                       border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),

@@ -237,23 +237,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ? const Color(0xFF3D8A5A)
         : const Color(0xFFA8A7A5);
 
-    return InkWell(
-      onTap: () => setState(() => _currentIndex = index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
+    return SizedBox(
+      width: 64,
+      height: 56,
+      child: InkWell(
+        onTap: () => setState(() => _currentIndex = index),
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 16, color: color),
             ),
-            child: Icon(icon, size: 16, color: color),
-          ),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 10, color: color)),
-        ],
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 10, color: color)),
+          ],
+        ),
       ),
     );
   }
