@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import '../native/p2p_ffi.dart';
+import '../p2p_manager.dart';
 
 class SettingsScreen extends StatefulWidget {
-  final P2PService p2p;
-
-  const SettingsScreen({super.key, required this.p2p});
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -13,13 +11,35 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _autoScanEnabled = false;
+  String _localPeerId = '';
+  String _deviceName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDeviceInfo();
+  }
+
+  Future<void> _loadDeviceInfo() async {
+    try {
+      final localPeerId = P2PManager.instance.getLocalPeerId();
+      final deviceName = P2PManager.instance.getDeviceName();
+      if (mounted) {
+        setState(() {
+          _localPeerId = localPeerId;
+          _deviceName = deviceName;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load device info: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final localPeerId = widget.p2p.getLocalPeerId();
-    final deviceName = widget.p2p.getDeviceName();
     final now = DateTime.now();
-    final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final timeString =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     return Scaffold(
       body: Column(
@@ -31,9 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildHeader(),
 
           // Content
-          Expanded(
-            child: _buildContent(deviceName, localPeerId),
-          ),
+          Expanded(child: _buildContent(_deviceName, _localPeerId)),
         ],
       ),
     );
@@ -48,10 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Text(
             time,
-            style: const TextStyle(
-              fontSize: 17,
-              color: Color(0xFF000000),
-            ),
+            style: const TextStyle(fontSize: 17, color: Color(0xFF000000)),
           ),
           Container(
             width: 60,
@@ -72,15 +87,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E4E1)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E4E1))),
       ),
       child: Center(
-        child: Text(
-          '设置',
-          style: Theme.of(context).textTheme.displayMedium,
-        ),
+        child: Text('设置', style: Theme.of(context).textTheme.displayMedium),
       ),
     );
   }
@@ -96,19 +106,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // Device Settings
-          Text(
-            '设备设置',
-            style: Theme.of(context).textTheme.displaySmall,
-          ),
+          Text('设备设置', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 12),
           _buildDeviceSettingsCard(),
           const SizedBox(height: 20),
 
           // App Settings
-          Text(
-            '应用设置',
-            style: Theme.of(context).textTheme.displaySmall,
-          ),
+          Text('应用设置', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 12),
           _buildAppSettingsCard(),
         ],
@@ -189,8 +193,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildSettingsRow(
             '设备名称',
-            widget.p2p.getDeviceName(),
-            onTap: () => _showEditDialog('设备名称', widget.p2p.getDeviceName()),
+            _deviceName,
+            onTap: () => _showEditDialog('设备名称', _deviceName),
           ),
           _buildDivider(),
           _buildSettingsRow(
@@ -199,11 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => _showEditDialog('昵称', ''),
           ),
           _buildDivider(),
-          _buildSettingsRow(
-            '状态',
-            '在线',
-            showArrow: false,
-          ),
+          _buildSettingsRow('状态', '在线', showArrow: false),
         ],
       ),
     );
@@ -261,10 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(
           children: [
-            Text(
-              label,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            Text(label, style: Theme.of(context).textTheme.titleLarge),
             const Spacer(),
             Text(
               value,
@@ -301,10 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 18),
       child: Row(
         children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text(label, style: Theme.of(context).textTheme.titleLarge),
           const Spacer(),
           GestureDetector(
             onTap: () => onChanged(!value),
@@ -362,9 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
         ),
         actions: [
           TextButton(
@@ -375,9 +367,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () {
               // TODO: Save the value
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$title 已更新')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('$title 已更新')));
             },
             child: const Text('保存'),
           ),

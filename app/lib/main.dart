@@ -1,8 +1,4 @@
-import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'native/p2p_ffi.dart';
 import 'screens/home_screen.dart';
 
 void main() {

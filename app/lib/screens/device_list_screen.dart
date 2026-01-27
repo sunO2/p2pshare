@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
-import '../native/p2p_ffi.dart';
+import '../p2p_manager.dart';
+import '../bridge/bridge.dart';
 import '../widgets/device_card.dart';
 import 'chat_screen.dart';
 import 'device_detail_screen.dart';
 
 class DeviceListScreen extends StatefulWidget {
-  final P2PService p2p;
-
-  const DeviceListScreen({super.key, required this.p2p});
+  const DeviceListScreen({super.key});
 
   @override
   State<DeviceListScreen> createState() => _DeviceListScreenState();
 }
 
 class _DeviceListScreenState extends State<DeviceListScreen> {
-  final List<NodeInfoData> _nodes = [];
+  final List<P2PBridgeNodeInfo> _nodes = [];
   String _searchQuery = '';
 
   @override
@@ -25,34 +24,51 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   }
 
   void _loadNodes() {
-    setState(() {
-      _nodes.clear();
-      _nodes.addAll(widget.p2p.getVerifiedNodes());
-    });
+    try {
+      final nodes = P2PManager.instance.getVerifiedNodes();
+      if (mounted) {
+        setState(() {
+          _nodes.clear();
+          _nodes.addAll(nodes);
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load nodes: $e');
+    }
   }
 
   void _listenToEvents() {
-    widget.p2p.eventStream.listen((event) {
+    P2PManager.instance.eventStream.listen((event) {
       if (!mounted) return;
 
-      if (event is NodeVerifiedEvent || event is NodeOfflineEvent) {
+      if (event is NodeVerifiedEvent ||
+          event is NodeOfflineEvent ||
+          event is UserInfoReceivedEvent) {
         _loadNodes();
       }
     });
   }
 
-  List<NodeInfoData> get _filteredNodes {
+  List<P2PBridgeNodeInfo> get _filteredNodes {
     if (_searchQuery.isEmpty) return _nodes;
-    return _nodes.where((node) =>
-      node.deviceName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      node.displayName.toLowerCase().contains(_searchQuery.toLowerCase())
-    ).toList();
+    return _nodes
+        .where(
+          (node) =>
+              node.deviceName.toLowerCase().contains(
+                _searchQuery.toLowerCase(),
+              ) ||
+              node.displayName.toLowerCase().contains(
+                _searchQuery.toLowerCase(),
+              ),
+        )
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final timeString =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     return Column(
       children: [
@@ -115,10 +131,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '我的设备',
-                    style: Theme.of(context).textTheme.displayLarge,
-                  ),
+                  Text('我的设备', style: Theme.of(context).textTheme.displayLarge),
                   const SizedBox(height: 4),
                   Text(
                     '发现 ${_nodes.length} 个设备',
@@ -171,11 +184,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Icon(
-                  Icons.search,
-                  size: 18,
-                  color: Colors.grey[600],
-                ),
+                Icon(Icons.search, size: 18, color: Colors.grey[600]),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
@@ -202,10 +211,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '在线设备',
-                style: Theme.of(context).textTheme.displaySmall,
-              ),
+              Text('在线设备', style: Theme.of(context).textTheme.displaySmall),
               _buildStatusIndicator(_nodes.length),
             ],
           ),
@@ -236,9 +242,9 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           const SizedBox(width: 6),
           Text(
             '在线',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: const Color(0xFF3D8A5A),
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: const Color(0xFF3D8A5A)),
           ),
         ],
       ),
@@ -250,18 +256,11 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.search,
-            size: 48,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.search, size: 48, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
             _searchQuery.isEmpty ? '正在扫描局域网内的设备...' : '未找到匹配的设备',
-            style: TextStyle(
-              fontSize: 15,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 15, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -284,27 +283,21 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
     );
   }
 
-  void _openDeviceDetail(NodeInfoData node) {
+  void _openDeviceDetail(P2PBridgeNodeInfo node) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => DeviceDetailScreen(
-          p2p: widget.p2p,
-          peerId: node.peerId,
-        ),
+        builder: (context) => DeviceDetailScreen(peerId: node.peerId),
       ),
     );
   }
 
-  void _openChat(NodeInfoData node) {
+  void _openChat(P2PBridgeNodeInfo node) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          p2p: widget.p2p,
-          peerId: node.peerId,
-          deviceName: node.deviceName,
-        ),
+        builder: (context) =>
+            ChatScreen(peerId: node.peerId, deviceName: node.deviceName),
       ),
     );
   }

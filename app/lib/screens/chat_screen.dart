@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
-import '../native/p2p_ffi.dart';
+import '../p2p_manager.dart';
 import '../widgets/chat_bubble_sent.dart';
 import '../widgets/chat_bubble_received.dart';
 
 class ChatScreen extends StatefulWidget {
-  final P2PService p2p;
   final String peerId;
   final String deviceName;
 
   const ChatScreen({
     super.key,
-    required this.p2p,
     required this.peerId,
     this.deviceName = 'Unknown',
   });
@@ -31,25 +29,29 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _listenToEvents() {
-    widget.p2p.eventStream.listen((event) {
+    P2PManager.instance.eventStream.listen((event) {
       if (!mounted) return;
 
       if (event is MessageReceivedEvent && event.from == widget.peerId) {
         setState(() {
-          _messages.add(ChatMessageData(
-            message: event.message,
-            timestamp: DateTime.fromMillisecondsSinceEpoch(event.timestamp),
-            isSelf: false,
-          ));
+          _messages.add(
+            ChatMessageData(
+              message: event.message,
+              timestamp: DateTime.fromMillisecondsSinceEpoch(event.timestamp),
+              isSelf: false,
+            ),
+          );
         });
         _scrollToBottom();
       } else if (event is MessageSentEvent && event.to == widget.peerId) {
         setState(() {
-          _messages.add(ChatMessageData(
-            message: '(sent)',
-            timestamp: DateTime.now(),
-            isSelf: true,
-          ));
+          _messages.add(
+            ChatMessageData(
+              message: '(sent)',
+              timestamp: DateTime.now(),
+              isSelf: true,
+            ),
+          );
         });
         _scrollToBottom();
       }
@@ -78,7 +80,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final timeString =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     return Scaffold(
       body: Column(
@@ -90,9 +93,7 @@ class _ChatScreenState extends State<ChatScreen> {
           _buildHeader(),
 
           // Messages
-          Expanded(
-            child: _buildMessagesArea(),
-          ),
+          Expanded(child: _buildMessagesArea()),
 
           // Input Area
           _buildInputArea(),
@@ -110,10 +111,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Text(
             time,
-            style: const TextStyle(
-              fontSize: 17,
-              color: Color(0xFF000000),
-            ),
+            style: const TextStyle(fontSize: 17, color: Color(0xFF000000)),
           ),
           Container(
             width: 60,
@@ -134,9 +132,7 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E4E1)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E4E1))),
       ),
       child: Row(
         children: [
@@ -197,9 +193,9 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(width: 6),
           Text(
             '在线',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: const Color(0xFF3D8A5A),
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: const Color(0xFF3D8A5A)),
           ),
         ],
       ),
@@ -219,9 +215,7 @@ class _ChatScreenState extends State<ChatScreen> {
           if (message.isSelf) {
             return Row(
               mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                ChatBubbleSent(message: message),
-              ],
+              children: [ChatBubbleSent(message: message)],
             );
           } else {
             return ChatBubbleReceived(message: message);
@@ -236,9 +230,7 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 34),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFE5E4E1)),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFFE5E4E1))),
       ),
       child: Row(
         children: [
@@ -254,10 +246,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 controller: _messageController,
                 decoration: const InputDecoration(
                   hintText: '输入消息...',
-                  hintStyle: TextStyle(
-                    fontSize: 15,
-                    color: Color(0xFF9C9B99),
-                  ),
+                  hintStyle: TextStyle(fontSize: 15, color: Color(0xFF9C9B99)),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -282,11 +271,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.send,
-                size: 20,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.send, size: 20, color: Colors.white),
             ),
           ),
         ],
@@ -297,16 +282,26 @@ class _ChatScreenState extends State<ChatScreen> {
   void _sendMessage(String text) {
     if (text.trim().isEmpty) return;
 
-    widget.p2p.sendMessage(widget.peerId, text);
+    try {
+      P2PManager.instance.sendMessage(widget.peerId, text);
+    } catch (e) {
+      debugPrint('Failed to send message: $e');
+      // Show error to user
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('发送失败: $e')));
+        return;
+      }
+    }
+
     _messageController.clear();
 
     // Add to local messages immediately for better UX
     setState(() {
-      _messages.add(ChatMessageData(
-        message: text,
-        timestamp: DateTime.now(),
-        isSelf: true,
-      ));
+      _messages.add(
+        ChatMessageData(message: text, timestamp: DateTime.now(), isSelf: true),
+      );
     });
     _scrollToBottom();
   }

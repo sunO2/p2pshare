@@ -29,18 +29,12 @@ class ChatBubbleSent extends StatelessWidget {
         children: [
           Text(
             message.message,
-            style: const TextStyle(
-              fontSize: 15,
-              color: Colors.white,
-            ),
+            style: const TextStyle(fontSize: 15, color: Colors.white),
           ),
           const SizedBox(height: 6),
           Text(
             _formatTime(message.timestamp),
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFFC8F0D8),
-            ),
+            style: const TextStyle(fontSize: 11, color: Color(0xFFC8F0D8)),
           ),
         ],
       ),

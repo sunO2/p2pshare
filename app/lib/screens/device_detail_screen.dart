@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
-import '../native/p2p_ffi.dart';
+import '../p2p_manager.dart';
+import '../bridge/bridge.dart';
 import 'chat_screen.dart';
 
 class DeviceDetailScreen extends StatefulWidget {
-  final P2PService p2p;
   final String peerId;
 
-  const DeviceDetailScreen({
-    super.key,
-    required this.p2p,
-    required this.peerId,
-  });
+  const DeviceDetailScreen({super.key, required this.peerId});
 
   @override
   State<DeviceDetailScreen> createState() => _DeviceDetailScreenState();
 }
 
 class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
-  NodeInfoData? _nodeInfo;
+  P2PBridgeNodeInfo? _nodeInfo;
 
   @override
   void initState() {
@@ -26,17 +22,32 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   void _loadNodeInfo() {
-    final nodes = widget.p2p.getVerifiedNodes();
-    setState(() {
-      _nodeInfo = nodes.firstWhere(
-        (node) => node.peerId == widget.peerId,
-        orElse: () => NodeInfoData(
-          peerId: widget.peerId,
-          displayName: 'Unknown',
-          deviceName: 'Unknown',
-        ),
-      );
-    });
+    try {
+      final nodes = P2PManager.instance.getVerifiedNodes();
+      if (mounted) {
+        setState(() {
+          _nodeInfo = nodes.firstWhere(
+            (node) => node.peerId == widget.peerId,
+            orElse: () => P2PBridgeNodeInfo(
+              peerId: widget.peerId,
+              displayName: 'Unknown',
+              deviceName: 'Unknown',
+            ),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load node info: $e');
+      if (mounted) {
+        setState(() {
+          _nodeInfo = P2PBridgeNodeInfo(
+            peerId: widget.peerId,
+            displayName: 'Unknown',
+            deviceName: 'Unknown',
+          );
+        });
+      }
+    }
   }
 
   String _shortenPeerId(String peerId) {
@@ -49,7 +60,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final timeString =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     return Scaffold(
       body: Column(
@@ -61,9 +73,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           _buildHeader(),
 
           // Content
-          Expanded(
-            child: _buildContent(),
-          ),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
@@ -78,10 +88,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
         children: [
           Text(
             time,
-            style: const TextStyle(
-              fontSize: 17,
-              color: Color(0xFF000000),
-            ),
+            style: const TextStyle(fontSize: 17, color: Color(0xFF000000)),
           ),
           Container(
             width: 60,
@@ -102,9 +109,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E4E1)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E4E1))),
       ),
       child: Row(
         children: [
@@ -125,10 +130,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            '设备详情',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
+          Text('设备详情', style: Theme.of(context).textTheme.headlineMedium),
         ],
       ),
     );
@@ -209,10 +211,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           const SizedBox(height: 16),
 
           // Divider
-          Container(
-            height: 1,
-            color: const Color(0xFFE5E4E1),
-          ),
+          Container(height: 1, color: const Color(0xFFE5E4E1)),
           const SizedBox(height: 16),
 
           // Device Details
@@ -249,9 +248,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           const SizedBox(width: 6),
           Text(
             '在线',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: const Color(0xFF3D8A5A),
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: const Color(0xFF3D8A5A)),
           ),
         ],
       ),
@@ -262,15 +261,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
+        Text(value, style: Theme.of(context).textTheme.bodyLarge),
       ],
     );
   }
@@ -288,7 +281,6 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ChatScreen(
-                    p2p: widget.p2p,
                     peerId: widget.peerId,
                     deviceName: _nodeInfo?.deviceName ?? 'Unknown',
                   ),
@@ -304,10 +296,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
               elevation: 0,
               shadowColor: const Color(0x403D8A5A),
             ),
-            child: const Text(
-              '发送消息',
-              style: TextStyle(fontSize: 16),
-            ),
+            child: const Text('发送消息', style: TextStyle(fontSize: 16)),
           ),
         ),
         const SizedBox(height: 12),
@@ -318,9 +307,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           height: 52,
           child: OutlinedButton(
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('文件传输功能开发中...')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('文件传输功能开发中...')));
             },
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFF3D8A5A),
@@ -329,10 +318,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text(
-              '发送文件',
-              style: TextStyle(fontSize: 16),
-            ),
+            child: const Text('发送文件', style: TextStyle(fontSize: 16)),
           ),
         ),
       ],

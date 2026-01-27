@@ -35,8 +35,39 @@ echo -e "${BLUE}  Android FFI 库交叉编译脚本${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
+# 生成 Flutter Rust Bridge 代码
+echo -e "${YELLOW}[1/6] 生成 Flutter Rust Bridge 代码...${NC}"
+if ! command -v flutter_rust_bridge_codegen &> /dev/null; then
+    echo -e "${RED}错误: 未找到 flutter_rust_bridge_codegen${NC}"
+    echo ""
+    echo "请安装 flutter_rust_bridge_codegen:"
+    echo "  cargo install flutter_rust_bridge_codegen"
+    echo ""
+    exit 1
+fi
+
+# 生成 Dart 和 Rust 代码
+echo -e "  ${BLUE}生成 Dart 和 Rust 绑定代码...${NC}"
+flutter_rust_bridge_codegen generate \
+    -r localp2p-ffi::bridge \
+    -d app/lib/bridge \
+    --rust-root crates/ffi \
+    --rust-output crates/ffi/src/frb_generated.rs > /dev/null 2>&1
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}✗ FRB 代码生成失败${NC}"
+    exit 1
+fi
+
+# 自动修复生成代码中的路径问题（localp2p_ffi:: -> crate::）
+echo -e "  ${BLUE}修复生成代码中的路径引用...${NC}"
+sed -i 's/use localp2p_ffi::bridge::\*/use crate::bridge::*;/g' crates/ffi/src/frb_generated.rs
+
+echo -e "${GREEN}✓ FRB 代码生成完成${NC}"
+echo ""
+
 # 检查必要的工具
-echo -e "${YELLOW}[1/5] 检查编译环境...${NC}"
+echo -e "${YELLOW}[2/6] 检查编译环境...${NC}"
 if ! command -v cargo &> /dev/null; then
     echo -e "${RED}错误: 未找到 cargo，请先安装 Rust${NC}"
     exit 1
@@ -72,7 +103,7 @@ echo -e "${GREEN}✓ 工具链安装完成${NC}"
 echo ""
 
 # 清理旧的 jniLibs 目录
-echo -e "${YELLOW}[3/5] 清理旧的库文件...${NC}"
+echo -e "${YELLOW}[3/6] 清理旧的库文件...${NC}"
 if [ -d "$ANDROID_JNI_DIR" ]; then
     echo -e "  ${BLUE}→${NC} 删除 $ANDROID_JNI_DIR"
     rm -rf "$ANDROID_JNI_DIR"
@@ -82,7 +113,7 @@ echo -e "${GREEN}✓ 清理完成${NC}"
 echo ""
 
 # 交叉编译库文件
-echo -e "${YELLOW}[4/5] 交叉编译库文件...${NC}"
+echo -e "${YELLOW}[4/6] 交叉编译库文件...${NC}"
 
 for target_pair in "${TARGETS[@]}"; do
     IFS=':' read -ra PARTS <<< "$target_pair"
@@ -125,7 +156,7 @@ echo -e "${GREEN}✓ 编译完成${NC}"
 echo ""
 
 # 显示编译结果
-echo -e "${YELLOW}[5/5] 编译结果摘要${NC}"
+echo -e "${YELLOW}[5/6] 编译结果摘要${NC}"
 echo ""
 echo -e "${BLUE}生成的库文件:${NC}"
 

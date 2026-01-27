@@ -22,9 +22,7 @@ class ChatBubbleReceived extends StatelessWidget {
           bottomLeft: Radius.circular(4),
           bottomRight: Radius.circular(20),
         ),
-        border: Border.all(
-          color: const Color(0xFFE5E4E1),
-        ),
+        border: Border.all(color: const Color(0xFFE5E4E1)),
         boxShadow: [
           BoxShadow(
             color: const Color(0x08000000),
@@ -39,18 +37,12 @@ class ChatBubbleReceived extends StatelessWidget {
         children: [
           Text(
             message.message,
-            style: const TextStyle(
-              fontSize: 15,
-              color: Color(0xFF1A1918),
-            ),
+            style: const TextStyle(fontSize: 15, color: Color(0xFF1A1918)),
           ),
           const SizedBox(height: 6),
           Text(
             _formatTime(message.timestamp),
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF9C9B99),
-            ),
+            style: const TextStyle(fontSize: 11, color: Color(0xFF9C9B99)),
           ),
         ],
       ),

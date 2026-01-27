@@ -15,15 +15,46 @@ NC='\033[0m'
 # 项目路径
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ANDROID_JNI_DIR="$PROJECT_ROOT/app/android/src/main/jniLibs"
+ANDROID_JNI_DIR="$PROJECT_ROOT/app/android/app/src/main/jniLibs"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Android FFI 库编译 (cargo-ndk)${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
+# 生成 Flutter Rust Bridge 代码
+echo -e "${YELLOW}[1/4] 生成 Flutter Rust Bridge 代码...${NC}"
+if ! command -v flutter_rust_bridge_codegen &> /dev/null; then
+    echo -e "${RED}错误: 未找到 flutter_rust_bridge_codegen${NC}"
+    echo ""
+    echo "请安装 flutter_rust_bridge_codegen:"
+    echo "  cargo install flutter_rust_bridge_codegen"
+    echo ""
+    exit 1
+fi
+
+# 生成 Dart 和 Rust 代码
+echo -e "  ${BLUE}生成 Dart 和 Rust 绑定代码...${NC}"
+flutter_rust_bridge_codegen generate \
+    -r localp2p-ffi::bridge \
+    -d app/lib/bridge \
+    --rust-root crates/ffi \
+    --rust-output crates/ffi/src/frb_generated.rs > /dev/null 2>&1
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}✗ FRB 代码生成失败${NC}"
+    exit 1
+fi
+
+# 自动修复生成代码中的路径问题（localp2p_ffi:: -> crate::）
+echo -e "  ${BLUE}修复生成代码中的路径引用...${NC}"
+sed -i 's/use localp2p_ffi::bridge::\*/use crate::bridge::*;/g' crates/ffi/src/frb_generated.rs
+
+echo -e "${GREEN}✓ FRB 代码生成完成${NC}"
+echo ""
+
 # 检查 cargo-ndk 是否安装
-echo -e "${YELLOW}[1/3] 检查 cargo-ndk...${NC}"
+echo -e "${YELLOW}[2/4] 检查 cargo-ndk...${NC}"
 if ! command -v cargo-ndk &> /dev/null; then
     echo -e "${RED}错误: 未找到 cargo-ndk${NC}"
     echo ""
@@ -68,19 +99,23 @@ echo -e "${GREEN}✓ NDK 路径: $ANDROID_NDK_HOME${NC}"
 echo ""
 
 # 清理并创建输出目录
-echo -e "${YELLOW}[3/3] 编译库文件...${NC}"
+echo -e "${YELLOW}[3/4] 清理旧的库文件...${NC}"
 if [ -d "$ANDROID_JNI_DIR" ]; then
     rm -rf "$ANDROID_JNI_DIR"
 fi
 mkdir -p "$ANDROID_JNI_DIR"
+echo -e "${GREEN}✓ 清理完成${NC}"
+echo ""
 
 # 编译所有架构
+echo -e "${YELLOW}[4/4] 编译库文件...${NC}"
 echo ""
 echo -e "${BLUE}开始编译...${NC}"
 echo ""
 
 cd "$PROJECT_ROOT"
-cargo ndk --target arm64-v8a --target armeabi-v7a --target x86_64 --target x86 --platform 21 -o "$ANDROID_JNI_DIR" -- build --release
+# 只编译 localp2p-ffi 包，不编译整个 workspace
+cargo ndk --target arm64-v8a --target armeabi-v7a --target x86_64 --target x86 --platform 21 -o "$ANDROID_JNI_DIR" -- build --release -p localp2p-ffi
 
 echo ""
 echo -e "${GREEN}✓ 编译完成${NC}"

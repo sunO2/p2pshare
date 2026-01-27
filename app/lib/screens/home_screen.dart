@@ -1,11 +1,6 @@
-import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../native/p2p_ffi.dart';
+import '../p2p_manager.dart';
 import 'device_list_screen.dart';
-import 'chat_screen.dart';
-import 'device_detail_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,15 +11,11 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  P2PService? _p2p;
   bool _isInitialized = false;
   String? _localPeerId;
   String? _deviceName;
   int _currentIndex = 0;
-  String? _initError;  // 添加错误信息字段
-
-  // Tab pages
-  final List<Widget> _pages = [];
+  String? _initError;
 
   @override
   void initState() {
@@ -35,39 +26,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initP2P() async {
     try {
       debugPrint('开始初始化 P2P...');
-      debugPrint('库路径: ${_getLibraryPath()}');
 
-      final lib = ffi.DynamicLibrary.open(_getLibraryPath());
-      debugPrint('✓ 库加载成功');
-      _p2p = P2PService(lib);
+      await P2PManager.instance.init('我的设备');
+      debugPrint('✓ init 成功，获取节点信息...');
 
-      debugPrint('开始调用 init...');
-      final success = _p2p!.init('我的设备');
-      debugPrint('init 结果: $success');
+      final localPeerId = P2PManager.instance.getLocalPeerId();
+      final deviceName = P2PManager.instance.getDeviceName();
 
-      if (success) {
-        debugPrint('✓ init 成功，获取节点信息...');
+      setState(() {
+        _isInitialized = true;
+        _localPeerId = localPeerId;
+        _deviceName = deviceName;
+        _initError = null;
+      });
 
-        setState(() {
-          _isInitialized = true;
-          _localPeerId = _p2p!.getLocalPeerId();
-          _deviceName = _p2p!.getDeviceName();
-          _initError = null;
-        });
-
-        debugPrint('✓ Peer ID: $_localPeerId');
-        debugPrint('✓ Device Name: $_deviceName');
-        debugPrint('开始调用 start...');
-        _p2p!.start();
-        debugPrint('✓ start 调用完成');
-      } else {
-        debugPrint('✗ init 返回 false');
-        if (mounted) {
-          setState(() {
-            _initError = '初始化失败：init 返回 false';
-          });
-        }
-      }
+      debugPrint('✓ Peer ID: $_localPeerId');
+      debugPrint('✓ Device Name: $_deviceName');
+      debugPrint('开始调用 start...');
+      await P2PManager.instance.start();
+      debugPrint('✓ start 调用完成');
     } catch (e, stackTrace) {
       debugPrint('✗ 初始化异常: $e');
       debugPrint('Stack trace: $stackTrace');
@@ -80,53 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  String _getLibraryPath() {
-    if (Platform.isAndroid) {
-      return 'liblocalp2p_ffi.so';
-    } else if (Platform.isLinux) {
-      return 'liblocalp2p_ffi.so';
-    } else if (Platform.isMacOS) {
-      return 'liblocalp2p_ffi.dylib';
-    } else if (Platform.isWindows) {
-      return 'localp2p_ffi.dll';
-    }
-    throw Exception('Unsupported platform: ${Platform.operatingSystem}');
-  }
-
   @override
   void dispose() {
-    _p2p?.cleanup();
+    P2PManager.instance.cleanup();
     super.dispose();
-  }
-
-  void _onPageTapped(int index, {String? peerId}) {
-    setState(() {
-      _currentIndex = index;
-    });
-
-    // Navigate to specific screens
-    if (index == 1 && peerId != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ChatScreen(
-            p2p: _p2p!,
-            peerId: peerId,
-            deviceName: _deviceName ?? 'Unknown',
-          ),
-        ),
-      );
-    } else if (index == 2 && peerId != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => DeviceDetailScreen(
-            p2p: _p2p!,
-            peerId: peerId,
-          ),
-        ),
-      );
-    }
   }
 
   @override
@@ -141,7 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 if (_initError == null) ...[
                   const CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFF3D8A5A),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -151,21 +87,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 24),
                   Text(
                     '正在加载 P2P 模块，请稍候...',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                   ),
                 ] else ...[
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: Colors.red[400],
-                  ),
+                  Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
                   const SizedBox(height: 16),
-                  Text(
-                    '初始化失败',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  Text('初始化失败', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -176,9 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Text(
                       _initError!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.red[700],
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.red[700]),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -188,9 +117,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     '• 设备已授予必要权限\n'
                     '• 库文件正确安装\n'
                     '• 网络连接正常',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -216,20 +145,17 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        // Handle back button - exit app on home screen
-        return Future.value(true);
-      },
+    return PopScope(
+      canPop: true,
       child: Scaffold(
         body: SafeArea(
           child: IndexedStack(
             index: _currentIndex,
             children: [
-              DeviceListScreen(p2p: _p2p!),
+              const DeviceListScreen(),
               const ChatPlaceholderScreen(),
               const FilePlaceholderScreen(),
-              SettingsScreen(p2p: _p2p!),
+              const SettingsScreen(),
             ],
           ),
         ),
@@ -270,7 +196,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTabItem(int index, IconData icon, String label) {
     final isSelected = _currentIndex == index;
-    final color = isSelected ? const Color(0xFF3D8A5A) : const Color(0xFFA8A7A5);
+    final color = isSelected
+        ? const Color(0xFF3D8A5A)
+        : const Color(0xFFA8A7A5);
 
     return InkWell(
       onTap: () => setState(() => _currentIndex = index),
@@ -281,23 +209,13 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 22,
             height: 22,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              size: 16,
-              color: color,
-            ),
+            child: Icon(icon, size: 16, color: color),
           ),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 10, color: color)),
         ],
       ),
     );
@@ -314,17 +232,13 @@ class ChatPlaceholderScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 64,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
             '选择一个设备开始聊天',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
           ),
         ],
       ),
@@ -341,17 +255,13 @@ class FilePlaceholderScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.folder_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.folder_outlined, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
             '文件传输功能开发中...',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
           ),
         ],
       ),

@@ -1,0 +1,21 @@
+# Flutter Rust Bridge 配置文件
+
+rust_input: localp2p-ffi::bridge
+rust_root: crates/ffi
+dart_output: app/lib
+dart_entrypoint_class_name: P2PBridge
+c_output: none
+rust_output: crates/ffi/src/frb_generated.rs
+
+# Dart 格式化选项
+dart_format_line_length: 80
+
+# Rust 格式化
+rust_format: true
+
+# Dart 格式化
+dart_format: true
+dart_fix: true
+
+# 添加 mod 到 lib.rs
+add_mod_to_lib: false

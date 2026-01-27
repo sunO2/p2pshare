@@ -1391,7 +1391,100 @@ dev_dependencies:
 
 ### 故障排查
 
-#### 问题：无法加载动态库
+#### 问题 1：SIGABRT 崩溃 - nested async runtime
+
+**错误信息**:
+```
+Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid xxx
+#10 pc 00000000001ad7c0 (frb_pde_ffi_dispatcher_sync+24)
+```
+
+**原因**: 在 `async fn` 中调用 `runtime.block_on()` 导致嵌套异步运行时冲突
+
+**解决方法**:
+将需要使用 `block_on()` 的函数从 async 改为 sync，并使用 `#[frb(sync)]` 标记
+
+**修改前**:
+```rust
+// ❌ 错误：async 函数中不能使用 block_on
+pub async fn internal_get_nodes() -> Result<Vec<NodeInfo>, String> {
+    let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+    let nodes = runtime.block_on(async {  // 崩溃！
+        node_manager.list_nodes().await
+    })?;
+    Ok(nodes)
+}
+```
+
+**修改后**:
+```rust
+// ✅ 正确：分离 sync 和 async 版本
+fn internal_get_nodes_sync() -> Result<Vec<NodeInfo>, String> {
+    let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+    let nodes = runtime.block_on(async {
+        node_manager.list_nodes().await
+    })?;
+    Ok(nodes)
+}
+
+pub async fn internal_get_nodes() -> Result<Vec<NodeInfo>, String> {
+    tokio::task::spawn_blocking(|| {
+        internal_get_nodes_sync()
+    }).await.map_err(|e| format!("Join error: {:?}", e))?
+}
+```
+
+**相关文件**:
+- `crates/ffi/src/lib.rs` - 添加 sync 版本的函数
+- `crates/ffi/src/bridge.rs` - 使用 `#[frb(sync)]` 标记
+
+---
+
+#### 问题 2：Content hash 不匹配
+
+**错误信息**:
+```
+Bad state: Content hash on Dart side (-1696354102) is different from Rust side (-2061748452)
+```
+
+**原因**:
+1. JNI 库输出路径配置错误
+2. 旧版本的 .so 文件被加载
+
+**解决方法**:
+
+1. **修复构建脚本路径** (`scripts/build-android-ndk.sh`):
+```bash
+# ❌ 错误路径
+ANDROID_JNI_DIR="$PROJECT_ROOT/app/android/src/main/jniLibs"
+
+# ✅ 正确路径
+ANDROID_JNI_DIR="$PROJECT_ROOT/app/android/app/src/main/jniLibs"
+```
+
+2. **清理并重新构建**:
+```bash
+# 清理旧的构建产物
+flutter clean
+cargo clean -p localp2p-ffi
+
+# 重新构建原生库
+export ANDROID_NDK_HOME=/path/to/ndk
+bash scripts/build-android-ndk.sh
+
+# 重新构建 APK
+flutter build apk --release
+```
+
+3. **卸载旧版本**:
+```bash
+adb uninstall com.suno2.localp2p.localp2p_app
+adb install app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+```
+
+---
+
+#### 问题 3：无法加载动态库
 
 **原因**: 库文件路径不正确或文件不存在
 
@@ -1405,13 +1498,17 @@ dev_dependencies:
 print('Current directory: ${Directory.current.path}');
 ```
 
-#### 问题：FFI 回调未被触发
+---
+
+#### 问题 4：FFI 回调未被触发
 
 **原因**: 回调函数被垃圾回收
 
 **解决方法**: 确保 `_callbackPointer` 被正确保存，不会被 GC 回收
 
-#### 问题：节点列表为空
+---
+
+#### 问题 5：节点列表为空
 
 **原因**:
 1. 没有其他节点在运行
