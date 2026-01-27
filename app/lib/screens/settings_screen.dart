@@ -225,23 +225,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             showArrow: false,
           ),
           _buildDivider(),
-          _buildSettingsRow(
-            '导出日志',
-            '导出所有日志',
-            onTap: _exportLogs,
-          ),
+          _buildSettingsRow('导出日志', '导出所有日志', onTap: _exportLogs),
           _buildDivider(),
-          _buildSettingsRow(
-            '查看日志',
-            '最近 500 条',
-            onTap: _showLogs,
-          ),
+          _buildSettingsRow('查看日志', '最近 500 条', onTap: _showLogs),
           _buildDivider(),
-          _buildSettingsRow(
-            '清空日志',
-            '清空所有日志',
-            onTap: _clearLogs,
-          ),
+          _buildSettingsRow('清空日志', '清空所有日志', onTap: _clearLogs),
         ],
       ),
     );
@@ -398,29 +386,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (logs.isEmpty || logs == '日志文件不存在') {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('没有可导出的日志')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('没有可导出的日志')));
         }
         return;
       }
 
       // 使用 share_plus 分享日志
-      await Share.share(
-        logs,
-        subject: 'LocalP2P Logs',
-      );
+      await Share.share(logs, subject: 'LocalP2P Logs');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('日志已导出')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('日志已导出')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出失败: $e')));
       }
     }
   }
@@ -434,18 +419,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       await Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => _LogsViewerScreen(logs: logs),
-        ),
+        MaterialPageRoute(builder: (context) => _LogsViewerScreen(logs: logs)),
       );
 
       // 刷新日志大小
       _loadLogInfo();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('读取日志失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('读取日志失败: $e')));
       }
     }
   }
@@ -474,16 +457,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       try {
         await LogService.instance.clearLogs();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('日志已清空')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('日志已清空')));
           _loadLogInfo();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('清空失败: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('清空失败: $e')));
         }
       }
     }
@@ -536,15 +519,12 @@ class _LogsViewerScreenState extends State<_LogsViewerScreen> {
 
   Future<void> _shareLogs() async {
     try {
-      await Share.share(
-        widget.logs,
-        subject: 'LocalP2P Logs',
-      );
+      await Share.share(widget.logs, subject: 'LocalP2P Logs');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('分享失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('分享失败: $e')));
       }
     }
   }

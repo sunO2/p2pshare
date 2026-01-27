@@ -223,9 +223,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildBottomNavigationBar() {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-      ),
+      decoration: const BoxDecoration(color: Colors.white),
       child: SafeArea(
         top: false,
         child: Padding(

@@ -26,6 +26,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo;
 
   @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
   UserInfo
   dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
     dynamic raw,
@@ -34,6 +37,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   UserInfo
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
+    dynamic raw,
+  );
+
+  @protected
+  RustStreamSink<P2PBridgeEvent> dco_decode_StreamSink_p_2_p_bridge_event_Sse(
     dynamic raw,
   );
 
@@ -77,6 +85,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
   UserInfo
   sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
     SseDeserializer deserializer,
@@ -85,6 +96,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   UserInfo
   sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RustStreamSink<P2PBridgeEvent> sse_decode_StreamSink_p_2_p_bridge_event_Sse(
     SseDeserializer deserializer,
   );
 
@@ -134,6 +150,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_usize(SseDeserializer deserializer);
 
   @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void
   sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
     UserInfo self,
@@ -144,6 +166,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
     UserInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_p_2_p_bridge_event_Sse(
+    RustStreamSink<P2PBridgeEvent> self,
     SseSerializer serializer,
   );
 

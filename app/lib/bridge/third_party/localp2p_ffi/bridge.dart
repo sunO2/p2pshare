@@ -68,8 +68,16 @@ void p2PBroadcastMessage({
   message: message,
 );
 
+/// 设置事件流接收器（用于 Stream 模式）
+///
+/// 调用此函数后，Rust 会将事件推送到 Stream，Flutter 端可以订阅这个 Stream
+/// 这是推荐的方式，比轮询更高效
+Stream<P2PBridgeEvent> p2PSetEventStream() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PSetEventStream();
+
 /// 轮询事件（返回所有待处理的事件）
 ///
+/// @deprecated 推荐使用 p2p_set_event_stream + p2p_start_with_stream 代替
 /// Flutter 应该定期调用此函数来获取事件
 /// 返回的事件按时间顺序排列
 List<P2PBridgeEvent> p2PPollEvents() =>

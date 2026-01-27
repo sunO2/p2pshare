@@ -1029,6 +1029,8 @@ pub fn internal_start() -> Result<(), String> {
                                                         event_type: 1,
                                                         data: format!(r#"{{"peer_id":"{}","addr":"{}"}}"#, peer_id, addr),
                                                     };
+                                                    // 同时发送到 Stream 和队列（兼容模式）
+                                                    send_event_to_stream(event.clone());
                                                     let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
                                                     queue.push(event);
                                                 }
@@ -1038,6 +1040,8 @@ pub fn internal_start() -> Result<(), String> {
                                                         event_type: 3,
                                                         data: format!(r#"{{"peer_id":"{}","display_name":"{}"}}"#, peer_id, display_name),
                                                     };
+                                                    // 同时发送到 Stream 和队列（兼容模式）
+                                                    send_event_to_stream(event.clone());
                                                     let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
                                                     queue.push(event);
                                                 }
@@ -1046,20 +1050,21 @@ pub fn internal_start() -> Result<(), String> {
                                                         event_type: 4,
                                                         data: format!(r#"{{"peer_id":"{}"}}"#, peer_id),
                                                     };
+                                                    // 同时发送到 Stream 和队列（兼容模式）
+                                                    send_event_to_stream(event.clone());
                                                     let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
                                                     queue.push(event);
 
                                                     // 从用户信息缓存中移除
-                                                    if let Some(cache) = unsafe { GLOBAL_USER_INFO.lock().ok() } {
+                                                    if let Some(cache) = GLOBAL_USER_INFO.lock().ok() {
                                                         let mut cache = cache.write().unwrap();
                                                         cache.remove(&peer_id.to_string());
                                                     }
                                                 }
                                                 DiscoveryEvent::UserInfoReceived(peer_id, user_info) => {
                                                     // 更新全局用户信息缓存
-                                                    if let Some(cache) = unsafe { GLOBAL_USER_INFO.lock().ok() } {
-                                                        use std::sync::RwLock;
-                                                        let mut cache: std::sync::RwLockWriteGuard<'_, HashMap<String, mdns::UserInfo>> = cache.write().unwrap();
+                                                    if let Some(cache) = GLOBAL_USER_INFO.lock().ok() {
+                                                        let mut cache = cache.write().unwrap();
                                                         cache.insert(peer_id.to_string(), user_info.clone());
                                                     }
 
@@ -1074,6 +1079,8 @@ pub fn internal_start() -> Result<(), String> {
                                                             user_info.avatar_url.as_ref().unwrap_or(&String::new()),
                                                         ),
                                                     };
+                                                    // 同时发送到 Stream 和队列（兼容模式）
+                                                    send_event_to_stream(event.clone());
                                                     let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
                                                     queue.push(event);
                                                 }
@@ -1137,12 +1144,13 @@ pub fn internal_start() -> Result<(), String> {
                                     use mdns::chat::ChatEvent;
                                     match chat_event {
                                         ChatEvent::MessageReceived { from, message } => {
-                                            use mdns::chat::ChatMessage;
-                                            if let mdns::ChatMessage::Text(text) = message {
+                                            if let mdns::chat::ChatMessage::Text(text) = message {
                                                 let event = bridge::P2PEvent {
                                                     event_type: 6,
                                                     data: format!(r#"{{"from":"{}","content":"{}","timestamp":{}}}"#, from, text.content, text.timestamp),
                                                 };
+                                                // 同时发送到 Stream 和队列（兼容模式）
+                                                send_event_to_stream(event.clone());
                                                 let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
                                                 queue.push(event);
                                             }
@@ -1152,6 +1160,8 @@ pub fn internal_start() -> Result<(), String> {
                                                 event_type: 7,
                                                 data: format!(r#"{{"to":"{}","message_id":"{}"}}"#, to, message_id),
                                             };
+                                            // 同时发送到 Stream 和队列（兼容模式）
+                                            send_event_to_stream(event.clone());
                                             let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
                                             queue.push(event);
                                         }
@@ -1160,6 +1170,8 @@ pub fn internal_start() -> Result<(), String> {
                                                 event_type: 8,
                                                 data: format!(r#"{{"from":"{}","is_typing":{}}}"#, from, is_typing),
                                             };
+                                            // 同时发送到 Stream 和队列（兼容模式）
+                                            send_event_to_stream(event.clone());
                                             let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
                                             queue.push(event);
                                         }
@@ -1343,6 +1355,9 @@ pub fn internal_cleanup() {
     // 清空 FRB 事件队列
     let mut frb_queue = FRB_EVENT_QUEUE.lock().unwrap();
     frb_queue.clear();
+
+    // 清空 StreamSink
+    *GLOBAL_STREAM_SINK.lock().unwrap() = None;
 }
 
 // ============================================================================
@@ -1589,6 +1604,28 @@ pub async fn internal_broadcast_message(target_peer_ids: Vec<String>, message: S
 
 /// 全局事件队列（用于 FRB 轮询）
 static FRB_EVENT_QUEUE: Mutex<Vec<bridge::P2PEvent>> = Mutex::new(Vec::new());
+
+/// 全局 StreamSink（用于 FRB Stream 模式）
+static GLOBAL_STREAM_SINK: Mutex<Option<frb_generated::StreamSink<bridge::P2PEvent, flutter_rust_bridge::for_generated::SseCodec>>> = Mutex::new(None);
+
+/// 设置事件流接收器（用于 Stream 模式）
+///
+/// 这个函数会保存 StreamSink，之后的 P2P 事件会通过它推送到 Flutter
+pub fn set_event_stream_sink(stream_sink: frb_generated::StreamSink<bridge::P2PEvent, flutter_rust_bridge::for_generated::SseCodec>) -> Result<(), String> {
+    let mut sink = GLOBAL_STREAM_SINK.lock().map_err(|e| format!("Failed to lock stream sink: {:?}", e))?;
+    *sink = Some(stream_sink);
+    Ok(())
+}
+
+/// 发送事件到 StreamSink（如果已设置）
+fn send_event_to_stream(event: crate::bridge::P2PBridgeEvent) {
+    if let Ok(sink) = GLOBAL_STREAM_SINK.lock() {
+        if let Some(ref sink) = *sink {
+            // 将事件添加到 Stream，忽略错误
+            let _: Result<(), flutter_rust_bridge::Rust2DartSendError> = sink.add(event);
+        }
+    }
+}
 
 /// 轮询事件（返回所有待处理的事件并清空队列）
 pub fn poll_events() -> Vec<bridge::P2PEvent> {

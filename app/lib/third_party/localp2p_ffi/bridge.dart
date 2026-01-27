@@ -7,68 +7,73 @@ import '../../bridge.dart';
 import '../../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+
+            // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+
+
+            /// 检查 P2P 是否已初始化
+bool  p2PIsInitialized() => P2PBridge.instance.api.localp2PFfiBridgeP2PIsInitialized();
+
+/// 检查 P2P 服务是否正在运行
+bool  p2PIsRunning() => P2PBridge.instance.api.localp2PFfiBridgeP2PIsRunning();
 
 /// 初始化 P2P 模块
 ///
 /// # Arguments
 /// * `device_name` - 本设备的显示名称
-void p2PInit({required String deviceName}) =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PInit(deviceName: deviceName);
+void  p2PInit({required String deviceName }) => P2PBridge.instance.api.localp2PFfiBridgeP2PInit(deviceName: deviceName);
 
 /// 启动 P2P 服务
-void p2PStart() => P2PBridge.instance.api.localp2PFfiBridgeP2PStart();
+void  p2PStart() => P2PBridge.instance.api.localp2PFfiBridgeP2PStart();
 
 /// 停止 P2P 服务
-void p2PStop() => P2PBridge.instance.api.localp2PFfiBridgeP2PStop();
+void  p2PStop() => P2PBridge.instance.api.localp2PFfiBridgeP2PStop();
 
 /// 清理资源
-void p2PCleanup() => P2PBridge.instance.api.localp2PFfiBridgeP2PCleanup();
+void  p2PCleanup() => P2PBridge.instance.api.localp2PFfiBridgeP2PCleanup();
 
 /// 获取本地 Peer ID
-Future<String> p2PGetLocalPeerId() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetLocalPeerId();
+String  p2PGetLocalPeerId() => P2PBridge.instance.api.localp2PFfiBridgeP2PGetLocalPeerId();
 
 /// 获取设备名称
-Future<String> p2PGetDeviceName() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetDeviceName();
+String  p2PGetDeviceName() => P2PBridge.instance.api.localp2PFfiBridgeP2PGetDeviceName();
 
 /// 获取已验证的节点列表
-Future<List<P2PBridgeNodeInfo>> p2PGetVerifiedNodes() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetVerifiedNodes();
+List<P2PBridgeNodeInfo>  p2PGetVerifiedNodes() => P2PBridge.instance.api.localp2PFfiBridgeP2PGetVerifiedNodes();
 
 /// 发送消息给指定节点
 ///
 /// # Arguments
 /// * `target_peer_id` - 目标节点的 Peer ID
 /// * `message` - 消息内容
-Future<void> p2PSendMessage({
-  required String targetPeerId,
-  required String message,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PSendMessage(
-  targetPeerId: targetPeerId,
-  message: message,
-);
+void  p2PSendMessage({required String targetPeerId , required String message }) => P2PBridge.instance.api.localp2PFfiBridgeP2PSendMessage(targetPeerId: targetPeerId, message: message);
 
 /// 广播消息给多个节点
 ///
 /// # Arguments
 /// * `target_peer_ids` - 目标节点的 Peer ID 列表
 /// * `message` - 消息内容
-Future<void> p2PBroadcastMessage({
-  required List<String> targetPeerIds,
-  required String message,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PBroadcastMessage(
-  targetPeerIds: targetPeerIds,
-  message: message,
-);
+void  p2PBroadcastMessage({required List<String> targetPeerIds , required String message }) => P2PBridge.instance.api.localp2PFfiBridgeP2PBroadcastMessage(targetPeerIds: targetPeerIds, message: message);
+
+/// 设置事件流接收器（用于 Stream 模式）
+///
+/// 调用此函数后，Rust 会将事件推送到 Stream，Flutter 端可以订阅这个 Stream
+/// 这是推荐的方式，比轮询更高效
+Stream<P2PBridgeEvent>  p2PSetEventStream() => P2PBridge.instance.api.localp2PFfiBridgeP2PSetEventStream();
 
 /// 轮询事件（返回所有待处理的事件）
 ///
+/// @deprecated 推荐使用 p2p_set_event_stream + p2p_start_with_stream 代替
 /// Flutter 应该定期调用此函数来获取事件
 /// 返回的事件按时间顺序排列
-List<P2PBridgeEvent> p2PPollEvents() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PPollEvents();
+List<P2PBridgeEvent>  p2PPollEvents() => P2PBridge.instance.api.localp2PFfiBridgeP2PPollEvents();
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UserInfo>>
-abstract class UserInfo implements RustOpaqueInterface {}
+            
+                // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UserInfo>>
+                abstract class UserInfo implements RustOpaqueInterface {
+                    
+
+                    
+                }
+                
+            

@@ -7,91 +7,78 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
 
-/// P2P 事件（用于 FRB）
-class P2PBridgeEvent {
-  /// 事件类型
-  /// 1 = NodeDiscovered
-  /// 2 = NodeExpired
-  /// 3 = NodeVerified
-  /// 4 = NodeOffline
-  /// 5 = UserInfoReceived
-  /// 6 = MessageReceived
-  /// 7 = MessageSent
-  /// 8 = PeerTyping
-  final int eventType;
 
-  /// 事件数据 (JSON 字符串)
-  final String data;
+            
 
-  const P2PBridgeEvent({required this.eventType, required this.data});
+            
 
-  @override
-  int get hashCode => eventType.hashCode ^ data.hashCode;
+            /// P2P 事件（用于 FRB）
+class P2PBridgeEvent  {
+                /// 事件类型
+/// 1 = NodeDiscovered
+/// 2 = NodeExpired
+/// 3 = NodeVerified
+/// 4 = NodeOffline
+/// 5 = UserInfoReceived
+/// 6 = MessageReceived
+/// 7 = MessageSent
+/// 8 = PeerTyping
+final int eventType;
+/// 事件数据 (JSON 字符串)
+final String data;
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is P2PBridgeEvent &&
-          runtimeType == other.runtimeType &&
-          eventType == other.eventType &&
-          data == other.data;
-}
+                const P2PBridgeEvent({required this.eventType ,required this.data ,});
+
+                
+                
+
+                
+        @override
+        int get hashCode => eventType.hashCode^data.hashCode;
+        
+
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is P2PBridgeEvent &&
+                runtimeType == other.runtimeType
+                && eventType == other.eventType&& data == other.data;
+        
+            }
 
 /// 节点信息（用于 FRB）
-class P2PBridgeNodeInfo {
-  final String peerId;
-  final String displayName;
-  final String deviceName;
-  final String? nickname;
-  final String? status;
-  final String? avatarUrl;
+class P2PBridgeNodeInfo  {
+                final String peerId;
+final String displayName;
+final String deviceName;
+final String? nickname;
+final String? status;
+final String? avatarUrl;
 
-  const P2PBridgeNodeInfo({
-    required this.peerId,
-    required this.displayName,
-    required this.deviceName,
-    this.nickname,
-    this.status,
-    this.avatarUrl,
-  });
+                const P2PBridgeNodeInfo({required this.peerId ,required this.displayName ,required this.deviceName ,this.nickname ,this.status ,this.avatarUrl ,});
 
-  /// 简化版本，只有基本信息（用于兼容旧代码）
-  static Future<P2PBridgeNodeInfo> fromBasicInfo({
-    required String peerId,
-    required String displayName,
-    required String deviceName,
-  }) => P2PBridge.instance.api.crateBridgeP2PBridgeNodeInfoFromBasicInfo(
-    peerId: peerId,
-    displayName: displayName,
-    deviceName: deviceName,
-  );
+                /// 简化版本，只有基本信息（用于兼容旧代码）
+static Future<P2PBridgeNodeInfo>  fromBasicInfo({required String peerId , required String displayName , required String deviceName })=>P2PBridge.instance.api.crateBridgeP2PBridgeNodeInfoFromBasicInfo(peerId: peerId, displayName: displayName, deviceName: deviceName);
 
-  static Future<P2PBridgeNodeInfo> fromPeerIdAndInfo({
-    required String peerId,
-    required UserInfo info,
-  }) => P2PBridge.instance.api.crateBridgeP2PBridgeNodeInfoFromPeerIdAndInfo(
-    peerId: peerId,
-    info: info,
-  );
 
-  @override
-  int get hashCode =>
-      peerId.hashCode ^
-      displayName.hashCode ^
-      deviceName.hashCode ^
-      nickname.hashCode ^
-      status.hashCode ^
-      avatarUrl.hashCode;
+static Future<P2PBridgeNodeInfo>  fromPeerIdAndInfo({required String peerId , required UserInfo info })=>P2PBridge.instance.api.crateBridgeP2PBridgeNodeInfoFromPeerIdAndInfo(peerId: peerId, info: info);
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is P2PBridgeNodeInfo &&
-          runtimeType == other.runtimeType &&
-          peerId == other.peerId &&
-          displayName == other.displayName &&
-          deviceName == other.deviceName &&
-          nickname == other.nickname &&
-          status == other.status &&
-          avatarUrl == other.avatarUrl;
-}
+
+                
+
+                
+        @override
+        int get hashCode => peerId.hashCode^displayName.hashCode^deviceName.hashCode^nickname.hashCode^status.hashCode^avatarUrl.hashCode;
+        
+
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is P2PBridgeNodeInfo &&
+                runtimeType == other.runtimeType
+                && peerId == other.peerId&& displayName == other.displayName&& deviceName == other.deviceName&& nickname == other.nickname&& status == other.status&& avatarUrl == other.avatarUrl;
+        
+            }
+            

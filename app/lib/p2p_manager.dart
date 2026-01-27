@@ -69,7 +69,7 @@ class P2PManager {
   static P2PManager? _instance;
   bool _initialized = false;
   final _eventController = StreamController<P2PEvent>.broadcast();
-  Timer? _pollTimer;
+  StreamSubscription<P2PBridgeEvent>? _eventStreamSubscription;
   late P2PLogHelper _log;
 
   // 私有构造函数
@@ -128,7 +128,7 @@ class P2PManager {
       final result = RustLib.instance.api.localp2PFfiBridgeP2PIsInitialized();
       _log.rustReturn('p2pIsInitialized', result: result);
       return result;
-    } catch (e, stackTrace) {
+    } catch (e) {
       // 函数可能不存在，假设未初始化
       _log.w('p2pIsInitialized 调用失败: $e');
       debugPrint('p2pIsInitialized 调用失败: $e');
@@ -142,10 +142,10 @@ class P2PManager {
     debugPrint('同步 Rust 状态到 Dart...');
     _initialized = true;
 
-    // 恢复轮询（如果未运行）
-    if (_pollTimer == null || !_pollTimer!.isActive) {
-      _log.d('恢复事件轮询...');
-      _startPolling();
+    // 恢复 Stream 订阅（如果未运行）
+    if (_eventStreamSubscription == null) {
+      _log.d('恢复事件 Stream 订阅...');
+      _startEventStream();
     }
   }
 
@@ -164,9 +164,9 @@ class P2PManager {
 
     // 检查是否已在运行
     if (_isRustRunning()) {
-      _log.i('Rust 服务已在运行，仅恢复轮询');
-      debugPrint('Rust 服务已在运行，仅恢复轮询');
-      _startPolling();
+      _log.i('Rust 服务已在运行，仅恢复 Stream 订阅');
+      debugPrint('Rust 服务已在运行，仅恢复 Stream 订阅');
+      _startEventStream();
       _log.performance('start (already running)', stopwatch.elapsed);
       return;
     }
@@ -174,8 +174,8 @@ class P2PManager {
     try {
       RustLib.instance.api.localp2PFfiBridgeP2PStart();
       _log.rustReturn('start', result: 'started');
-      // 启动轮询以模拟事件（临时方案）
-      _startPolling();
+      // 启动事件 Stream 订阅（推荐方式）
+      _startEventStream();
       _log.performance('start', stopwatch.elapsed);
     } catch (e, stackTrace) {
       _log.rustError('localp2PFfiBridgeP2PStart', e, stackTrace);
@@ -190,30 +190,42 @@ class P2PManager {
       final result = RustLib.instance.api.localp2PFfiBridgeP2PIsRunning();
       _log.rustReturn('p2pIsRunning', result: result);
       return result;
-    } catch (e, stackTrace) {
+    } catch (e) {
       _log.w('p2pIsRunning 调用失败: $e');
       debugPrint('p2pIsRunning 调用失败: $e');
       return false;
     }
   }
 
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _log.d('启动事件轮询 (100ms 间隔)');
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 100), (_) async {
-      try {
-        final events = RustLib.instance.api.localp2PFfiBridgeP2PPollEvents();
-        if (events.isNotEmpty) {
-          _log.t('轮询到 ${events.length} 个事件');
-        }
-        for (final event in events) {
+  /// 启动事件 Stream 订阅（Stream 模式）
+  void _startEventStream() {
+    // 取消之前的订阅（如果有）
+    _eventStreamSubscription?.cancel();
+
+    _log.d('启动事件 Stream 订阅');
+    try {
+      // 获取事件 Stream
+      final eventStream = RustLib.instance.api.localp2PFfiBridgeP2PSetEventStream();
+
+      // 订阅 Stream
+      _eventStreamSubscription = eventStream.listen(
+        (event) {
+          _log.t('收到 Stream 事件，类型: ${event.eventType}');
           _handleEvent(event);
-        }
-      } catch (e, stackTrace) {
-        _log.e('Failed to poll events: $e', e, stackTrace);
-        debugPrint('Failed to poll events: $e');
-      }
-    });
+        },
+        onError: (error) {
+          _log.e('Stream 错误: $error');
+          debugPrint('Event stream error: $error');
+        },
+        onDone: () {
+          _log.w('Stream 结束');
+          debugPrint('Event stream ended');
+        },
+      );
+    } catch (e, stackTrace) {
+      _log.e('Failed to start event stream: $e', e, stackTrace);
+      debugPrint('Failed to start event stream: $e');
+    }
   }
 
   void _handleEvent(P2PBridgeEvent event) {
@@ -258,11 +270,15 @@ class P2PManager {
         final status = _extractStatus(event.data);
         final avatarUrl = _extractAvatarUrl(event.data);
         if (peerId != null && deviceName != null) {
-          _log.node('userInfo', peerId, details: {
-            'deviceName': deviceName,
-            'nickname': nickname,
-            'status': status,
-          });
+          _log.node(
+            'userInfo',
+            peerId,
+            details: {
+              'deviceName': deviceName,
+              'nickname': nickname,
+              'status': status,
+            },
+          );
           _eventController.add(
             UserInfoReceivedEvent(
               peerId,
@@ -390,7 +406,10 @@ class P2PManager {
       return;
     }
 
-    _pollTimer?.cancel();
+    // 取消 Stream 订阅
+    _eventStreamSubscription?.cancel();
+    _eventStreamSubscription = null;
+
     try {
       RustLib.instance.api.localp2PFfiBridgeP2PStop();
       _log.rustReturn('stop', result: 'stopped');
@@ -404,12 +423,15 @@ class P2PManager {
   void cleanup() {
     _log.rustCall('cleanup');
 
-    _pollTimer?.cancel();
+    // 取消 Stream 订阅
+    _eventStreamSubscription?.cancel();
+    _eventStreamSubscription = null;
+
     if (_initialized) {
       try {
         RustLib.instance.api.localp2PFfiBridgeP2PCleanup();
         _log.rustReturn('cleanup', result: 'cleaned');
-      } catch (e, stackTrace) {
+      } catch (e) {
         _log.w('Cleanup error (ignoring): $e');
         // 忽略清理错误
       }
@@ -473,10 +495,10 @@ class P2PManager {
     }
 
     _log.message('SEND', targetPeerId, message);
-    _log.rustCall('sendMessage', params: {
-      'targetPeerId': targetPeerId,
-      'message': message,
-    });
+    _log.rustCall(
+      'sendMessage',
+      params: {'targetPeerId': targetPeerId, 'message': message},
+    );
 
     try {
       RustLib.instance.api.localp2PFfiBridgeP2PSendMessage(
@@ -491,10 +513,7 @@ class P2PManager {
   }
 
   /// 广播消息给多个节点
-  void broadcastMessage(
-    List<String> targetPeerIds,
-    String message,
-  ) {
+  void broadcastMessage(List<String> targetPeerIds, String message) {
     if (!_initialized) {
       _log.e('broadcastMessage 但未初始化');
       throw Exception('Not initialized');
@@ -502,10 +521,10 @@ class P2PManager {
 
     _log.d('广播消息给 ${targetPeerIds.length} 个节点');
     _log.message('BROADCAST', targetPeerIds.join(','), message);
-    _log.rustCall('broadcastMessage', params: {
-      'targetPeerIds': targetPeerIds,
-      'message': message,
-    });
+    _log.rustCall(
+      'broadcastMessage',
+      params: {'targetPeerIds': targetPeerIds, 'message': message},
+    );
 
     try {
       RustLib.instance.api.localp2PFfiBridgeP2PBroadcastMessage(

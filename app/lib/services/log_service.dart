@@ -193,7 +193,11 @@ class LogService {
         return [];
       }
 
-      final files = await logsDir.list().where((entity) => entity is File).cast<File>().toList();
+      final files = await logsDir
+          .list()
+          .where((entity) => entity is File)
+          .cast<File>()
+          .toList();
       files.sort((a, b) => b.path.compareTo(a.path)); // 按时间倒序
       return files;
     } catch (e) {
@@ -345,7 +349,9 @@ class P2PLogHelper {
 
   /// 记录消息
   void message(String direction, String peerId, String content) {
-    final preview = content.length > 50 ? '${content.substring(0, 50)}...' : content;
+    final preview = content.length > 50
+        ? '${content.substring(0, 50)}...'
+        : content;
     _log.d('💬 Message $direction: $peerId | "$preview"');
   }
 

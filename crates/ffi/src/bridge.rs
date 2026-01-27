@@ -8,8 +8,10 @@
 
 use flutter_rust_bridge::frb;
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 pub use mdns::UserInfo;
+
+// 导入生成的 StreamSink 类型
+use crate::frb_generated::StreamSink;
 
 // ============================================================================
 // 数据结构定义
@@ -192,8 +194,18 @@ pub fn p2p_broadcast_message(
 // 事件功能
 // ============================================================================
 
+/// 设置事件流接收器（用于 Stream 模式）
+///
+/// 调用此函数后，Rust 会将事件推送到 Stream，Flutter 端可以订阅这个 Stream
+/// 这是推荐的方式，比轮询更高效
+#[frb(sync)]
+pub fn p2p_set_event_stream(stream_sink: StreamSink<P2PBridgeEvent>) -> Result<(), String> {
+    crate::set_event_stream_sink(stream_sink)
+}
+
 /// 轮询事件（返回所有待处理的事件）
 ///
+/// @deprecated 推荐使用 p2p_set_event_stream + p2p_start_with_stream 代替
 /// Flutter 应该定期调用此函数来获取事件
 /// 返回的事件按时间顺序排列
 #[frb(sync)]
