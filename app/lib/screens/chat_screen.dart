@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../p2p_manager.dart';
 import '../widgets/chat_bubble_sent.dart';
 import '../widgets/chat_bubble_received.dart';
@@ -79,26 +80,34 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          // Header
-          _buildHeader(),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        body: Column(
+          children: [
+            // Header
+            _buildHeader(),
 
-          // Messages
-          Expanded(child: _buildMessagesArea()),
+            // Messages
+            Expanded(child: _buildMessagesArea()),
 
-          // Input Area
-          _buildInputArea(),
-        ],
+            // Input Area
+            _buildInputArea(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      height: 70,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      height: 56 + topPadding,
+      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 0),
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
       ),

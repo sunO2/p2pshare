@@ -1338,6 +1338,243 @@ p2p.sendMessage(targetPeerId, 'Hello!');
 p2p.cleanup();
 ```
 
+### 事件传输机制（flutter_rust_bridge Stream 模式）
+
+项目使用 **flutter_rust_bridge (FRB)** 的 **Stream 模式** 实现 Rust 后台线程到 Flutter UI 线程的事件推送，相比传统的轮询模式具有更低的延迟和更好的性能。
+
+#### 架构设计
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Rust 后台线程                            │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │              Discovery/Chat Event Source                  │  │
+│  │  - mDNS 发现事件                                         │  │
+│  │  - 节点验证事件                                         │  │
+│  │  - 消息收发事件                                         │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              ↓                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │              send_event_to_stream(event)                  │  │
+│  │  - 将事件推送到 StreamSink                               │  │
+│  │  - 同时推送到队列（向后兼容）                            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                    flutter_rust_bridge                         │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │              StreamSink<P2PBridgeEvent>                   │  │
+│  │  - 线程安全的事件推送通道                                 │  │
+│  │  - 自动序列化事件到 Dart                                 │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                         Flutter UI 线程                           │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │           p2pSetEventStream() -> Stream                   │  │
+│  │  - 返回 Dart Stream                                      │  │
+│  │  - 自动接收 Rust 推送的事件                              │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              ↓                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │              _eventStreamSubscription                     │  │
+│  │  - 订阅 Stream 接收事件                                  │  │
+│  │  - 转发到 _eventController.broadcast()                    │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              ↓                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                  _handleEvent(event)                      │  │
+│  │  - 解析事件 JSON 数据                                    │  │
+│  │  - 转换为 Dart 事件对象                                   │  │
+│  │  - 发送到 eventStream                                     │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Stream 模式 vs 轮询模式
+
+| 特性 | Stream 模式（当前） | 轮询模式（旧版） |
+|------|-------------------|----------------|
+| **延迟** | 毫秒级实时推送 | 100ms 轮询间隔 |
+| **CPU 使用** | 事件驱动，空闲时零消耗 | 定期轮询，持续消耗 |
+| **电池消耗** | 低 | 较高 |
+| **网络效率** | 即时响应 | 平均 50ms 延迟 |
+| **实现复杂度** | 中等（需处理线程安全） | 简单 |
+
+#### Rust 端实现
+
+**关键文件**: `crates/ffi/src/lib.rs`
+
+```rust
+use flutter_rust_bridge::StreamSink;
+
+// 全局 StreamSink（用于 FRB Stream 模式）
+static GLOBAL_STREAM_SINK: Mutex<Option<frb_generated::StreamSink<
+    bridge::P2PEvent,
+    flutter_rust_bridge::for_generated::SseCodec
+>>> = Mutex::new(None);
+
+/// 设置事件流接收器（用于 Stream 模式）
+pub fn set_event_stream_sink(
+    stream_sink: frb_generated::StreamSink<
+        bridge::P2PEvent,
+        flutter_rust_bridge::for_generated::SseCodec
+    >
+) -> Result<(), String> {
+    let mut sink = GLOBAL_STREAM_SINK.lock()
+        .map_err(|e| format!("Failed to lock stream sink: {:?}", e))?;
+    *sink = Some(stream_sink);
+    Ok(())
+}
+
+/// 发送事件到 StreamSink（如果已设置）
+fn send_event_to_stream(event: bridge::P2PEvent) {
+    if let Ok(sink) = GLOBAL_STREAM_SINK.lock() {
+        if let Some(ref sink) = *sink {
+            // 将事件添加到 Stream，忽略错误
+            let _: Result<(), flutter_rust_bridge::Rust2DartSendError> = sink.add(event);
+        }
+    }
+}
+```
+
+**关键文件**: `crates/ffi/src/bridge.rs`
+
+```rust
+use flutter_rust_bridge::frb;
+use crate::frb_generated::StreamSink;
+
+/// 设置事件流接收器（用于 Stream 模式）
+#[frb(sync)]
+pub fn p2p_set_event_stream(
+    stream_sink: StreamSink<P2PBridgeEvent>
+) -> Result<(), String> {
+    crate::set_event_stream_sink(stream_sink)
+}
+```
+
+**事件发送示例**（在发现线程中）:
+
+```rust
+DiscoveryEvent::Discovered(peer_id, addr) => {
+    let event = bridge::P2PEvent {
+        event_type: 1,  // NodeDiscovered
+        data: format!(r#"{{"peer_id":"{}","addr":"{}"}}"#, peer_id, addr),
+    };
+    // 同时发送到 Stream 和队列（兼容模式）
+    send_event_to_stream(event.clone());
+    let mut queue = FRB_EVENT_QUEUE.lock().unwrap();
+    queue.push(event);
+}
+```
+
+#### Flutter 端实现
+
+**关键文件**: `app/lib/p2p_manager.dart`
+
+```dart
+class P2PManager {
+  StreamSubscription<P2PBridgeEvent>? _eventStreamSubscription;
+
+  /// 启动事件 Stream 订阅（Stream 模式）
+  void _startEventStream() {
+    // 取消之前的订阅（如果有）
+    _eventStreamSubscription?.cancel();
+
+    // 获取事件 Stream
+    final eventStream = RustLib.instance.api.localp2PFfiBridgeP2PSetEventStream();
+
+    // 订阅 Stream
+    _eventStreamSubscription = eventStream.listen(
+      (event) {
+        _log.t('收到 Stream 事件，类型: ${event.eventType}');
+        _handleEvent(event);
+      },
+      onError: (error) {
+        _log.e('Stream 错误: $error');
+      },
+      onDone: () {
+        _log.w('Stream 结束');
+      },
+    );
+  }
+
+  void _handleEvent(P2PBridgeEvent event) {
+    switch (event.eventType) {
+      case 1: // NodeDiscovered
+        final peerId = _extractPeerId(event.data);
+        if (peerId != null) {
+          _eventController.add(NodeDiscoveredEvent(peerId));
+        }
+        break;
+      case 6: // MessageReceived
+        final from = _extractFrom(event.data);
+        final content = _extractContent(event.data);
+        if (from != null && content != null) {
+          _eventController.add(MessageReceivedEvent(from, content, timestamp));
+        }
+        break;
+      // ... 其他事件类型
+    }
+  }
+}
+```
+
+#### 事件类型映射
+
+| event_type | 事件名称 | Dart 类 |
+|------------|----------|---------|
+| 1 | NodeDiscovered | `NodeDiscoveredEvent` |
+| 2 | NodeExpired | `NodeExpiredEvent` |
+| 3 | NodeVerified | `NodeVerifiedEvent` |
+| 4 | NodeOffline | `NodeOfflineEvent` |
+| 5 | UserInfoReceived | `UserInfoReceivedEvent` |
+| 6 | MessageReceived | `MessageReceivedEvent` |
+| 7 | MessageSent | `MessageSentEvent` |
+| 8 | PeerTyping | `PeerTypingEvent` |
+
+#### 数据格式
+
+所有事件数据以 JSON 字符串形式传输：
+
+```json
+// NodeDiscovered (event_type = 1)
+{"peer_id":"12D3kooW...","addr":"/ip4/192.168.1.100/tcp/50001"}
+
+// NodeVerified (event_type = 3)
+{"peer_id":"12D3kooW...","display_name":"客厅电视"}
+
+// MessageReceived (event_type = 6)
+{"from":"12D3kooW...","content":"你好！","timestamp":1706357845123}
+```
+
+#### 线程安全保证
+
+1. **Rust 端**: 使用 `Mutex<Option<StreamSink>>` 保护全局 StreamSink
+2. **FRB 框架**: StreamSink 内部已实现线程安全的跨线程通信
+3. **Flutter 端**: Stream 监听在 UI 线程执行，无需额外同步
+
+#### 向后兼容性
+
+为保持向后兼容，事件同时推送到：
+- **StreamSink**（推荐，实时推送）
+- **事件队列**（已弃用，轮询使用）
+
+旧代码仍可通过 `p2p_poll_events()` 获取事件。
+
+#### 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| `crates/ffi/src/lib.rs` | Rust FFI 实现，包含 StreamSink 管理 |
+| `crates/ffi/src/bridge.rs` | FRB API 定义，包含 `p2p_set_event_stream()` |
+| `crates/ffi/src/frb_generated.rs` | FRB 自动生成的代码（包含 Stream 类型） |
+| `app/lib/p2p_manager.dart` | Flutter P2P 管理器，包含 Stream 订阅逻辑 |
+| `app/lib/frb_generated.dart` | Dart 自动生成的代码 |
+| `frb_config.yaml` | FRB 配置文件 |
+
 ### 平台特定配置
 
 #### Linux

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../p2p_manager.dart';
 import '../services/log_service.dart';
@@ -50,23 +51,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          // Header
-          _buildHeader(),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        body: Column(
+          children: [
+            // Header
+            _buildHeader(),
 
-          // Content
-          Expanded(child: _buildContent(_deviceName, _localPeerId)),
-        ],
+            // Content
+            Expanded(child: _buildContent(_deviceName, _localPeerId)),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      height: 70,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      height: 56 + topPadding,
+      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 0),
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
       ),
@@ -516,30 +525,37 @@ class _LogsViewerScreen extends StatefulWidget {
 class _LogsViewerScreenState extends State<_LogsViewerScreen> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('日志'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share),
-            onPressed: _shareLogs,
-            tooltip: '分享',
-          ),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
-      body: Container(
-        color: const Color(0xFF1E1E1E),
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: Text(
-            widget.logs,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: Color(0xFFD4D4D4),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('日志'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: _shareLogs,
+              tooltip: '分享',
+            ),
+          ],
+        ),
+        body: Container(
+          color: const Color(0xFF1E1E1E),
+          padding: const EdgeInsets.all(16),
+          child: SingleChildScrollView(
+            child: Text(
+              widget.logs,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: Color(0xFFD4D4D4),
+              ),
             ),
           ),
         ),
