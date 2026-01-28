@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../p2p_manager.dart';
 import '../widgets/chat_bubble_sent.dart';
 import '../widgets/chat_bubble_received.dart';
+import '../widgets/unified_app_bar.dart';
 
 class ChatScreen extends StatefulWidget {
   final String peerId;
@@ -87,99 +88,24 @@ class _ChatScreenState extends State<ChatScreen> {
         statusBarBrightness: Brightness.light,
       ),
       child: Scaffold(
-        body: Column(
-          children: [
-            // Header
-            _buildHeader(),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // Header - use UnifiedAppBar
+              UnifiedAppBar(
+                title: widget.deviceName,
+                statusIndicator: const OnlineStatusIndicator(),
+              ),
 
-            // Messages
-            Expanded(child: _buildMessagesArea()),
+              // Messages
+              Expanded(child: _buildMessagesArea()),
 
-            // Input Area
-            _buildInputArea(),
-          ],
+              // Input Area
+              _buildInputArea(),
+            ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final topPadding = MediaQuery.of(context).padding.top;
-    return Container(
-      height: 76 + topPadding,
-      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8F8F6),
-      ),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                color: Color(0xFFE8E8E6),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.arrow_back,
-                size: 18,
-                color: Color(0xFF6D6C6A),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.deviceName,
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 26,
-                    fontWeight: FontWeight.normal,
-                    color: Color(0xFF1A1918),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                _buildStatusIndicator(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusIndicator() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFC8F0D8),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: Color(0xFF3D8A5A),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '在线',
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: const Color(0xFF3D8A5A)),
-          ),
-        ],
       ),
     );
   }
@@ -210,7 +136,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildInputArea() {
     return Container(
       height: 80,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
         border: Border(top: BorderSide(color: Color(0xFFCCCCCC))),
@@ -219,10 +145,10 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: Container(
-              height: 48,
+              height: 52,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
+                color: const Color(0xFFE8E8E6),
+                borderRadius: BorderRadius.circular(26),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
@@ -241,8 +167,8 @@ class _ChatScreenState extends State<ChatScreen> {
           GestureDetector(
             onTap: () => _sendMessage(_messageController.text),
             child: Container(
-              width: 48,
-              height: 48,
+              width: 52,
+              height: 52,
               decoration: const BoxDecoration(
                 color: Color(0xFF3D8A5A),
                 shape: BoxShape.circle,

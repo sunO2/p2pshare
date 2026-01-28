@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../p2p_manager.dart';
 import '../bridge/bridge.dart';
+import '../widgets/unified_app_bar.dart';
 import 'chat_screen.dart';
 
 class DeviceDetailScreen extends StatefulWidget {
@@ -67,56 +68,20 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
         statusBarBrightness: Brightness.light,
       ),
       child: Scaffold(
-        body: Column(
-          children: [
-            // Header
-            _buildHeader(),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // Header - use UnifiedAppBar
+              const UnifiedAppBar(
+                title: '设备详情',
+              ),
 
-            // Content
-            Expanded(child: _buildContent()),
-          ],
+              // Content
+              Expanded(child: _buildContent()),
+            ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final topPadding = MediaQuery.of(context).padding.top;
-    return Container(
-      height: 56 + topPadding,
-      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 0),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8F8F6),
-      ),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                color: Color(0xFFE8E8E6),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.arrow_back,
-                size: 18,
-                color: Color(0xFF6D6C6A),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            '设备详情',
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 26,
-              fontWeight: FontWeight.normal,
-              color: Color(0xFF1A1918),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -262,17 +262,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(icon, size: 18, color: isSelected ? Colors.white : color),
-              ),
-            ),
+            // 选中时显示圆形背景，未选中时直接显示图标
+            if (isSelected)
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF3D8A5A),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Icon(icon, size: 18, color: Colors.white),
+                ),
+              )
+            else
+              Icon(icon, size: 24, color: color),
             const SizedBox(height: 4),
             Text(label, style: TextStyle(fontSize: 10, color: color)),
           ],

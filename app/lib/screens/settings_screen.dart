@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../p2p_manager.dart';
 import '../services/log_service.dart';
+import '../widgets/unified_app_bar.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -58,60 +59,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         statusBarBrightness: Brightness.light,
       ),
       child: Scaffold(
-        body: Column(
-          children: [
-            // Header
-            _buildHeader(),
-
-            // Content
-            Expanded(child: _buildContent(_deviceName, _localPeerId)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final topPadding = MediaQuery.of(context).padding.top;
-    return Container(
-      height: 56 + topPadding,
-      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 0),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8F8F6),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '设置',
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 26,
-              fontWeight: FontWeight.normal,
-              color: Color(0xFF1A1918),
-            ),
-          ),
-          Container(
-            width: 44,
-            height: 44,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(22),
-                onTap: () {},
-                child: const Icon(
-                  Icons.settings_outlined,
-                  size: 20,
-                  color: Color(0xFF6D6C6A),
-                ),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // Header - use UnifiedAppBar
+              const UnifiedAppBar(
+                title: '设置',
+                showBackButton: false,
               ),
-            ),
+
+              // Content
+              Expanded(child: _buildContent(_deviceName, _localPeerId)),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
