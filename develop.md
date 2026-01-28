@@ -541,7 +541,71 @@ pub struct UserInfoCodec;
 [4 bytes: 长度][JSON 数据: UserInfo/UserInfoRequest]
 ```
 
-### 5. chat/ - 聊天模块
+### 5. identity.rs - 密钥持久化模块
+
+密钥持久化模块提供密钥对的保存和加载功能，用于固定 Peer ID。
+
+#### IdentityManager
+
+```rust
+pub struct IdentityManager;
+```
+
+**主要方法**:
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `load_or_none(path)` | 从文件加载密钥对，不存在返回 None | `Result<Option<Keypair>>` |
+| `generate_and_save(path)` | 生成新的 ed25519 密钥对并保存 | `Result<Keypair>` |
+| `load_or_generate(path)` | 加载或生成密钥对（便捷方法） | `Result<Keypair>` |
+| `delete(path)` | 删除密钥文件 | `Result<()>` |
+
+#### 使用示例
+
+```rust
+use mdns::IdentityManager;
+use std::path::Path;
+
+// 首次启动：生成新密钥对并保存
+let keypair = IdentityManager::load_or_generate(Path::new("/path/to/identity.key"))?;
+let peer_id = keypair.public().to_peer_id();
+
+// 后续启动：从文件加载相同的密钥对
+let keypair = IdentityManager::load_or_generate(Path::new("/path/to/identity.key"))?;
+let peer_id = keypair.public().to_peer_id();
+// peer_id 将与首次启动时相同
+```
+
+#### 密钥格式
+
+- **算法**: ed25519
+- **编码**: libp2p Protobuf 格式
+- **文件权限**: 0600 (Unix, 仅所有者可读写)
+- **特点**: 使用 libp2p 的 `to_protobuf_encoding()` 和 `from_protobuf_encoding()` 进行序列化
+
+#### 在 ManagedDiscovery 中使用
+
+```rust
+// 创建发现器并传入密钥对
+let discovery = ManagedDiscovery::new(
+    node_manager,
+    listen_addresses,
+    health_config,
+    user_info,
+    Some(keypair),  // 使用持久化密钥对
+).await?;
+
+// 或生成临时密钥对（每次启动会变化）
+let discovery = ManagedDiscovery::new(
+    node_manager,
+    listen_addresses,
+    health_config,
+    user_info,
+    None,  // 生成临时密钥对
+).await?;
+```
+
+### 6. chat/ - 聊天模块
 
 聊天模块提供局域网内的点对点聊天功能，支持一对一和一对多群聊。
 
@@ -1203,8 +1267,160 @@ localp2p/
 | 节点发现 | 自动扫描局域网内的 P2P 节点 |
 | 实时聊天 | 与发现的节点进行点对点聊天 |
 | 消息历史 | 显示聊天记录，支持左右分栏 |
+| 设备名称管理 | 首次启动自动生成随机设备名称并持久化 |
+| Peer ID 固定 | 使用持久化密钥对，确保重启后 Peer ID 不变 |
 | Material Design 3 | 现代化 UI 设计 |
 | 跨平台 | 支持 Linux、macOS、Windows、Android |
+
+### 设备名称和 Peer ID 持久化
+
+Flutter 应用实现了以下持久化机制：
+
+#### 1. 设备名称持久化
+
+**首次启动**：
+- 自动生成随机设备名称（如"快乐熊猫123"）
+- 保存到 SharedPreferences
+- 后续启动使用已保存的名称
+
+**实现位置**：`lib/services/storage_service.dart`
+
+```dart
+class StorageService {
+  static const String _keyDeviceName = 'device_name';
+
+  Future<String> getDeviceName() async {
+    String? deviceName = _prefs!.getString(_keyDeviceName);
+
+    if (deviceName == null || deviceName.isEmpty) {
+      // 首次启动，生成随机设备名称
+      deviceName = _generateRandomDeviceName();
+      await setDeviceName(deviceName);
+    }
+
+    return deviceName;
+  }
+
+  String _generateRandomDeviceName() {
+    final adjectives = ['快乐', '幸运', '快速', ...];
+    final nouns = ['熊猫', '手机', '电脑', ...];
+    final random = Random();
+    final adjective = adjectives[random.nextInt(adjectives.length)];
+    final noun = nouns[random.nextInt(nouns.length)];
+    final number = random.nextInt(1000);
+
+    return '$adjective$noun$number';
+  }
+}
+```
+
+#### 2. Peer ID 持久化
+
+**首次启动**：
+- 生成新的 ed25519 密钥对
+- 保存到 `{应用文档目录}/identity.key`
+- 使用该密钥对生成 Peer ID
+
+**后续启动**：
+- 从文件加载已保存的密钥对
+- 使用相同的密钥对生成 Peer ID
+- Peer ID 保持不变
+
+**Rust 端实现**：`crates/mdns/src/identity.rs`
+
+**Flutter 端调用**：`lib/screens/home_screen.dart`
+
+```dart
+// 获取应用文档目录
+final appDocDir = await getApplicationDocumentsDirectory();
+final identityPath = '${appDocDir.path}/identity.key';
+
+// 创建 P2P 配置
+final config = P2PInitConfig(
+  deviceName: deviceName,
+  identityPath: identityPath,  // 密钥文件路径
+);
+
+await P2PManager.instance.init(config);
+```
+
+**Rust 端处理**：`crates/ffi/src/lib.rs`
+
+```rust
+pub fn internal_init(device_name: String, identity_path: String) -> Result<(), String> {
+    let identity = if !identity_path.is_empty() {
+        match IdentityManager::load_or_generate(Path::new(&identity_path)) {
+            Ok(keypair) => Some(keypair),
+            Err(e) => {
+                tracing::warn!("密钥对加载失败，将生成临时密钥对: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // 创建发现器，传入密钥对
+    ManagedDiscovery::new(
+        node_manager,
+        listen_addresses,
+        health_config,
+        user_info,
+        identity,
+    ).await?;
+}
+```
+
+#### 3. 初始化顺序修复
+
+修复了服务初始化的竞态条件问题：
+
+**修改前**（有问题）：
+```dart
+@override
+void initState() {
+  super.initState();
+  _initServices();  // ❌ 没有 await
+  _initP2P();       // ❌ 没有 await
+}
+```
+
+**修改后**（正确）：
+```dart
+@override
+void initState() {
+  super.initState();
+  _initialize();  // ✅ 正确顺序
+}
+
+Future<void> _initialize() async {
+  await _initServices();  // ✅ 先初始化存储服务
+  await _initP2P();       // ✅ 再初始化 P2P
+}
+```
+
+这确保了 `StorageService` 在 `P2PManager` 使用前完成初始化。
+
+#### 4. 应用恢复状态同步
+
+修复了应用从后台恢复时的状态同步问题：
+
+```dart
+Future<void> _syncP2PState() async {
+  if (P2PManager.instance.isInitialized) {
+    // ✅ 从存储服务获取设备名称（确保使用正确的名称）
+    final deviceName = await StorageService.instance.getDeviceName();
+    final localPeerId = P2PManager.instance.getLocalPeerId();
+
+    setState(() {
+      _deviceName = deviceName;  // 使用持久化的设备名称
+      _localPeerId = localPeerId;
+    });
+  }
+}
+```
+
+### 项目结构
 
 ### 构建和运行
 

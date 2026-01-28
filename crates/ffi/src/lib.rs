@@ -18,6 +18,7 @@ use tokio::runtime::Runtime;
 use mdns::{
     ManagedDiscovery, NodeManager, NodeManagerConfig,
     HealthCheckConfig, UserInfo, ChatExtension, ChatMessage,
+    IdentityManager,
 };
 
 mod types;
@@ -169,13 +170,14 @@ pub unsafe extern "C" fn localp2p_init(
             max_failures: 3,
         };
 
-        // 创建发现器
+        // 创建发现器（不使用持久化密钥对）
         let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
         let discovery_result = ManagedDiscovery::new(
             node_manager.clone(),
             listen_addresses,
             health_config,
             user_info,
+            None, // 不使用持久化密钥对
         ).await;
 
         let mut discovery = match discovery_result {
@@ -914,9 +916,28 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
     let runtime = unsafe { RUNTIME.as_ref().unwrap() };
 
     // 在运行时中初始化核心组件
-    // 注意：identity_path 参数当前未使用（密钥持久化功能待实现）
-    // TODO: 实现 identity_path 功能，使用持久化密钥对初始化 discovery
     let result = runtime.block_on(async {
+        // 加载或生成密钥对
+        let identity = if !identity_path.is_empty() {
+            // 使用指定的路径加载或生成密钥对
+            tracing::info!("尝试从文件加载密钥对: {}", identity_path);
+            match IdentityManager::load_or_generate(std::path::Path::new(&identity_path)) {
+                Ok(keypair) => {
+                    let peer_id = keypair.public().to_peer_id();
+                    tracing::info!("✓ 成功加载密钥对，Peer ID: {}", peer_id);
+                    Some(keypair)
+                }
+                Err(e) => {
+                    tracing::warn!("密钥对加载失败，将生成临时密钥对: {}", e);
+                    None
+                }
+            }
+        } else {
+            // 未指定路径，生成临时密钥对
+            tracing::info!("未指定密钥文件路径，将生成临时密钥对");
+            None
+        };
+
         // 创建用户信息
         let user_info = UserInfo::new(device_name.clone())
             .with_status("在线".to_string());
@@ -941,14 +962,13 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
         // 解析监听地址
         let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
 
-        // 创建发现器
-        // 注意：当前版本的 mdns::ManagedDiscovery 不支持传入已有密钥对
-        // 密钥对会被保存/加载，但 discovery 仍会使用随机生成的密钥对
+        // 创建发现器，传入密钥对（如果有）
         let discovery_result = ManagedDiscovery::new(
             node_manager.clone(),
             listen_addresses,
             health_config,
             user_info,
+            identity,
         ).await;
 
         let mut discovery = match discovery_result {
@@ -996,9 +1016,11 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
         tracing::info!("  设备名称: {}", device_name);
         tracing::info!("  Peer ID: {}", local_peer_id);
         if !identity_path.is_empty() {
-            tracing::info!("  密钥文件路径: {} (功能待实现)", identity_path);
+            tracing::info!("  密钥文件路径: {}", identity_path);
+            tracing::info!("  ✓ 使用持久化密钥对，Peer ID 将保持不变");
+        } else {
+            tracing::warn!("  未指定密钥文件路径，每次启动会生成新的 Peer ID");
         }
-        tracing::warn!("注意: 当前版本未使用持久化密钥对，每次启动会生成新的 Peer ID");
 
         Ok::<(), String>(())
     });

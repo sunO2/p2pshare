@@ -145,13 +145,28 @@ struct ManagedBehaviour {
 
 impl ManagedDiscovery {
     /// 创建新的管理式服务发现器
+    ///
+    /// # Arguments
+    /// * `node_manager` - 节点管理器
+    /// * `listen_addresses` - 监听地址列表
+    /// * `health_config` - 健康检查配置
+    /// * `local_user_info` - 本地用户信息
+    /// * `identity` - 可选的密钥对，如果为 None 则生成新的
     pub async fn new(
         node_manager: Arc<NodeManager>,
         listen_addresses: Vec<Multiaddr>,
         health_config: HealthCheckConfig,
         local_user_info: user_info::UserInfo,
+        identity: Option<Keypair>,
     ) -> std::result::Result<Self, MdnsError> {
-        let local_key = Keypair::generate_ed25519();
+        // 使用提供的密钥对，或生成新的
+        let local_key = identity.unwrap_or_else(|| {
+            tracing::info!("生成新的 ed25519 密钥对");
+            Keypair::generate_ed25519()
+        });
+
+        let peer_id = local_key.public().to_peer_id();
+        tracing::info!("使用密钥对生成 Peer ID: {}", peer_id);
 
         let config = node_manager.config();
         let protocol_version = config.expected_protocol_version.clone();
