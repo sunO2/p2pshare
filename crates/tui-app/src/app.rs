@@ -10,11 +10,13 @@ use libp2p::PeerId;
 use mdns::{
     ManagedDiscovery, ManagedDiscoveryEvent, NodeManager, NodeManagerConfig,
     HealthCheckConfig, UserInfo, ChatExtension, ChatMessage, ChatEvent,
+    IdentityManager,
 };
 use ratatui::{
     backend::CrosstermBackend,
     Terminal,
 };
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -29,8 +31,10 @@ pub struct TuiApp {
     user_info_map: std::collections::HashMap<PeerId, mdns::UserInfo>,
     /// 设备名称
     device_name: String,
-    /// 本地 Peer ID
-    local_peer_id: PeerId,
+    /// 本地 Peer ID（在 run() 中设置）
+    local_peer_id: Option<PeerId>,
+    /// 密钥文件路径
+    identity_path: PathBuf,
     /// 当前选中的 Tab
     current_tab: AppTab,
     /// 聊天面板状态
@@ -42,12 +46,32 @@ pub struct TuiApp {
 }
 
 impl TuiApp {
+    /// 获取密钥文件存储路径
+    fn get_identity_path() -> PathBuf {
+        // 使用 XDG 数据目录规范
+        if let Ok(data_dir) = std::env::var("XDG_DATA_HOME") {
+            let mut path = PathBuf::from(data_dir);
+            path.push("localp2p_tui");
+            path.push("identity.key");
+            return path;
+        }
+
+        // 回退到 ~/.local/share
+        if let Ok(home) = std::env::var("HOME") {
+            let mut path = PathBuf::from(home);
+            path.push(".local");
+            path.push("share");
+            path.push("localp2p_tui");
+            path.push("identity.key");
+            return path;
+        }
+
+        // 最终回退到当前目录
+        PathBuf::from(".localp2p_tui_identity.key")
+    }
+
     /// 创建新的 TUI 应用
     pub async fn new(device_name: String) -> AppResult<Self> {
-        // 创建用户信息
-        let user_info = UserInfo::new(device_name.clone())
-            .with_status("在线".to_string());
-
         // 创建节点管理器配置
         let config = NodeManagerConfig::new()
             .with_protocol_version("/localp2p/1.0.0".to_string())
@@ -60,34 +84,24 @@ impl TuiApp {
         // 启动后台清理任务
         let _cleanup_handle = node_manager.clone().spawn_cleanup_task();
 
-        // 创建健康检查配置
-        let health_config = HealthCheckConfig {
-            heartbeat_interval: Duration::from_secs(10),
-            max_failures: 3,
-        };
+        // 获取密钥文件路径
+        let identity_path = Self::get_identity_path();
 
-        // 创建管理式服务发现器
-        let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
-        let discovery = ManagedDiscovery::new(
-            node_manager.clone(),
-            listen_addresses,
-            health_config,
-            user_info,
-        ).await?;
+        tracing::info!("TUI 密钥文件路径: {}", identity_path.display());
 
-        let local_peer_id = discovery.local_peer_id();
-
-        // 启动发现任务，将事件发送到主事件通道
-        // 注意：这需要在 run() 方法中进行，因为我们需要 event_tx
+        // 使用临时 Peer ID 创建 ChatPanelState，稍后在 run() 中更新
+        let temp_peer_id = PeerId::random();
+        let identity_path_clone = identity_path.clone();
 
         Ok(Self {
             node_manager,
             node_list_state: NodeListState::default(),
             user_info_map: std::collections::HashMap::new(),
             device_name,
-            local_peer_id,
+            local_peer_id: Some(temp_peer_id),
+            identity_path: identity_path_clone,
             current_tab: AppTab::Panel1,
-            chat_panel_state: ChatPanelState::new(local_peer_id),
+            chat_panel_state: ChatPanelState::new(temp_peer_id),
             cmd_tx: None,
             running: true,
         })
@@ -96,6 +110,24 @@ impl TuiApp {
     /// 运行应用
     pub async fn run(&mut self) -> AppResult<()> {
         use crossterm::event::EventStream;
+
+        // 加载或生成持久化密钥对
+        let _identity = match IdentityManager::load_or_generate(&self.identity_path) {
+            Ok(keypair) => {
+                let peer_id = keypair.public().to_peer_id();
+                tracing::info!("使用持久化密钥对，Peer ID: {}", peer_id);
+                self.local_peer_id = Some(peer_id);
+
+                // 更新 ChatPanelState 的 Peer ID
+                self.chat_panel_state = ChatPanelState::new(peer_id);
+
+                Some(keypair)
+            }
+            Err(e) => {
+                tracing::warn!("加载密钥对失败，将生成临时密钥: {}", e);
+                None
+            }
+        };
 
         // 启用原始模式
         crossterm::terminal::enable_raw_mode()?;
@@ -123,16 +155,25 @@ impl TuiApp {
         let discovery_tx = event_tx.clone();
         let node_manager = self.node_manager.clone();
         let device_name = self.device_name.clone();
+        let identity_path = self.identity_path.clone();
 
         tokio::spawn(async move {
-            // 重新创建发现器（在独立任务中）
+            // 加载或生成持久化密钥对（在后台任务中也使用相同的密钥）
+            let identity = match IdentityManager::load_or_generate(&identity_path) {
+                Ok(keypair) => {
+                    let peer_id = keypair.public().to_peer_id();
+                    tracing::info!("后台任务使用持久化密钥对，Peer ID: {}", peer_id);
+                    Some(keypair)
+                }
+                Err(e) => {
+                    tracing::warn!("后台任务加载密钥对失败: {}", e);
+                    None
+                }
+            };
+
+            // 创建用户信息
             let user_info = UserInfo::new(device_name.clone())
                 .with_status("在线".to_string());
-
-            let _config = NodeManagerConfig::new()
-                .with_protocol_version("/localp2p/1.0.0".to_string())
-                .with_agent_prefix(Some("localp2p-rust/".to_string()))
-                .with_device_name(device_name);
 
             let health_config = HealthCheckConfig {
                 heartbeat_interval: Duration::from_secs(10),
@@ -141,11 +182,13 @@ impl TuiApp {
 
             let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
 
+            // 使用持久化密钥对创建发现器
             let discovery = ManagedDiscovery::new(
                 node_manager,
                 listen_addresses,
                 health_config,
                 user_info,
+                identity,  // 传入密钥对
             ).await;
 
             if let Err(err) = &discovery {
@@ -317,7 +360,7 @@ impl TuiApp {
 
                     if !targets.is_empty() {
                         // 先添加到聊天历史（用于立即显示），使用本地 Peer ID
-                        self.chat_panel_state.add_message(self.local_peer_id, message.clone());
+                        self.chat_panel_state.add_message(self.local_peer_id(), message.clone());
 
                         // 通过 cmd_tx 发送消息到 discovery 任务
                         if let Some(ref cmd_tx) = self.cmd_tx {
@@ -460,7 +503,10 @@ impl TuiApp {
 
     /// 获取本地 Peer ID
     pub fn local_peer_id(&self) -> PeerId {
-        self.local_peer_id
+        self.local_peer_id.unwrap_or_else(|| {
+            tracing::warn!("local_peer_id 尚未初始化，使用临时值");
+            PeerId::random()
+        })
     }
 
     /// 获取当前选中的 Tab

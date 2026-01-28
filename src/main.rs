@@ -102,6 +102,7 @@ async fn run_console_mode(device_name: String) -> Result<(), Box<dyn std::error:
         listen_addresses,
         health_config,
         user_info.clone(),  // ← 传入用户信息
+        None,  // ← 控制台模式不使用持久化密钥对
     ).await?;
 
     println!("本地 Peer ID: {}", discovery.local_peer_id());

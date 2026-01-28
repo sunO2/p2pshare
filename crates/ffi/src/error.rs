@@ -1,8 +1,9 @@
 //! FFI 错误类型
+//!
+//! 注意：旧 C ABI 的错误类型已被移除，现在使用 FRB API
+//! 错误通过 Result 类型直接返回
 
-use std::fmt;
-
-/// FFI 错误
+/// FFI 错误（仅供内部使用）
 #[derive(Debug)]
 pub enum FFIError {
     /// 未初始化
@@ -19,8 +20,8 @@ pub enum FFIError {
     Other(String),
 }
 
-impl fmt::Display for FFIError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for FFIError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotInitialized => write!(f, "P2P not initialized"),
             Self::InvalidArgument(s) => write!(f, "Invalid argument: {}", s),
@@ -33,17 +34,3 @@ impl fmt::Display for FFIError {
 }
 
 impl std::error::Error for FFIError {}
-
-/// 将 FFIError 转换为 P2PErrorCode
-impl From<FFIError> for crate::types::P2PErrorCode {
-    fn from(err: FFIError) -> Self {
-        match err {
-            FFIError::NotInitialized => Self::NotInitialized,
-            FFIError::InvalidArgument(_) => Self::InvalidArgument,
-            FFIError::SendFailed(_) => Self::SendFailed,
-            FFIError::NodeNotVerified(_) => Self::NodeNotVerified,
-            FFIError::OutOfMemory => Self::OutOfMemory,
-            FFIError::Other(_) => Self::Unknown,
-        }
-    }
-}
