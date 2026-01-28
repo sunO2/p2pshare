@@ -106,8 +106,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildHeader() {
     final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      height: 56 + topPadding,
-      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 0),
+      height: 76 + topPadding,
+      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 8),
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
       ),
@@ -209,7 +209,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 34),
+      height: 80,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
         border: Border(top: BorderSide(color: Color(0xFFCCCCCC))),
@@ -220,10 +221,10 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFFE8E8E6),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
                 controller: _messageController,
                 decoration: const InputDecoration(
