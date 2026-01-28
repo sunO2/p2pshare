@@ -30,7 +30,7 @@ class LocalP2PApp extends StatelessWidget {
           outline: const Color(0xFFE5E4E1),
           outlineVariant: const Color(0xFFE5E4E1),
         ),
-        scaffoldBackgroundColor: const Color(0xFFF5F4F1),
+        scaffoldBackgroundColor: const Color(0xFFF8F8F6),
         fontFamily: 'Inter',
         textTheme: const TextTheme(
           displayLarge: TextStyle(
@@ -92,19 +92,20 @@ class LocalP2PApp extends StatelessWidget {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(16)),
+            side: BorderSide(color: Color(0xFFCCCCCC), width: 1),
           ),
-          color: Colors.white,
+          color: Color(0xFFF8F8F6),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: Colors.white,
+          fillColor: const Color(0xFFF8F8F6),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFE5E4E1)),
+            borderSide: const BorderSide(color: Color(0xFFCCCCCC)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFE5E4E1)),
+            borderSide: const BorderSide(color: Color(0xFFCCCCCC)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),

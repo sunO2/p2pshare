@@ -34,7 +34,7 @@ class ChatBubbleSent extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             _formatTime(message.timestamp),
-            style: const TextStyle(fontSize: 11, color: Color(0xFFC8F0D8)),
+            style: const TextStyle(fontSize: 11, color: Color(0xFF999999)),
           ),
         ],
       ),

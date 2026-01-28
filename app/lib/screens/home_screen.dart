@@ -223,7 +223,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildBottomNavigationBar() {
     return Container(
-      decoration: const BoxDecoration(color: Colors.white),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8F8F6),
+        border: Border(
+          top: BorderSide(color: Color(0xFFCCCCCC), width: 1),
+        ),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -231,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildTabItem(0, Icons.devices_outlined, '设F备'),
+              _buildTabItem(0, Icons.devices_outlined, '设备'),
               _buildTabItem(1, Icons.chat_bubble_outline, '聊天'),
               _buildTabItem(2, Icons.folder_outlined, '文件'),
               _buildTabItem(3, Icons.settings_outlined, '设置'),
@@ -246,26 +251,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final isSelected = _currentIndex == index;
     final color = isSelected
         ? const Color(0xFF3D8A5A)
-        : const Color(0xFFA8A7A5);
+        : const Color(0xFF999999);
 
     return SizedBox(
       width: 64,
-      height: 56,
+      height: 60,
       child: InkWell(
         onTap: () => setState(() => _currentIndex = index),
-        borderRadius: BorderRadius.circular(12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 22,
-              height: 22,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.2),
+                color: color,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 16, color: color),
+              child: Center(
+                child: Icon(icon, size: 18, color: isSelected ? Colors.white : color),
+              ),
             ),
             const SizedBox(height: 4),
             Text(label, style: TextStyle(fontSize: 10, color: color)),

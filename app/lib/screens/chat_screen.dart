@@ -97,11 +97,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildHeader() {
     return Container(
-      height: 56,
+      height: 70,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E4E1))),
+        color: Color(0xFFF8F8F6),
       ),
       child: Row(
         children: [
@@ -111,7 +110,7 @@ class _ChatScreenState extends State<ChatScreen> {
               width: 36,
               height: 36,
               decoration: const BoxDecoration(
-                color: Color(0xFFEDECEA),
+                color: Color(0xFFE8E8E6),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -129,9 +128,14 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Text(
                   widget.deviceName,
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 26,
+                    fontWeight: FontWeight.normal,
+                    color: Color(0xFF1A1918),
+                  ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 _buildStatusIndicator(),
               ],
             ),
@@ -173,7 +177,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildMessagesArea() {
     return Container(
-      color: const Color(0xFFF5F4F1),
+      color: const Color(0xFFF8F8F6),
       padding: const EdgeInsets.all(16),
       child: ListView.separated(
         controller: _scrollController,
@@ -198,8 +202,8 @@ class _ChatScreenState extends State<ChatScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 34),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFE5E4E1))),
+        color: Color(0xFFF8F8F6),
+        border: Border(top: BorderSide(color: Color(0xFFCCCCCC))),
       ),
       child: Row(
         children: [
@@ -207,7 +211,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F4F1),
+                color: const Color(0xFFE8E8E6),
                 borderRadius: BorderRadius.circular(24),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -229,8 +233,8 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               width: 48,
               height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFF3D8A5A),
+              decoration: const BoxDecoration(
+                color: Color(0xFF3D8A5A),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.send, size: 20, color: Colors.white),

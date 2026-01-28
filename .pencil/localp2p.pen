@@ -10,17 +10,11 @@
       "reusable": true,
       "width": 378,
       "height": 80,
-      "fill": "#FFFFFF",
+      "fill": "#F8F8F6",
       "cornerRadius": 16,
-      "effect": {
-        "type": "shadow",
-        "shadowType": "outer",
-        "color": "#1A191808",
-        "offset": {
-          "x": 0,
-          "y": 2
-        },
-        "blur": 12
+      "stroke": {
+        "thickness": 1,
+        "fill": "#CCCCCC"
       },
       "gap": 14,
       "padding": [
@@ -34,7 +28,7 @@
           "name": "icon",
           "width": 48,
           "height": 48,
-          "fill": "#EDECEA",
+          "fill": "#E8E8E6",
           "cornerRadius": 100,
           "justifyContent": "center",
           "alignItems": "center",
@@ -130,7 +124,7 @@
           "type": "text",
           "id": "Wf301",
           "name": "time",
-          "fill": "#C8F0D8",
+          "fill": "#999999",
           "content": "10:30",
           "textAlign": "right",
           "fontFamily": "Inter",
@@ -148,7 +142,7 @@
       "reusable": true,
       "width": 260,
       "height": 60,
-      "fill": "#FFFFFF",
+      "fill": "#F8F8F6",
       "cornerRadius": [
         20,
         20,
@@ -157,17 +151,7 @@
       ],
       "stroke": {
         "thickness": 1,
-        "fill": "#E5E4E1"
-      },
-      "effect": {
-        "type": "shadow",
-        "shadowType": "outer",
-        "color": "#1A191808",
-        "offset": {
-          "x": 0,
-          "y": 1
-        },
-        "blur": 6
+        "fill": "#CCCCCC"
       },
       "layout": "vertical",
       "gap": 6,
@@ -180,7 +164,7 @@
           "type": "text",
           "id": "HEvtB",
           "name": "message",
-          "fill": "#1A1918",
+          "fill": "#000000",
           "textGrowth": "fixed-width",
           "width": 228,
           "content": "在的，有什么事吗？",
@@ -192,7 +176,7 @@
           "type": "text",
           "id": "GBvQ0",
           "name": "time",
-          "fill": "#9C9B99",
+          "fill": "#999999",
           "content": "10:31",
           "fontFamily": "Inter",
           "fontSize": 11,
@@ -216,6 +200,7 @@
         4,
         10
       ],
+      "alignItems": "center",
       "children": [
         {
           "type": "frame",
@@ -247,9 +232,35 @@
       "clip": true,
       "width": 402,
       "height": 850,
-      "fill": "#F5F4F1",
+      "fill": "#F8F8F6",
       "layout": "vertical",
       "children": [
+        {
+          "type": "frame",
+          "id": "ecxkQ",
+          "name": "statusBar",
+          "width": "fill_container",
+          "height": 62,
+          "padding": [
+            21,
+            24,
+            19,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "r3KxH",
+              "name": "statusBarRight",
+              "width": 60,
+              "height": "fill_container",
+              "gap": 6,
+              "alignItems": "center"
+            }
+          ]
+        },
         {
           "type": "frame",
           "id": "wmMea",
@@ -342,11 +353,11 @@
               "name": "searchBar",
               "width": "fill_container",
               "height": 48,
-              "fill": "#FFFFFF",
+              "fill": "#F8F8F6",
               "cornerRadius": 12,
               "stroke": {
                 "thickness": 1,
-                "fill": "#E5E4E1"
+                "fill": "#CCCCCC"
               },
               "gap": 12,
               "padding": [
@@ -466,21 +477,13 @@
           "name": "tabBar",
           "width": "fill_container",
           "height": 84,
-          "fill": "#FFFFFF",
-          "effect": {
-            "type": "shadow",
-            "shadowType": "outer",
-            "color": "#1A191808",
-            "offset": {
-              "x": 0,
-              "y": -1
-            },
-            "blur": 8
+          "fill": "#F8F8F6",
+          "stroke": {
+            "thickness": 1,
+            "fill": "#CCCCCC"
           },
           "padding": [
             12,
-            0,
-            34,
             0
           ],
           "children": [
@@ -500,8 +503,8 @@
                   "id": "8LPtY",
                   "name": "tab1Icon",
                   "fill": "#3D8A5A",
-                  "width": 22,
-                  "height": 22
+                  "width": 32,
+                  "height": 32
                 },
                 {
                   "type": "text",
@@ -530,15 +533,15 @@
                   "type": "ellipse",
                   "id": "Tc77V",
                   "name": "tab2Icon",
-                  "fill": "#A8A7A5",
-                  "width": 22,
-                  "height": 22
+                  "fill": "#999999",
+                  "width": 32,
+                  "height": 32
                 },
                 {
                   "type": "text",
                   "id": "Ct82a",
                   "name": "tab2Label",
-                  "fill": "#A8A7A5",
+                  "fill": "#999999",
                   "content": "聊天",
                   "fontFamily": "Inter",
                   "fontSize": 10,
@@ -561,15 +564,15 @@
                   "type": "ellipse",
                   "id": "ZEtqG",
                   "name": "tab3Icon",
-                  "fill": "#A8A7A5",
-                  "width": 22,
-                  "height": 22
+                  "fill": "#999999",
+                  "width": 32,
+                  "height": 32
                 },
                 {
                   "type": "text",
                   "id": "oxY6Q",
                   "name": "tab3Label",
-                  "fill": "#A8A7A5",
+                  "fill": "#999999",
                   "content": "文件",
                   "fontFamily": "Inter",
                   "fontSize": 10,
@@ -592,15 +595,15 @@
                   "type": "ellipse",
                   "id": "stbCO",
                   "name": "tab4Icon",
-                  "fill": "#A8A7A5",
-                  "width": 22,
-                  "height": 22
+                  "fill": "#999999",
+                  "width": 32,
+                  "height": 32
                 },
                 {
                   "type": "text",
                   "id": "oBRuS",
                   "name": "tab4Label",
-                  "fill": "#A8A7A5",
+                  "fill": "#999999",
                   "content": "设置",
                   "fontFamily": "Inter",
                   "fontSize": 10,
@@ -621,20 +624,42 @@
       "clip": true,
       "width": 402,
       "height": 850,
-      "fill": "#F5F4F1",
+      "fill": "#F8F8F6",
       "layout": "vertical",
       "children": [
+        {
+          "type": "frame",
+          "id": "zMQdU",
+          "name": "chatStatusBar",
+          "width": "fill_container",
+          "height": 62,
+          "padding": [
+            21,
+            24,
+            19,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "hnCZ3",
+              "name": "chatStatusRight",
+              "width": 60,
+              "height": "fill_container",
+              "gap": 6,
+              "alignItems": "center"
+            }
+          ]
+        },
         {
           "type": "frame",
           "id": "QeLBC",
           "name": "chatHeader",
           "width": "fill_container",
-          "height": 56,
-          "fill": "#FFFFFF",
-          "stroke": {
-            "thickness": 1,
-            "fill": "#E5E4E1"
-          },
+          "height": 70,
+          "fill": "#F8F8F6",
           "gap": 12,
           "padding": [
             16,
@@ -648,7 +673,7 @@
               "name": "chatBackBtn",
               "width": 36,
               "height": 36,
-              "fill": "#EDECEA",
+              "fill": "#E8E8E6",
               "cornerRadius": 100,
               "justifyContent": "center",
               "alignItems": "center",
@@ -670,7 +695,7 @@
               "width": "fill_container",
               "height": "fill_container",
               "layout": "vertical",
-              "gap": 2,
+              "gap": 4,
               "children": [
                 {
                   "type": "text",
@@ -679,7 +704,7 @@
                   "fill": "#1A1918",
                   "content": "客厅电视",
                   "fontFamily": "Outfit",
-                  "fontSize": 16,
+                  "fontSize": 26,
                   "fontWeight": "normal"
                 },
                 {
@@ -751,10 +776,11 @@
           "name": "chatInputArea",
           "width": "fill_container",
           "height": 72,
-          "fill": "#FFFFFF",
+          "fill": "#F8F8F6",
           "stroke": {
+            "align": "inside",
             "thickness": 1,
-            "fill": "#E5E4E1"
+            "fill": "#CCCCCC"
           },
           "gap": 12,
           "padding": [
@@ -771,7 +797,7 @@
               "name": "chatInputField",
               "width": "fill_container",
               "height": 48,
-              "fill": "#F5F4F1",
+              "fill": "#E8E8E6",
               "cornerRadius": 24,
               "gap": 12,
               "padding": [
@@ -800,16 +826,6 @@
               "height": 48,
               "fill": "#3D8A5A",
               "cornerRadius": 100,
-              "effect": {
-                "type": "shadow",
-                "shadowType": "outer",
-                "color": "#3D8A5A40",
-                "offset": {
-                  "x": 0,
-                  "y": 2
-                },
-                "blur": 8
-              },
               "justifyContent": "center",
               "alignItems": "center",
               "children": [
@@ -836,20 +852,42 @@
       "clip": true,
       "width": 402,
       "height": 850,
-      "fill": "#F5F4F1",
+      "fill": "#F8F8F6",
       "layout": "vertical",
       "children": [
+        {
+          "type": "frame",
+          "id": "avBQa",
+          "name": "detailStatusBar",
+          "width": "fill_container",
+          "height": 62,
+          "padding": [
+            21,
+            24,
+            19,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "dBItG",
+              "name": "detailStatusRight",
+              "width": 60,
+              "height": "fill_container",
+              "gap": 6,
+              "alignItems": "center"
+            }
+          ]
+        },
         {
           "type": "frame",
           "id": "ksalB",
           "name": "detailHeader",
           "width": "fill_container",
-          "height": 56,
-          "fill": "#FFFFFF",
-          "stroke": {
-            "thickness": 1,
-            "fill": "#E5E4E1"
-          },
+          "height": 70,
+          "fill": "#F8F8F6",
           "gap": 12,
           "padding": [
             16,
@@ -863,7 +901,7 @@
               "name": "detailBackBtn",
               "width": 36,
               "height": 36,
-              "fill": "#EDECEA",
+              "fill": "#E8E8E6",
               "cornerRadius": 100,
               "justifyContent": "center",
               "alignItems": "center",
@@ -885,7 +923,7 @@
               "fill": "#1A1918",
               "content": "设备详情",
               "fontFamily": "Outfit",
-              "fontSize": 16,
+              "fontSize": 26,
               "fontWeight": "normal"
             }
           ]
@@ -1217,21 +1255,42 @@
       "name": "Settings Screen",
       "clip": true,
       "width": 402,
-      "height": 850,
-      "fill": "#F5F4F1",
+      "height": 1013,
+      "fill": "#F8F8F6",
       "layout": "vertical",
       "children": [
         {
           "type": "frame",
-          "id": "wVQtv",
-          "name": "settingsHeader",
+          "id": "c3kDT",
+          "name": "settingsStatusBar",
           "width": "fill_container",
-          "height": 56,
-          "fill": "#FFFFFF",
-          "stroke": {
-            "thickness": 1,
-            "fill": "#E5E4E1"
-          },
+          "height": 62,
+          "padding": [
+            21,
+            24,
+            19,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "EhzA8",
+              "name": "settingsStatusRight",
+              "width": 60,
+              "height": "fill_container",
+              "gap": 6,
+              "alignItems": "center"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "7lDqF",
+          "name": "settingsHeaderNew",
+          "width": "fill_container",
+          "height": 70,
           "gap": 12,
           "padding": [
             16,
@@ -1240,14 +1299,53 @@
           "alignItems": "center",
           "children": [
             {
-              "type": "text",
-              "id": "94HsS",
-              "name": "settingsHeaderTitle",
-              "fill": "#1A1918",
-              "content": "设置",
-              "fontFamily": "Outfit",
-              "fontSize": 20,
-              "fontWeight": "normal"
+              "type": "frame",
+              "id": "TqUBf",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "PLrqj",
+                  "fill": "#1A1918",
+                  "content": "设置",
+                  "fontFamily": "Outfit",
+                  "fontSize": 26,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "a9I8S",
+              "name": "settingsBtn",
+              "width": 44,
+              "height": 44,
+              "fill": "#FFFFFF",
+              "cornerRadius": 100,
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#1A191808",
+                "offset": {
+                  "x": 0,
+                  "y": 2
+                },
+                "blur": 12
+              },
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "c6x3Q",
+                  "name": "settingsIcon",
+                  "fill": "#6D6C6A",
+                  "width": 20,
+                  "height": 20
+                }
+              ]
             }
           ]
         },
@@ -1255,8 +1353,8 @@
           "type": "frame",
           "id": "usDl8",
           "name": "settingsContent",
-          "width": "fill_container",
-          "height": "fill_container",
+          "width": 404,
+          "height": 884,
           "layout": "vertical",
           "gap": 20,
           "padding": [
@@ -1626,6 +1724,369 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "text",
+              "id": "f0KN6",
+              "name": "debugHeader",
+              "fill": "#1A1918",
+              "content": "调试",
+              "fontFamily": "Outfit",
+              "fontSize": 18,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "Ggho6",
+              "name": "debugCard",
+              "width": "fill_container",
+              "fill": "#FFFFFF",
+              "cornerRadius": 16,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FZn2Y",
+                  "name": "logSizeRow",
+                  "height": 56,
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "CCDeK",
+                      "name": "logSizeLabel",
+                      "fill": "#1A1918",
+                      "content": "日志文件大小",
+                      "fontFamily": "Inter",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "lttGm",
+                      "name": "logSizeValue",
+                      "fill": "#6D6C6A",
+                      "content": "125 KB",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Akqvw",
+                  "name": "exportLogRow",
+                  "height": 56,
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "QwDeA",
+                      "name": "exportLogLabel",
+                      "fill": "#1A1918",
+                      "content": "导出日志",
+                      "fontFamily": "Inter",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "V4p6R",
+                      "name": "exportLogValue",
+                      "fill": "#6D6C6A",
+                      "content": "导出所有日志",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "euVtO",
+                      "name": "exportLogArrow",
+                      "fill": "#A8A7A5",
+                      "width": 16,
+                      "height": 16
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MvPhI",
+                  "name": "viewLogRow",
+                  "height": 56,
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "hWh25",
+                      "name": "viewLogLabel",
+                      "fill": "#1A1918",
+                      "content": "查看日志",
+                      "fontFamily": "Inter",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "mLITR",
+                      "name": "viewLogValue",
+                      "fill": "#6D6C6A",
+                      "content": "最近 500 条",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "ellipse",
+                      "id": "ibMFM",
+                      "name": "viewLogArrow",
+                      "fill": "#A8A7A5",
+                      "width": 16,
+                      "height": 16
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "sHomv",
+                  "name": "clearLogRow",
+                  "height": 56,
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    18
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "hE2JJ",
+                      "name": "clearLogLabel",
+                      "fill": "#1A1918",
+                      "content": "清空日志",
+                      "fontFamily": "Inter",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "5hPUD",
+                      "name": "clearLogValue",
+                      "fill": "#D08068",
+                      "content": "清空所有日志",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "gALZt",
+              "name": "debugSpacer",
+              "width": "fit_content(0)",
+              "height": 12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "A2WjP",
+      "x": 2250,
+      "y": 0,
+      "name": "Log Viewer Screen",
+      "clip": true,
+      "width": 402,
+      "height": 850,
+      "fill": "#F8F8F6",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "JRwbo",
+          "name": "logViewerHeader",
+          "width": "fill_container",
+          "height": 56,
+          "fill": "#FFFFFF",
+          "stroke": {
+            "thickness": 1,
+            "fill": "#CCCCCC"
+          },
+          "padding": [
+            16,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "OKUi7",
+              "name": "logViewerBack",
+              "width": 36,
+              "height": 36,
+              "fill": "#E8E8E6",
+              "cornerRadius": 100,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "LAiv4",
+                  "name": "logViewerBackIcon",
+                  "fill": "#6D6C6A",
+                  "width": 18,
+                  "height": 18
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "QGK98",
+              "name": "logViewerTitle",
+              "fill": "#1A1918",
+              "content": "日志",
+              "fontFamily": "Outfit",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "PTZC8",
+              "name": "logViewerShareBtn",
+              "width": 44,
+              "height": 44,
+              "fill": "#F8F8F6",
+              "cornerRadius": 100,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "aUnvX",
+                  "name": "logViewerShareIcon",
+                  "fill": "#6D6C6A",
+                  "width": 20,
+                  "height": 20
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "wMwGm",
+          "name": "logContentArea",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#1E1E1E",
+          "layout": "vertical",
+          "gap": 4,
+          "padding": 16,
+          "children": [
+            {
+              "type": "text",
+              "id": "4ata5",
+              "name": "logLine1",
+              "fill": "#D4D4D4",
+              "content": "[2024-01-28 10:30:15] INFO: P2P service started",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "exJ8r",
+              "name": "logLine2",
+              "fill": "#D4D4D4",
+              "content": "[2024-01-28 10:30:16] INFO: Local peer ID: 12D3KooM3L...",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "PwG3B",
+              "name": "logLine3",
+              "fill": "#4D9B6A",
+              "content": "[2024-01-28 10:30:17] INFO: Node discovered: 12D3KooW7X...",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "RauXq",
+              "name": "logLine4",
+              "fill": "#D4D4D4",
+              "content": "[2024-01-28 10:30:18] INFO: Connection established",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "hejKu",
+              "name": "logLine5",
+              "fill": "#6D6C6A",
+              "content": "[2024-01-28 10:30:20] DEBUG: Handshake completed",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Hy1j6",
+              "name": "logLine6",
+              "fill": "#D4D4D4",
+              "content": "[2024-01-28 10:30:25] INFO: Message received: Hello",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "1KOXY",
+              "name": "logLine7",
+              "fill": "#D4D4D4",
+              "content": "[2024-01-28 10:30:26] INFO: Message sent: Hi there!",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Rd8qD",
+              "name": "logLine8",
+              "fill": "#F9A825",
+              "content": "[2024-01-28 10:30:30] WARNING: High latency detected",
+              "fontFamily": "monospace",
+              "fontSize": 12,
+              "fontWeight": "normal"
             }
           ]
         }

@@ -65,21 +65,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildHeader() {
     return Container(
-      height: 56,
+      height: 70,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E4E1))),
+        color: Color(0xFFF8F8F6),
       ),
-      child: Center(
-        child: Text('设置', style: Theme.of(context).textTheme.displayMedium),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '设置',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 26,
+              fontWeight: FontWeight.normal,
+              color: Color(0xFF1A1918),
+            ),
+          ),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: () {},
+                child: const Icon(
+                  Icons.settings_outlined,
+                  size: 20,
+                  color: Color(0xFF6D6C6A),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildContent(String deviceName, String peerId) {
     return Container(
-      color: const Color(0xFFF5F4F1),
+      color: const Color(0xFFF8F8F6),
       padding: const EdgeInsets.all(24),
       child: ListView(
         children: [

@@ -74,11 +74,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
 
   Widget _buildHeader() {
     return Container(
-      height: 56,
+      height: 70,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E4E1))),
+        color: Color(0xFFF8F8F6),
       ),
       child: Row(
         children: [
@@ -88,7 +87,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
               width: 36,
               height: 36,
               decoration: const BoxDecoration(
-                color: Color(0xFFEDECEA),
+                color: Color(0xFFE8E8E6),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -99,7 +98,15 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Text('设备详情', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            '设备详情',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 26,
+              fontWeight: FontWeight.normal,
+              color: Color(0xFF1A1918),
+            ),
+          ),
         ],
       ),
     );
@@ -107,7 +114,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
 
   Widget _buildContent() {
     return Container(
-      color: const Color(0xFFF5F4F1),
+      color: const Color(0xFFF8F8F6),
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [

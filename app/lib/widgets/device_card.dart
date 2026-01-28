@@ -37,8 +37,9 @@ class DeviceCard extends StatelessWidget {
       width: double.infinity,
       height: 80,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF8F8F6),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFCCCCCC)),
       ),
       child: Material(
         color: Colors.transparent,
@@ -54,7 +55,7 @@ class DeviceCard extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEDECEA),
+                    color: const Color(0xFFE8E8E6),
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -144,7 +145,7 @@ class DeviceCard extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEDECEA),
+                      color: const Color(0xFFE8E8E6),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(

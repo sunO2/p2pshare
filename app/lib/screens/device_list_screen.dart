@@ -77,9 +77,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
               ? _buildEmptyState()
               : _buildDeviceList(),
         ),
-
-        // Tab Bar Spacer
-        const SizedBox(height: 84),
       ],
     );
   }
@@ -135,9 +132,9 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color(0xFFF8F8F6),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E4E1)),
+              border: Border.all(color: const Color(0xFFCCCCCC)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
