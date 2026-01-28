@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import '../p2p_manager.dart';
 import '../services/log_service.dart';
+import '../services/storage_service.dart';
 import 'device_list_screen.dart';
 import 'settings_screen.dart';
 
@@ -23,18 +25,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     // 监听应用生命周期
     WidgetsBinding.instance.addObserver(this);
-    // 初始化日志服务
-    _initLogService();
-    _initP2P();
+    // 初始化服务和 P2P
+    _initialize();
   }
 
-  /// 初始化日志服务
-  Future<void> _initLogService() async {
+  /// 初始化所有服务和 P2P
+  Future<void> _initialize() async {
+    // 先初始化存储服务（必须在 P2P 之前完成）
+    await _initServices();
+    // 再初始化 P2P
+    await _initP2P();
+  }
+
+  /// 初始化所有服务
+  Future<void> _initServices() async {
     try {
       await LogService.instance.init();
       debugPrint('日志服务已初始化');
     } catch (e) {
       debugPrint('日志服务初始化失败: $e');
+    }
+
+    try {
+      await StorageService.instance.init();
+      debugPrint('存储服务已初始化');
+    } catch (e) {
+      debugPrint('存储服务初始化失败: $e');
     }
   }
 
@@ -71,15 +87,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   /// 同步 P2P 状态
-  void _syncP2PState() {
+  Future<void> _syncP2PState() async {
     try {
       if (P2PManager.instance.isInitialized) {
+        // 从存储服务获取设备名称（确保使用正确的设备名称）
+        final deviceName = await StorageService.instance.getDeviceName();
+        final localPeerId = P2PManager.instance.getLocalPeerId();
+
         setState(() {
           _isInitialized = true;
-          _localPeerId = P2PManager.instance.getLocalPeerId();
-          _deviceName = P2PManager.instance.getDeviceName();
+          _localPeerId = localPeerId;
+          _deviceName = deviceName;
           _initError = null;
         });
+
+        debugPrint('同步 P2P 状态: Peer ID = $_localPeerId, Device Name = $_deviceName');
       }
     } catch (e) {
       debugPrint('同步 P2P 状态失败: $e');
@@ -90,16 +112,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       debugPrint('开始初始化 P2P...');
 
-      await P2PManager.instance.init('我的设备');
+      // 获取存储的设备名称（首次会自动生成随机名称）
+      final deviceName = await StorageService.instance.getDeviceName();
+      debugPrint('使用设备名称: $deviceName');
+
+      // 获取应用文档目录，用于保存密钥对
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final identityPath = '${appDocDir.path}/identity.key';
+      debugPrint('密钥文件路径: $identityPath');
+
+      // 创建 P2P 配置
+      final config = P2PInitConfig(
+        deviceName: deviceName,
+        identityPath: identityPath,
+        // 可选：自定义配置
+        // listenAddresses: ['/ip4/0.0.0.0/tcp/0'],
+        // protocolVersion: '/localp2p/1.0.0',
+        // heartbeatIntervalSecs: 10,
+        // maxFailures: 3,
+      );
+
+      await P2PManager.instance.init(config);
       debugPrint('✓ init 成功，获取节点信息...');
 
       final localPeerId = P2PManager.instance.getLocalPeerId();
-      final deviceName = P2PManager.instance.getDeviceName();
+      final storedDeviceName = P2PManager.instance.getDeviceName();
 
       setState(() {
         _isInitialized = true;
         _localPeerId = localPeerId;
-        _deviceName = deviceName;
+        _deviceName = storedDeviceName;
         _initError = null;
       });
 
@@ -225,9 +267,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
-        border: Border(
-          top: BorderSide(color: Color(0xFFCCCCCC), width: 1),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFFCCCCCC), width: 1)),
       ),
       child: SafeArea(
         top: false,
@@ -271,9 +311,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   color: Color(0xFF3D8A5A),
                   shape: BoxShape.circle,
                 ),
-                child: Center(
-                  child: Icon(icon, size: 18, color: Colors.white),
-                ),
+                child: Center(child: Icon(icon, size: 18, color: Colors.white)),
               )
             else
               Icon(icon, size: 24, color: color),

@@ -4,6 +4,40 @@ import 'bridge/bridge.dart';
 import 'bridge/frb_generated.dart';
 import 'services/log_service.dart';
 
+/// P2P 初始化配置
+///
+/// 用于在初始化时传递各种配置参数
+class P2PInitConfig {
+  /// 设备名称（必需）
+  final String deviceName;
+
+  /// 密钥对保存路径（可选，用于持久化 Peer ID）
+  /// 如果为空，则每次启动生成新的随机 Peer ID
+  /// 如果指定路径，则首次生成密钥对并保存，后续启动加载保存的密钥对
+  final String? identityPath;
+
+  /// 监听地址（可选，默认 "/ip4/0.0.0.0/tcp/0"）
+  final List<String>? listenAddresses;
+
+  /// 协议版本（可选，默认 "/localp2p/1.0.0"）
+  final String? protocolVersion;
+
+  /// 心跳间隔（秒，可选，默认 10）
+  final int? heartbeatIntervalSecs;
+
+  /// 心跳失败阈值（可选，默认 3）
+  final int? maxFailures;
+
+  P2PInitConfig({
+    required this.deviceName,
+    this.identityPath,
+    this.listenAddresses,
+    this.protocolVersion,
+    this.heartbeatIntervalSecs,
+    this.maxFailures,
+  });
+}
+
 // P2P 事件类型（兼容旧的事件系统）
 class P2PEvent {}
 
@@ -84,8 +118,8 @@ class P2PManager {
   }
 
   /// 初始化 P2P 模块
-  Future<void> init(String deviceName) async {
-    _log.rustCall('init', params: {'deviceName': deviceName});
+  Future<void> init(P2PInitConfig config) async {
+    _log.rustCall('init', params: {'deviceName': config.deviceName});
     final stopwatch = Stopwatch()..start();
 
     // 先检查 Rust 端是否已初始化
@@ -109,7 +143,10 @@ class P2PManager {
 
     // 调用 Rust 初始化函数
     try {
-      RustLib.instance.api.localp2PFfiBridgeP2PInit(deviceName: deviceName);
+      RustLib.instance.api.localp2PFfiBridgeP2PInit(
+        deviceName: config.deviceName,
+        identityPath: config.identityPath ?? '',
+      );
       _initialized = true;
       _log.rustReturn('init', result: 'initialized=$_initialized');
       _log.performance('init', stopwatch.elapsed);
@@ -205,7 +242,8 @@ class P2PManager {
     _log.d('启动事件 Stream 订阅');
     try {
       // 获取事件 Stream
-      final eventStream = RustLib.instance.api.localp2PFfiBridgeP2PSetEventStream();
+      final eventStream = RustLib.instance.api
+          .localp2PFfiBridgeP2PSetEventStream();
 
       // 订阅 Stream
       _eventStreamSubscription = eventStream.listen(

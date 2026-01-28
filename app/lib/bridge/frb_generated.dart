@@ -89,7 +89,10 @@ abstract class RustLibApi extends BaseApi {
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes();
 
-  void localp2PFfiBridgeP2PInit({required String deviceName});
+  void localp2PFfiBridgeP2PInit({
+    required String deviceName,
+    required String identityPath,
+  });
 
   bool localp2PFfiBridgeP2PIsInitialized();
 
@@ -255,12 +258,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "p2p_get_verified_nodes", argNames: []);
 
   @override
-  void localp2PFfiBridgeP2PInit({required String deviceName}) {
+  void localp2PFfiBridgeP2PInit({
+    required String deviceName,
+    required String identityPath,
+  }) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(deviceName, serializer);
+          sse_encode_String(identityPath, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
         },
         codec: SseCodec(
@@ -268,14 +275,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kLocalp2PFfiBridgeP2PInitConstMeta,
-        argValues: [deviceName],
+        argValues: [deviceName, identityPath],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PInitConstMeta =>
-      const TaskConstMeta(debugName: "p2p_init", argNames: ["deviceName"]);
+  TaskConstMeta get kLocalp2PFfiBridgeP2PInitConstMeta => const TaskConstMeta(
+    debugName: "p2p_init",
+    argNames: ["deviceName", "identityPath"],
+  );
 
   @override
   bool localp2PFfiBridgeP2PIsInitialized() {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../p2p_manager.dart';
 import '../services/log_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/unified_app_bar.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -17,6 +18,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoScanEnabled = false;
   String _localPeerId = '';
   String _deviceName = '';
+  String _nickname = '';
+  String _status = '在线';
   int _logFileSize = 0;
 
   @override
@@ -30,10 +33,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final localPeerId = P2PManager.instance.getLocalPeerId();
       final deviceName = P2PManager.instance.getDeviceName();
+
+      // 从存储服务读取昵称和状态
+      final nickname = StorageService.instance.getNickname() ?? '未设置';
+      final status = StorageService.instance.getStatus() ?? '在线';
+
       if (mounted) {
         setState(() {
           _localPeerId = localPeerId;
           _deviceName = deviceName;
+          _nickname = nickname;
+          _status = status;
         });
       }
     } catch (e) {
@@ -64,10 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             children: [
               // Header - use UnifiedAppBar
-              const UnifiedAppBar(
-                title: '设置',
-                showBackButton: false,
-              ),
+              const UnifiedAppBar(title: '设置', showBackButton: false),
 
               // Content
               Expanded(child: _buildContent(_deviceName, _localPeerId)),
@@ -92,6 +99,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text('设备设置', style: Theme.of(context).textTheme.displaySmall),
           const SizedBox(height: 12),
           _buildDeviceSettingsCard(),
+          const SizedBox(height: 20),
+
+          // User Profile Settings
+          Text('用户资料', style: Theme.of(context).textTheme.displaySmall),
+          const SizedBox(height: 12),
+          _buildUserProfileCard(),
           const SizedBox(height: 20),
 
           // App Settings
@@ -169,16 +182,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSettingsRow(
             '设备名称',
             _deviceName,
-            onTap: () => _showEditDialog('设备名称', _deviceName),
+            onTap: () =>
+                _showEditDialog('设备名称', _deviceName, isDeviceName: true),
           ),
           _buildDivider(),
           _buildSettingsRow(
+            'Peer ID',
+            _shortenPeerId(_localPeerId),
+            showArrow: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserProfileCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          _buildSettingsRow(
             '昵称',
-            '未设置',
-            onTap: () => _showEditDialog('昵称', ''),
+            _nickname,
+            onTap: () => _showEditDialog(
+              '昵称',
+              _nickname == '未设置' ? '' : _nickname,
+              isNickname: true,
+            ),
           ),
           _buildDivider(),
-          _buildSettingsRow('状态', '在线', showArrow: false),
+          _buildSettingsRow('状态', _status, onTap: () => _showStatusDialog()),
         ],
       ),
     );
@@ -348,7 +384,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showEditDialog(String title, String currentValue) {
+  void _showEditDialog(
+    String title,
+    String currentValue, {
+    bool isDeviceName = false,
+    bool isNickname = false,
+  }) {
     final controller = TextEditingController(text: currentValue);
 
     showDialog(
@@ -358,7 +399,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            hintText: title == '昵称' ? '请输入昵称（可选）' : '请输入$title',
+          ),
+          maxLength: title == '设备名称' ? 20 : 50,
         ),
         actions: [
           TextButton(
@@ -366,14 +411,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('取消'),
           ),
           TextButton(
-            onPressed: () {
-              // TODO: Save the value
+            onPressed: () async {
+              final newValue = controller.text.trim();
               Navigator.pop(context);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('$title 已更新')));
+
+              // 验证输入
+              if (isDeviceName && newValue.isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('设备名称不能为空')));
+                }
+                return;
+              }
+
+              try {
+                if (isDeviceName) {
+                  // 保存设备名称
+                  await StorageService.instance.setDeviceName(newValue);
+                  if (mounted) {
+                    setState(() {
+                      _deviceName = newValue;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('设备名称已更新，重启应用后生效')),
+                    );
+                  }
+                } else if (isNickname) {
+                  // 保存昵称
+                  if (newValue.isEmpty) {
+                    await StorageService.instance.setNickname(null);
+                    if (mounted) {
+                      setState(() {
+                        _nickname = '未设置';
+                      });
+                    }
+                  } else {
+                    await StorageService.instance.setNickname(newValue);
+                    if (mounted) {
+                      setState(() {
+                        _nickname = newValue;
+                      });
+                    }
+                  }
+                  if (mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('昵称已更新')));
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
+                }
+              }
             },
             child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStatusDialog() {
+    final statuses = ['在线', '忙碌', '离开', '隐身'];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('选择状态'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: statuses.map((status) {
+            return ListTile(
+              title: Text(status),
+              trailing: _status == status
+                  ? const Icon(Icons.check, color: Color(0xFF3D8A5A))
+                  : null,
+              onTap: () async {
+                Navigator.pop(context);
+                try {
+                  await StorageService.instance.setStatus(status);
+                  if (mounted) {
+                    setState(() {
+                      _status = status;
+                    });
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('状态已更改为: $status')));
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
+                  }
+                }
+              },
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
           ),
         ],
       ),

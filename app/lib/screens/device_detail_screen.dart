@@ -73,9 +73,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           child: Column(
             children: [
               // Header - use UnifiedAppBar
-              const UnifiedAppBar(
-                title: '设备详情',
-              ),
+              const UnifiedAppBar(title: '设备详情'),
 
               // Content
               Expanded(child: _buildContent()),

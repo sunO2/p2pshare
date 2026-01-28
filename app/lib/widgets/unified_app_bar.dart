@@ -32,10 +32,13 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
 
     return Container(
       height: totalHeight,
-      padding: EdgeInsets.only(top: topPadding, left: 24, right: 24, bottom: 16),
-      decoration: BoxDecoration(
-        color: backgroundColor,
+      padding: EdgeInsets.only(
+        top: topPadding,
+        left: 24,
+        right: 24,
+        bottom: 16,
       ),
+      decoration: BoxDecoration(color: backgroundColor),
       child: Row(
         children: [
           // Back button
@@ -74,7 +77,7 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
                     fontSize: 26,
                     fontWeight: FontWeight.normal,
                     color: Color(0xFF1A1918),
-                ),
+                  ),
                 ),
                 if (statusIndicator != null) ...[
                   const SizedBox(height: 4),
@@ -96,10 +99,7 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
 class OnlineStatusIndicator extends StatelessWidget {
   final String text;
 
-  const OnlineStatusIndicator({
-    super.key,
-    this.text = '在线',
-  });
+  const OnlineStatusIndicator({super.key, this.text = '在线'});
 
   @override
   Widget build(BuildContext context) {

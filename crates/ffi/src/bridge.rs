@@ -96,9 +96,10 @@ pub fn p2p_is_running() -> bool {
 ///
 /// # Arguments
 /// * `device_name` - 本设备的显示名称
+/// * `identity_path` - 密钥对保存路径（空字符串表示不持久化）
 #[frb(sync)]
-pub fn p2p_init(device_name: String) -> Result<(), String> {
-    crate::internal_init(device_name)
+pub fn p2p_init(device_name: String, identity_path: String) -> Result<(), String> {
+    crate::internal_init(device_name, identity_path)
 }
 
 /// 启动 P2P 服务

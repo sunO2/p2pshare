@@ -20,8 +20,12 @@ bool p2PIsRunning() => RustLib.instance.api.localp2PFfiBridgeP2PIsRunning();
 ///
 /// # Arguments
 /// * `device_name` - 本设备的显示名称
-void p2PInit({required String deviceName}) =>
-    RustLib.instance.api.localp2PFfiBridgeP2PInit(deviceName: deviceName);
+/// * `identity_path` - 密钥对保存路径（空字符串表示不持久化）
+void p2PInit({required String deviceName, required String identityPath}) =>
+    RustLib.instance.api.localp2PFfiBridgeP2PInit(
+      deviceName: deviceName,
+      identityPath: identityPath,
+    );
 
 /// 启动 P2P 服务
 void p2PStart() => RustLib.instance.api.localp2PFfiBridgeP2PStart();

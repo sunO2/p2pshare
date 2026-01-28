@@ -218,9 +218,10 @@ fn wire__localp2p_ffi__bridge__p2p_init_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_device_name = <String>::sse_decode(&mut deserializer);
+            let api_identity_path = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, String>((move || {
-                let output_ok = crate::bridge::p2p_init(api_device_name)?;
+                let output_ok = crate::bridge::p2p_init(api_device_name, api_identity_path)?;
                 Ok(output_ok)
             })())
         },

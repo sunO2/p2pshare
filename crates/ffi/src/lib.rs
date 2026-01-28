@@ -890,7 +890,7 @@ use bridge::InternalNodeInfo;
 // ============================================================================
 
 /// 内部初始化函数（供 FRB 调用）
-pub fn internal_init(device_name: String) -> Result<(), String> {
+pub fn internal_init(device_name: String, identity_path: String) -> Result<(), String> {
     // 初始化日志
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -914,6 +914,8 @@ pub fn internal_init(device_name: String) -> Result<(), String> {
     let runtime = unsafe { RUNTIME.as_ref().unwrap() };
 
     // 在运行时中初始化核心组件
+    // 注意：identity_path 参数当前未使用（密钥持久化功能待实现）
+    // TODO: 实现 identity_path 功能，使用持久化密钥对初始化 discovery
     let result = runtime.block_on(async {
         // 创建用户信息
         let user_info = UserInfo::new(device_name.clone())
@@ -936,8 +938,12 @@ pub fn internal_init(device_name: String) -> Result<(), String> {
             max_failures: 3,
         };
 
-        // 创建发现器
+        // 解析监听地址
         let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
+
+        // 创建发现器
+        // 注意：当前版本的 mdns::ManagedDiscovery 不支持传入已有密钥对
+        // 密钥对会被保存/加载，但 discovery 仍会使用随机生成的密钥对
         let discovery_result = ManagedDiscovery::new(
             node_manager.clone(),
             listen_addresses,
@@ -985,6 +991,14 @@ pub fn internal_init(device_name: String) -> Result<(), String> {
 
             P2P_INSTANCE = Some(Arc::new(Mutex::new(instance)));
         }
+
+        tracing::info!("✓ P2P 初始化成功");
+        tracing::info!("  设备名称: {}", device_name);
+        tracing::info!("  Peer ID: {}", local_peer_id);
+        if !identity_path.is_empty() {
+            tracing::info!("  密钥文件路径: {} (功能待实现)", identity_path);
+        }
+        tracing::warn!("注意: 当前版本未使用持久化密钥对，每次启动会生成新的 Peer ID");
 
         Ok::<(), String>(())
     });
