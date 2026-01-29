@@ -12,11 +12,18 @@ pub mod managed_discovery;
 pub mod user_info;
 pub mod chat;
 pub mod identity;
+pub mod events;
+pub mod mdns_service;
+pub mod connection_service;
+pub mod p2p_manager;
 
 pub use config::{MdnsConfig, ServiceInfo};
 pub use discovery::{MdnsDiscovery, DiscoveredPeer, DiscoveredEvent};
 pub use publisher::MdnsPublisher;
-pub use node::{VerifiedNode, NodeManager, NodeManagerConfig};
+pub use node::{VerifiedNode, NodeManager, NodeManagerConfig, NodeStatus};
+pub use mdns_service::{MdnsDiscoveryService, MdnsServiceError};
+pub use connection_service::{ConnectionService, ConnectionServiceConfig};
+pub use p2p_manager::{P2PManager, P2PManagerConfig};
 pub use managed_discovery::{
     ManagedDiscovery,
     DiscoveryEvent as ManagedDiscoveryEvent,
@@ -26,6 +33,7 @@ pub use managed_discovery::{
 };
 pub use user_info::UserInfo;
 pub use identity::IdentityManager;
+pub use events::{DiscoveryEvent, ConnectionEvent};
 
 // 聊天模块公共 API
 pub use chat::{

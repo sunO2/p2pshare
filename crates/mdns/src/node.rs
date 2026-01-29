@@ -7,6 +7,27 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
+/// 节点连接状态
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NodeStatus {
+    /// 在线（有活跃连接）
+    Online,
+    /// 离线（连接断开，但节点信息保留）
+    Offline,
+}
+
+impl NodeStatus {
+    /// 是否在线
+    pub fn is_online(&self) -> bool {
+        matches!(self, Self::Online)
+    }
+
+    /// 是否离线
+    pub fn is_offline(&self) -> bool {
+        matches!(self, Self::Offline)
+    }
+}
+
 /// 验证通过的节点信息
 #[derive(Debug, Clone)]
 pub struct VerifiedNode {
@@ -31,6 +52,15 @@ pub struct VerifiedNode {
     /// 最后活跃时间
     pub last_seen: Instant,
 
+    /// ⭐ 节点状态
+    pub status: NodeStatus,
+
+    /// 离线原因
+    pub offline_reason: Option<String>,
+
+    /// 离线时间
+    pub offline_since: Option<Instant>,
+
     /// 自定义属性
     pub attributes: HashMap<String, String>,
 }
@@ -53,6 +83,9 @@ impl VerifiedNode {
             name,
             first_seen: now,
             last_seen: now,
+            status: NodeStatus::Online,  // ← 默认在线
+            offline_reason: None,
+            offline_since: None,
             attributes: HashMap::new(),
         }
     }
@@ -64,6 +97,16 @@ impl VerifiedNode {
         } else {
             self.peer_id.to_string()
         }
+    }
+
+    /// 获取显示名称（包含状态）
+    pub fn display_name_with_status(&self) -> String {
+        let status_indicator = if self.status.is_online() {
+            "🟢"
+        } else {
+            "🔴"
+        };
+        format!("{} {}", status_indicator, self.display_name())
     }
 
     /// 更新最后活跃时间
@@ -236,12 +279,6 @@ impl NodeManager {
         nodes.contains_key(peer_id)
     }
 
-    /// 列出所有验证通过的节点
-    pub async fn list_nodes(&self) -> Vec<VerifiedNode> {
-        let nodes = self.nodes.read().await;
-        nodes.values().cloned().collect()
-    }
-
     /// 获取节点数量
     pub async fn node_count(&self) -> usize {
         let nodes = self.nodes.read().await;
@@ -288,6 +325,80 @@ impl NodeManager {
     /// 获取配置
     pub fn config(&self) -> &NodeManagerConfig {
         &self.config
+    }
+
+    /// 标记节点为离线（不移除）
+    pub async fn mark_node_offline(
+        &self,
+        peer_id: &PeerId,
+        reason: &str,
+    ) -> bool {
+        let mut nodes = self.nodes.write().await;
+        if let Some(node) = nodes.get_mut(peer_id) {
+            node.status = NodeStatus::Offline;
+            node.offline_reason = Some(reason.to_string());
+            node.offline_since = Some(Instant::now());
+            let display_name = if let Some(ref name) = node.name {
+                name.clone()
+            } else {
+                peer_id.to_string()
+            };
+            tracing::info!(
+                "节点 {} 已标记为离线: {} (原因: {})",
+                display_name,
+                peer_id,
+                reason
+            );
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 标记节点为在线（重新连接时）
+    pub async fn mark_node_online(&self, peer_id: &PeerId) {
+        let mut nodes = self.nodes.write().await;
+        if let Some(node) = nodes.get_mut(peer_id) {
+            let was_offline = node.status.is_offline();
+
+            node.status = NodeStatus::Online;
+            node.offline_reason = None;
+            node.offline_since = None;
+            node.update_last_seen();
+
+            if was_offline {
+                let display_name = if let Some(ref name) = node.name {
+                    name.clone()
+                } else {
+                    peer_id.to_string()
+                };
+                tracing::info!(
+                    "💚 节点 {} 已恢复在线",
+                    display_name
+                );
+            }
+        }
+    }
+
+    /// 列出所有节点（包括离线）
+    pub async fn list_all_nodes(&self) -> Vec<VerifiedNode> {
+        let nodes = self.nodes.read().await;
+        nodes.values().cloned().collect()
+    }
+
+    /// 只列出在线节点
+    pub async fn list_online_nodes(&self) -> Vec<VerifiedNode> {
+        let nodes = self.nodes.read().await;
+        nodes.values()
+            .filter(|n| n.status.is_online())
+            .cloned()
+            .collect()
+    }
+
+    /// ⚠️ 已弃用：使用 list_all_nodes() 代替
+    #[deprecated(note = "请使用 list_all_nodes() 代替")]
+    pub async fn list_nodes(&self) -> Vec<VerifiedNode> {
+        self.list_all_nodes().await
     }
 
     /// 验证节点信息

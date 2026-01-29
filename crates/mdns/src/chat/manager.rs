@@ -141,7 +141,7 @@ impl ChatManager {
 
     /// 获取所有可聊天节点（从 NodeManager 复用）
     pub async fn available_peers(&self) -> Vec<crate::VerifiedNode> {
-        self.node_manager.list_nodes().await
+        self.node_manager.list_online_nodes().await
     }
 
     /// 关闭指定会话

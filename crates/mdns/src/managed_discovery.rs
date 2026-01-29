@@ -304,6 +304,9 @@ impl ManagedDiscovery {
 
                                     self.node_manager.add_or_update_node(node).await;
 
+                                    // ⭐ 标记为在线（如果之前是离线状态）
+                                    self.node_manager.mark_node_online(&peer_id).await;
+
                                     if is_already_verified {
                                         // 已验证过，只更新不返回事件（静默更新）
                                         tracing::debug!("更新已验证节点: {}", peer_id);
@@ -365,9 +368,9 @@ impl ManagedDiscovery {
                             if health.is_offline() && was_healthy {
                                 tracing::warn!("💔 节点 {} 被判定为离线", peer);
 
-                                // 从节点管理器中移除离线节点
-                                if self.node_manager.remove_node(&peer).await.is_some() {
-                                    tracing::info!("已从管理器中移除离线节点 {}", peer);
+                                // 标记节点为离线（而不是移除）
+                                if self.node_manager.mark_node_offline(&peer, "Ping 失败").await {
+                                    tracing::info!("已标记节点为离线: {}", peer);
                                 }
 
                                 return Ok(DiscoveryEvent::NodeOffline(peer));
@@ -406,9 +409,9 @@ impl ManagedDiscovery {
                     if *conn_count == 0 {
                         tracing::warn!("💔 节点 {} 的所有连接已关闭，判定为离线", peer_id);
 
-                        // 从节点管理器中移除离线节点
-                        if self.node_manager.remove_node(&peer_id).await.is_some() {
-                            tracing::info!("已从管理器中移除离线节点 {}", peer_id);
+                        // 标记节点为离线（而不是移除）
+                        if self.node_manager.mark_node_offline(&peer_id, "连接关闭").await {
+                            tracing::info!("已标记节点为离线: {}", peer_id);
                         }
 
                         return Ok(DiscoveryEvent::NodeOffline(peer_id));

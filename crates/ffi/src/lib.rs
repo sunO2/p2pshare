@@ -16,7 +16,7 @@ use tokio::runtime::Runtime;
 use mdns::{
     ManagedDiscovery, NodeManager, NodeManagerConfig,
     HealthCheckConfig, UserInfo, ChatExtension, ChatMessage,
-    IdentityManager,
+    IdentityManager, P2PManager, P2PManagerConfig,
 };
 
 mod types;
@@ -49,6 +49,9 @@ static GLOBAL_USER_INFO: Lazy<Mutex<RwLock<HashMap<String, mdns::UserInfo>>>> = 
 
 /// 全局 Discovery 资源存储（在 init 和 start 之间传递）
 struct GlobalDiscoveryResources {
+    /// P2P 管理器（新架构）
+    p2p_manager: Option<P2PManager>,
+    /// 保留旧的 discovery 用于过渡期兼容
     discovery: Option<ManagedDiscovery>,
     chat_event_rx: Option<tokio::sync::mpsc::UnboundedReceiver<mdns::chat::ChatEvent>>,
     command_rx: Option<tokio::sync::mpsc::UnboundedReceiver<P2PCommand>>,
@@ -188,12 +191,12 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
             .with_status("在线".to_string());
 
         // 创建节点管理器配置
-        let config = NodeManagerConfig::new()
+        let node_manager_config = NodeManagerConfig::new()
             .with_protocol_version("/localp2p/1.0.0".to_string())
             .with_agent_prefix(Some("localp2p-rust/".to_string()))
             .with_device_name(device_name.clone());
 
-        let node_manager = Arc::new(NodeManager::new(config));
+        let node_manager = Arc::new(NodeManager::new(node_manager_config.clone()));
 
         // 启动后台清理任务
         node_manager.clone().spawn_cleanup_task();
@@ -210,7 +213,30 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
         // 保存 identity 的克隆，用于后续保存到 P2PInstance
         let identity_for_instance = identity.clone();
 
-        // 创建发现器，传入密钥对（如果有）
+        // 🔄 新架构：创建 P2PManager
+        tracing::info!("创建 P2PManager（新架构）...");
+        let p2p_manager_config = P2PManagerConfig::new()
+            .with_identity(identity.clone().unwrap_or_else(|| libp2p::identity::Keypair::generate_ed25519()))
+            .with_node_manager_config(node_manager_config)
+            .with_local_user_info(user_info.clone())
+            .with_health_check_config(health_config.clone())
+            .with_listen_addresses(listen_addresses.clone());
+
+        let mut p2p_manager = match P2PManager::new(p2p_manager_config).await {
+            Ok(pm) => {
+                tracing::info!("✓ P2PManager 创建成功，Peer ID: {}", pm.local_peer_id());
+                pm
+            }
+            Err(e) => {
+                tracing::error!("P2PManager 创建失败: {:?}", e);
+                return Err(format!("Failed to create P2PManager: {:?}", e));
+            }
+        };
+
+        let local_peer_id = p2p_manager.local_peer_id().to_string();
+
+        // 🔄 旧架构：同时创建 ManagedDiscovery（过渡期兼容）
+        tracing::info!("创建 ManagedDiscovery（旧架构，过渡期兼容）...");
         let discovery_result = ManagedDiscovery::new(
             node_manager.clone(),
             listen_addresses,
@@ -222,13 +248,18 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
         let mut discovery = match discovery_result {
             Ok(d) => d,
             Err(e) => {
+                tracing::error!("ManagedDiscovery 创建失败: {:?}", e);
                 return Err(format!("Failed to create discovery: {:?}", e));
             }
         };
 
-        let local_peer_id = discovery.local_peer_id().to_string();
+        // 验证两个 Manager 的 Peer ID 一致
+        let discovery_peer_id = discovery.local_peer_id().to_string();
+        if local_peer_id != discovery_peer_id {
+            tracing::warn!("⚠️ Peer ID 不匹配: P2PManager={}, ManagedDiscovery={}", local_peer_id, discovery_peer_id);
+        }
 
-        // 启用聊天功能
+        // 启用聊天功能（旧架构）
         if let Err(e) = discovery.enable_chat().await {
             tracing::error!("Failed to enable chat: {:?}", e);
         }
@@ -249,9 +280,10 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
             discovery_thread: None,
         };
 
-        // 保存到全局变量
+        // 保存到全局变量（包含新旧两种架构）
         unsafe {
             DISCOVERY_RESOURCES = Some(GlobalDiscoveryResources {
+                p2p_manager: Some(p2p_manager),
                 discovery: Some(discovery),
                 chat_event_rx,
                 command_rx: Some(command_rx),
@@ -770,6 +802,9 @@ pub fn internal_is_discovery_thread_alive() -> bool {
 ///
 /// 用于应用从后台恢复时，如果发现线程已死，重启它
 /// 如果服务仍在运行，会先停止再重启
+///
+/// 🔄 新架构：优先使用 P2PManager.restart_mdns()，只重启 mDNS 部分，不影响 TCP 连接
+/// ⚠️ 旧架构：回退到重新创建整个 ManagedDiscovery（会断开所有连接）
 pub fn internal_restart_discovery() -> Result<(), String> {
     send_log_to_flutter("INFO", "ffi", "开始重启 Discovery 服务".to_string());
 
@@ -777,6 +812,39 @@ pub fn internal_restart_discovery() -> Result<(), String> {
         if P2P_INSTANCE.is_none() {
             return Err("Not initialized".to_string());
         }
+
+        // 🔄 新架构：优先使用 P2PManager.restart_mdns()
+        if let Some(ref mut resources) = DISCOVERY_RESOURCES {
+            if resources.p2p_manager.is_some() {
+                send_log_to_flutter("INFO", "ffi", "使用 P2PManager.restart_mdns()（新架构）".to_string());
+
+                let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+
+                // 使用 P2PManager 重启 mDNS（不影响连接）
+                let result = runtime.block_on(async {
+                    let p2p_manager = resources.p2p_manager.as_mut().unwrap();
+                    p2p_manager.restart_mdns().await
+                });
+
+                match result {
+                    Ok(()) => {
+                        send_log_to_flutter("INFO", "ffi", "✓ mDNS 服务重启成功（TCP 连接保持不变）".to_string());
+
+                        // 调用 internal_start 启动服务（如果需要）
+                        // internal_start()?;
+
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        send_log_to_flutter("WARN", "ffi", format!("P2PManager.restart_mdns() 失败: {:?}，回退到旧架构", e));
+                        // 继续执行旧架构逻辑
+                    }
+                }
+            }
+        }
+
+        // ⚠️ 旧架构：回退到重新创建整个 ManagedDiscovery
+        send_log_to_flutter("INFO", "ffi", "使用旧架构：重新创建 ManagedDiscovery（会断开连接）".to_string());
 
         let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
 
@@ -874,7 +942,11 @@ pub fn internal_restart_discovery() -> Result<(), String> {
         let (discovery, chat_event_rx, command_rx, event_tx, command_tx) = result?;
 
         // 将新资源放入 DISCOVERY_RESOURCES
+        // 从旧资源中取出 P2PManager（如果有的话）
+        let old_p2p_manager = DISCOVERY_RESOURCES.as_mut().and_then(|res| res.p2p_manager.take());
+
         DISCOVERY_RESOURCES = Some(GlobalDiscoveryResources {
+            p2p_manager: old_p2p_manager, // 保留 P2PManager（如果有）
             discovery: Some(discovery),
             chat_event_rx,
             command_rx: Some(command_rx),
