@@ -1,5 +1,61 @@
 # P2P Discovery 问题分析与解决方案
 
+## 架构概述
+
+### 当前架构：服务分离架构（2024-01 实现）⭐
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    P2PManager                           │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  identity: Keypair (共享)                             │ │
+│  │  discovery_tx → discovery_rx (事件通道)               │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+         │                                      │
+         ▼                                      ▼
+┌──────────────────────┐          ┌──────────────────────┐
+│ MdnsDiscoveryService │          │  ConnectionService   │
+│                      │          │                      │
+│  Swarm {mDNS only}   │  事件通道  │  Swarm {identify,   │
+│                      │  ◄──────►││    ping, chat}      │
+│  spawn() → Task      │          │                      │
+│  restart_mdns() ◀───┼──────────┼── 响应连接事件        │
+└──────────────────────┘          └──────────────────────┘
+         │                                      │
+         ▼                                      ▼
+    后台任务 1                            后台任务 2
+   (mDNS 发现)                          (连接管理)
+```
+
+**关键优势**：
+- ✅ **真正的服务分离**：mDNS 和连接管理独立运行
+- ✅ **独立重启**：`restart_mdns()` 只重启 mDNS，TCP 连接保持不变
+- ✅ **无闪烁恢复**：应用恢复时不会断开已有连接
+- ✅ **事件驱动**：通过事件通道协调两个服务
+
+### 旧架构：单 Swarm 架构（已废弃）
+
+```
+┌─────────────────────────────────────┐
+│      ManagedDiscovery (单一)        │
+│  ┌────────────────────────────────┐  │
+│  │ Swarm {                        │  │
+│  │   mdns,                       │  │
+│  │   identify,                   │  │
+│  │   ping,                       │  │
+│  │   chat                        │  │
+│  │ }                             │  │
+│  └────────────────────────────────┘  │
+└─────────────────────────────────────┘
+```
+
+**缺点**：
+- ❌ 所有功能耦合在一个 Swarm 中
+- ❌ 重启 mDNS 需要重新创建整个 Swarm
+- ❌ 会断开所有 TCP 连接
+- ❌ 设备列表会闪烁
+
 ## 问题描述
 
 Flutter 应用从后台恢复到前台后，无法发现其他设备，也无法被其他设备发现。
@@ -565,4 +621,296 @@ void resumeEventStream() {
 - `crates/ffi/src/lib.rs` - 事件转发（行 347-364）
 - `app/lib/p2p_manager.dart` - Flutter 端处理（行 366-374）
 - `app/lib/screens/device_list_screen.dart` - UI 刷新（行 44-48）
+
+---
+
+## 服务分离架构实现（2024-01）
+
+### 架构设计
+
+#### 核心组件
+
+**1. P2PManager**
+- 位置：`crates/mdns/src/p2p_manager.rs`
+- 职责：统一管理两个服务的生命周期
+- 关键字段：
+  ```rust
+  pub struct P2PManager {
+      identity: Keypair,                    // 共享密钥对
+      peer_id: PeerId,
+      node_manager: Arc<NodeManager>,      // 共享节点管理器
+      discovery_tx: mpsc::UnboundedSender<DiscoveryEvent>,
+      discovery_rx: Option<mpsc::UnboundedReceiver<DiscoveryEvent>>,
+
+      // 任务句柄
+      mdns_task: Option<JoinHandle<()>>,
+      connection_task: Option<JoinHandle<()>>,
+
+      // 状态标记
+      mdns_running: bool,
+      connection_running: bool,
+  }
+  ```
+
+**2. MdnsDiscoveryService**
+- 位置：`crates/mdns/src/mdns_service.rs`
+- 职责：独立的 mDNS 发现服务
+- 特点：
+  - 只包含 mDNS behaviour
+  - 通过 `spawn()` 启动后台任务
+  - 通过 `discovery_tx` 发送发现事件
+
+**3. ConnectionService**
+- 位置：`crates/mdns/src/connection_service.rs`
+- 职责：独立的连接管理服务
+- 特点：
+  - 包含 identify、ping、chat behaviours
+  - 通过 `spawn()` 启动后台任务
+  - 通过 `discovery_rx` 接收发现事件
+  - 自动响应发现的设备并建立连接
+
+#### 事件流转
+
+```
+MdnsDiscoveryService                    ConnectionService
+        │                                      │
+        │  DiscoveryEvent::Discovered        │
+        │  ────────────────────────────────►  │
+        │                                      │
+        │                                      │ connect(peer_id, addr)
+        │                                      │
+        │                                      │ ← Swarm 事件流
+        │                                      │   (identify, ping, chat)
+```
+
+#### 启动流程
+
+```rust
+// P2PManager::start_all()
+pub async fn start_all(&mut self) -> Result<(), MdnsError> {
+    // 1. 先启动连接服务（接收者先就绪）
+    self.start_connection().await?;
+
+    // 2. 再启动 mDNS 服务（发送者）
+    self.start_mdns().await?;
+
+    Ok(())
+}
+```
+
+### Flutter 集成
+
+#### FFI 层适配
+
+**位置**：`crates/ffi/src/lib.rs`
+
+**internal_start() - 使用新架构**
+```rust
+pub fn internal_start() -> Result<(), String> {
+    // 使用 P2PManager.start_all() 启动服务分离架构
+    runtime.block_on(async {
+        p2p_manager.start_all().await
+    });
+
+    // 启动事件监控线程（轮询 NodeManager）
+    // 检测节点状态变化并发送到 Flutter
+}
+```
+
+**事件监控线程**
+```rust
+// 定期检查 NodeManager 状态变化
+loop {
+    tokio::select! {
+        _ = tokio::time::sleep(Duration::from_millis(500)) => {
+            let current_nodes = node_manager.list_nodes().await;
+
+            // 检测新节点
+            for node in &current_nodes {
+                if !known_nodes.contains(&peer_id) {
+                    // 发送 Discovered 事件到 Flutter
+                    send_event_to_flutter(event);
+                }
+            }
+
+            // 检测离线节点
+            let offline: Vec<_> = known_nodes.difference(&current_peer_ids);
+            for peer_id in offline {
+                // 发送 NodeOffline 事件到 Flutter
+                send_event_to_flutter(event);
+            }
+        }
+    }
+}
+```
+
+#### internal_restart_discovery() - 真正的无闪烁重启
+
+```rust
+pub fn internal_restart_discovery() -> Result<(), String> {
+    // 🔄 新架构：优先使用 P2PManager.restart_mdns()
+    if let Some(ref mut resources) = DISCOVERY_RESOURCES {
+        if resources.p2p_manager.is_some() {
+            let result = runtime.block_on(async {
+                p2p_manager.restart_mdns().await  // 只重启 mDNS！
+            });
+
+            match result {
+                Ok(()) => {
+                    // ✅ mDNS 重启成功，TCP 连接保持不变
+                    return Ok(());
+                }
+                Err(e) => {
+                    // 回退到旧架构
+                }
+            }
+        }
+    }
+
+    // ⚠️ 旧架构：回退到重新创建 ManagedDiscovery
+    // ...
+}
+```
+
+### 关键优势
+
+| 特性 | 旧架构 (ManagedDiscovery) | 新架构 (服务分离) |
+|------|-------------------------|------------------|
+| **重启 mDNS** | 重新创建整个 Swarm | 只重启 MdnsDiscoveryService |
+| **TCP 连接** | ❌ 会被断开 | ✅ 保持不变 |
+| **设备列表** | ❌ 会闪烁 | ✅ 无闪烁 |
+| **事件接收** | 通过 discovery.run() | 通过轮询 NodeManager |
+| **代码复杂度** | 单一服务，简单 | 两个服务，稍复杂 |
+
+### 实现细节
+
+#### MdnsDiscoveryService::spawn()
+
+```rust
+pub fn spawn(self) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            match self.swarm.select_next_some().await {
+                SwarmEvent::Behaviour(event) => {
+                    // 处理 mDNS 事件
+                    if let mdns::Event::Discovered(list) = event {
+                        for (peer_id, addr) in list {
+                            self.discovery_tx.send(DiscoveryEvent::Discovered { peer_id, addr });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    })
+}
+```
+
+#### ConnectionService::spawn()
+
+```rust
+pub fn spawn(mut self) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                // 接收 mDNS 发现事件
+                event = self.discovery_rx.recv() => {
+                    match event {
+                        Some(DiscoveryEvent::Discovered { peer_id, addr }) => {
+                            self.connect(peer_id, addr).await;
+                        }
+                        None => break, // 通道关闭，退出
+                    }
+                }
+
+                // 处理 Swarm 事件
+                event = self.swarm.select_next_some() => {
+                    self.handle_swarm_event(event).await;
+                }
+            }
+        }
+    })
+}
+```
+
+#### P2PManager::restart_mdns()
+
+```rust
+pub async fn restart_mdns(&mut self) -> Result<(), MdnsError> {
+    // 1. 停止旧的 mDNS 任务
+    if let Some(task) = self.mdns_task.take() {
+        task.abort();
+        tokio::time::timeout(Duration::from_secs(2), task).await;
+    }
+
+    // 2. 短暂等待资源释放
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // 3. 重新启动 mDNS 服务（不影响 ConnectionService）
+    self.start_mdns().await?;
+
+    // ✅ ConnectionService 继续运行，TCP 连接保持不变！
+
+    Ok(())
+}
+```
+
+### 相关文件
+
+#### 核心实现
+- `crates/mdns/src/p2p_manager.rs` - P2PManager 主实现
+- `crates/mdns/src/mdns_service.rs` - MdnsDiscoveryService 实现
+- `crates/mdns/src/connection_service.rs` - ConnectionService 实现
+- `crates/mdns/src/events.rs` - 事件定义
+
+#### FFI 层
+- `crates/ffi/src/lib.rs` - FFI 适配和新/旧架构切换逻辑
+
+### 向后兼容
+
+**保留旧架构支持**：
+- `P2PManager::start_all_legacy()` - 使用 ManagedDiscovery 的兼容模式
+- `internal_start_legacy()` - FFI 层的旧架构启动函数
+- `P2PManager::take_discovery()` - 过渡期兼容方法
+
+**切换逻辑**：
+```rust
+// 优先使用新架构
+if let Some(ref mut p2p_manager) = resources.p2p_manager {
+    if p2p_manager.start_all().await.is_ok() {
+        // 新架构成功
+        return Ok(());
+    }
+}
+
+// 回退到旧架构
+internal_start_legacy(resources)
+```
+
+### 测试验证
+
+```bash
+# 运行单元测试
+cargo test -p mdns --lib
+
+# 测试覆盖
+- test_p2p_manager_restart_mdns       # 验证重启功能
+- test_p2p_manager_new               # 验证创建功能
+- test_mdns_service_spawn           # 验证 mDNS 服务启动
+```
+
+### 总结
+
+**问题根源**：
+- 旧架构：重启 mDNS 需要重新创建整个 Swarm，导致 TCP 连接断开
+
+**解决方案**：
+- ✅ 服务分离架构：mDNS 和连接管理独立运行
+- ✅ 独立重启：`restart_mdns()` 只重启 mDNS 服务
+- ✅ 无闪烁恢复：TCP 连接保持不变，设备列表不闪烁
+
+**用户体验改进**：
+- ✅ 应用从后台恢复时，已连接的设备保持在线
+- ✅ 设备列表不闪烁
+- ✅ mDNS 功能正常恢复，可发现新设备
 

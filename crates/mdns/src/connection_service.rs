@@ -17,6 +17,18 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
+/// 全局聊天事件回调（可选）
+/// 由 FFI 层设置，用于将聊天事件发送到 Flutter
+static mut CHAT_EVENT_CALLBACK: Option<fn(from: String, content: String)> = None;
+
+/// 设置聊天事件回调
+///
+/// # Safety
+/// 此函数应在初始化时调用一次
+pub unsafe fn set_chat_event_callback(callback: fn(from: String, content: String)) {
+    CHAT_EVENT_CALLBACK = Some(callback);
+}
+
 /// 连接服务配置
 #[derive(Debug, Clone)]
 pub struct ConnectionServiceConfig {
@@ -79,15 +91,21 @@ pub struct ConnectionService {
     /// 聊天管理器
     chat_manager: Option<ChatManager>,
 
+    /// 聊天事件接收器
+    chat_event_rx: Option<mpsc::UnboundedReceiver<super::chat::ChatEvent>>,
+
     /// 本地 Peer ID
     local_peer_id: PeerId,
 }
 
 impl ConnectionService {
     /// 创建新的连接服务
+    ///
+    /// ⚠️ 重要：接受共享的 NodeManager 引用，而不是创建新的！
+    /// 这确保 ConnectionService 添加的节点可以被 P2PManager 和 FFI 层访问。
     pub async fn new(
         identity: Keypair,
-        node_manager_config: NodeManagerConfig,
+        node_manager: Arc<NodeManager>,  // 改为接受共享的 NodeManager
         local_user_info: user_info::UserInfo,
         discovery_rx: mpsc::UnboundedReceiver<DiscoveryEvent>,
         config: ConnectionServiceConfig,
@@ -95,14 +113,11 @@ impl ConnectionService {
         tracing::info!("正在初始化连接服务...");
 
         let local_peer_id = identity.public().to_peer_id();
-        let protocol_version = node_manager_config.expected_protocol_version.clone();
-        let agent_version = node_manager_config.build_agent_version();
+        let protocol_version = node_manager.config().expected_protocol_version.clone();
+        let agent_version = node_manager.config().build_agent_version();
 
-        // 创建节点管理器（需要在 ChatManager 之前）
-        let node_manager = Arc::new(NodeManager::new(node_manager_config));
-
-        // 创建聊天管理器
-        let (chat_manager, _chat_event_rx) = ChatManager::new(node_manager.clone(), local_peer_id);
+        // 创建聊天管理器（使用共享的 NodeManager）
+        let (chat_manager, chat_event_rx) = ChatManager::new(node_manager.clone(), local_peer_id);
         tracing::info!("✓ 聊天管理器已创建");
 
         // ⚠️ 关键：使用同一个 identity 创建 Swarm（不包含 mDNS）
@@ -168,6 +183,7 @@ impl ConnectionService {
             active_connections: HashMap::new(),
             peer_user_info: HashMap::new(),
             chat_manager: Some(chat_manager),
+            chat_event_rx: Some(chat_event_rx),
             local_peer_id,
         })
     }
@@ -207,33 +223,108 @@ impl ConnectionService {
         }
     }
 
+    /// 单次运行迭代
+    ///
+    /// 执行一次事件循环迭代，返回是否应该继续运行。
+    /// - Ok(true): 继续运行
+    /// - Ok(false): 应该退出（通道关闭）
+    /// - Err: 发生错误
+    pub async fn run_once(&mut self) -> Result<bool, MdnsError> {
+        tokio::select! {
+            // 处理 mDNS 发现事件
+            event = self.discovery_rx.recv() => {
+                match event {
+                    Some(DiscoveryEvent::Discovered { peer_id, addr }) => {
+                        self.connect(peer_id, addr).await;
+                    }
+                    Some(DiscoveryEvent::Expired { peer_id }) => {
+                        tracing::debug!("设备 {} mDNS 记录过期", peer_id);
+                    }
+                    None => {
+                        tracing::warn!("发现事件通道已关闭");
+                        return Ok(false); // 通道关闭，退出
+                    }
+                }
+            }
+
+            // 处理聊天事件
+            Some(event) = async {
+                if let Some(ref mut rx) = self.chat_event_rx {
+                    rx.recv().await
+                } else {
+                    std::future::pending().await
+                }
+            } => {
+                match event {
+                    super::chat::ChatEvent::MessageReceived { from, message } => {
+                        if let super::chat::ChatMessage::Text(text) = message {
+                            let from_str = from.to_string();
+                            let content_str = text.content.clone();
+                            tracing::info!("💬 收到来自 {} 的消息: {}", from, content_str);
+
+                            // 调用全局回调函数（如果已设置）
+                            unsafe {
+                                if let Some(callback) = CHAT_EVENT_CALLBACK {
+                                    callback(from_str, content_str);
+                                }
+                            }
+                        }
+                    }
+                    super::chat::ChatEvent::PeerTyping { from, is_typing } => {
+                        tracing::info!("⌨️ 节点 {} {}", from, if is_typing { "正在输入" } else { "停止输入" });
+                    }
+                    super::chat::ChatEvent::MessageAcknowledged { from, message_id } => {
+                        tracing::debug!("✓ 节点 {} 确认收到消息 {}", from, message_id);
+                    }
+                    super::chat::ChatEvent::SessionClosed { peer_id } => {
+                        tracing::info!("💬 与 {} 的聊天会话已关闭", peer_id);
+                    }
+                    _ => {
+                        // 其他事件类型暂不处理
+                        tracing::trace!("收到其他聊天事件: {:?}", event);
+                    }
+                }
+            }
+
+            // 处理 Swarm 事件
+            event = self.swarm.select_next_some() => {
+                self.handle_swarm_event(event).await?;
+            }
+        }
+        Ok(true)
+    }
+
     /// 运行连接服务
     pub async fn run(&mut self) -> Result<(), MdnsError> {
         loop {
-            tokio::select! {
-                // 处理 mDNS 发现事件
-                event = self.discovery_rx.recv() => {
-                    match event {
-                        Some(DiscoveryEvent::Discovered { peer_id, addr }) => {
-                            self.connect(peer_id, addr).await;
-                        }
-                        Some(DiscoveryEvent::Expired { peer_id }) => {
-                            tracing::debug!("设备 {} mDNS 记录过期", peer_id);
-                        }
-                        None => {
-                            tracing::warn!("发现事件通道已关闭");
-                            break;
-                        }
-                    }
-                }
-
-                // 处理 Swarm 事件
-                event = self.swarm.select_next_some() => {
-                    self.handle_swarm_event(event).await?;
-                }
+            if !self.run_once().await? {
+                break;
             }
         }
         Ok(())
+    }
+
+    /// 启动服务（返回任务句柄，消费 self）
+    ///
+    /// 在后台任务中运行连接服务，类似 MdnsDiscoveryService::spawn()。
+    /// 返回 JoinHandle 可用于任务控制（如 abort）。
+    pub fn spawn(mut self) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            tracing::info!("🔗 连接服务已启动");
+            loop {
+                match self.run_once().await {
+                    Ok(true) => continue,
+                    Ok(false) => {
+                        tracing::info!("连接服务正常退出");
+                        break;
+                    }
+                    Err(e) => {
+                        tracing::error!("连接服务错误: {:?}", e);
+                        break;
+                    }
+                }
+            }
+        })
     }
 
     /// 处理 Swarm 事件

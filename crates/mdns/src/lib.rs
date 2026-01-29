@@ -22,7 +22,7 @@ pub use discovery::{MdnsDiscovery, DiscoveredPeer, DiscoveredEvent};
 pub use publisher::MdnsPublisher;
 pub use node::{VerifiedNode, NodeManager, NodeManagerConfig, NodeStatus};
 pub use mdns_service::{MdnsDiscoveryService, MdnsServiceError};
-pub use connection_service::{ConnectionService, ConnectionServiceConfig};
+pub use connection_service::{ConnectionService, ConnectionServiceConfig, set_chat_event_callback};
 pub use p2p_manager::{P2PManager, P2PManagerConfig};
 pub use managed_discovery::{
     ManagedDiscovery,

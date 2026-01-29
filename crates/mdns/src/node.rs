@@ -218,6 +218,7 @@ use crate::MdnsError;
 /// 节点管理器
 ///
 /// 负责管理所有验证通过的节点，提供添加、移除、查询等功能。
+#[derive(Debug)]
 pub struct NodeManager {
     /// 节点存储
     nodes: RwLock<HashMap<PeerId, VerifiedNode>>,
