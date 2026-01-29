@@ -16,13 +16,30 @@ bool p2PIsInitialized() =>
 /// 检查 P2P 服务是否正在运行
 bool p2PIsRunning() => P2PBridge.instance.api.localp2PFfiBridgeP2PIsRunning();
 
+/// 检查 discovery 线程是否真的活着
+///
+/// 通过发送 Ping 命令来检查线程是否响应
+/// 比 p2p_is_running() 更可靠，因为它实际检查线程状态
+bool p2PIsDiscoveryThreadAlive() =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
+
+/// 重启 discovery 服务
+///
+/// 用于应用从后台恢复时，如果发现线程已死，重启它
+/// 如果服务仍在运行，会先停止再重启
+void p2PRestartDiscovery() =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
+
 /// 初始化 P2P 模块
 ///
 /// # Arguments
 /// * `device_name` - 本设备的显示名称
 /// * `identity_path` - 密钥对保存路径（空字符串表示不持久化）
 void p2PInit({required String deviceName, required String identityPath}) =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PInit(deviceName: deviceName, identityPath: identityPath);
+    P2PBridge.instance.api.localp2PFfiBridgeP2PInit(
+      deviceName: deviceName,
+      identityPath: identityPath,
+    );
 
 /// 启动 P2P 服务
 void p2PStart() => P2PBridge.instance.api.localp2PFfiBridgeP2PStart();

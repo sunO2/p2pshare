@@ -66,7 +66,7 @@ class P2PBridge
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 141893861;
+  int get rustContentHash => -238510421;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -90,13 +90,20 @@ abstract class P2PBridgeApi extends BaseApi {
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes();
 
-  void localp2PFfiBridgeP2PInit({required String deviceName, required String identityPath});
+  void localp2PFfiBridgeP2PInit({
+    required String deviceName,
+    required String identityPath,
+  });
+
+  bool localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
 
   bool localp2PFfiBridgeP2PIsInitialized();
 
   bool localp2PFfiBridgeP2PIsRunning();
 
   List<P2PBridgeEvent> localp2PFfiBridgeP2PPollEvents();
+
+  void localp2PFfiBridgeP2PRestartDiscovery();
 
   void localp2PFfiBridgeP2PSendMessage({
     required String targetPeerId,
@@ -257,7 +264,10 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_get_verified_nodes", argNames: []);
 
   @override
-  void localp2PFfiBridgeP2PInit({required String deviceName, required String identityPath}) {
+  void localp2PFfiBridgeP2PInit({
+    required String deviceName,
+    required String identityPath,
+  }) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -277,8 +287,35 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PInitConstMeta =>
-      const TaskConstMeta(debugName: "p2p_init", argNames: ["deviceName", "identityPath"]);
+  TaskConstMeta get kLocalp2PFfiBridgeP2PInitConstMeta => const TaskConstMeta(
+    debugName: "p2p_init",
+    argNames: ["deviceName", "identityPath"],
+  );
+
+  @override
+  bool localp2PFfiBridgeP2PIsDiscoveryThreadAlive() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PIsDiscoveryThreadAliveConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PIsDiscoveryThreadAliveConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_is_discovery_thread_alive",
+        argNames: [],
+      );
 
   @override
   bool localp2PFfiBridgeP2PIsInitialized() {
@@ -286,7 +323,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -308,7 +345,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -330,7 +367,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_event,
@@ -347,6 +384,28 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_poll_events", argNames: []);
 
   @override
+  void localp2PFfiBridgeP2PRestartDiscovery() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PRestartDiscoveryConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PRestartDiscoveryConstMeta =>
+      const TaskConstMeta(debugName: "p2p_restart_discovery", argNames: []);
+
+  @override
   void localp2PFfiBridgeP2PSendMessage({
     required String targetPeerId,
     required String message,
@@ -357,7 +416,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(targetPeerId, serializer);
           sse_encode_String(message, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -384,7 +443,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_StreamSink_p_2_p_bridge_event_Sse(streamSink, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -410,7 +469,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -432,7 +491,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -464,7 +523,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 16,
             port: port_,
           );
         },
@@ -502,7 +561,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 17,
             port: port_,
           );
         },

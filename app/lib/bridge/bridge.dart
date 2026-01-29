@@ -18,6 +18,7 @@ class P2PBridgeEvent {
   /// 6 = MessageReceived
   /// 7 = MessageSent
   /// 8 = PeerTyping
+  /// 9 = Log (Rust 日志)
   final int eventType;
 
   /// 事件数据 (JSON 字符串)

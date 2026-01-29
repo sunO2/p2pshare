@@ -60,11 +60,30 @@ static mut DISCOVERY_RESOURCES: Option<GlobalDiscoveryResources> = None;
 /// P2P 服务运行标志（用于 internal_is_running 检查）
 static mut P2P_IS_RUNNING: bool = false;
 
+/// 最后一次收到 discovery 事件的时间
+static LAST_EVENT_TIME: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+/// 更新最后事件时间
+fn update_last_event_time() {
+    if let Ok(mut time) = LAST_EVENT_TIME.lock() {
+        *time = Some(std::time::Instant::now());
+    }
+}
+
+/// 获取距离上次事件的时间
+fn time_since_last_event() -> Option<std::time::Duration> {
+    LAST_EVENT_TIME.lock().ok().and_then(|time| {
+        time.map(|instant| instant.elapsed())
+    })
+}
+
 /// P2P 实例（包含所有核心组件）
 struct P2PInstance {
     node_manager: Arc<NodeManager>,
     local_peer_id: String,
     device_name: String,
+    /// 身份密钥对（用于保持 Peer ID 稳定）
+    identity: Option<libp2p::identity::Keypair>,
     /// 命令通道，用于向 discovery 线程发送命令
     command_tx: tokio::sync::mpsc::UnboundedSender<P2PCommand>,
     /// Discovery 线程句柄
@@ -96,6 +115,9 @@ enum P2PCommand {
         target_peer_ids: Vec<String>,
         message: String,
         response_tx: tokio::sync::oneshot::Sender<Result<String, String>>,
+    },
+    Ping {
+        response_tx: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     Stop,
 }
@@ -185,6 +207,9 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
         // 解析监听地址
         let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
 
+        // 保存 identity 的克隆，用于后续保存到 P2PInstance
+        let identity_for_instance = identity.clone();
+
         // 创建发现器，传入密钥对（如果有）
         let discovery_result = ManagedDiscovery::new(
             node_manager.clone(),
@@ -219,6 +244,7 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
             node_manager,
             local_peer_id: local_peer_id.clone(),
             device_name: device_name.clone(),
+            identity: identity_for_instance, // 保存 identity 以保持 Peer ID 稳定
             command_tx,
             discovery_thread: None,
         };
@@ -271,6 +297,7 @@ pub fn internal_start() -> Result<(), String> {
                 let handle = std::thread::spawn(move || {
                     runtime.block_on(async move {
                         tracing::info!("FRB Discovery 线程启动");
+                        send_log_to_flutter("INFO", "ffi", "Discovery 线程启动".to_string());
                         let mut discovery = discovery;
                         let mut command_rx = command_rx;
                         let mut chat_event_rx = chat_event_rx;
@@ -281,9 +308,17 @@ pub fn internal_start() -> Result<(), String> {
                                 result = discovery.run() => {
                                     match result {
                                         Ok(event) => {
+                                            // 更新最后事件时间（任何 discovery 事件都算）
+                                            update_last_event_time();
+
                                             use mdns::managed_discovery::DiscoveryEvent;
                                             match event {
                                                 DiscoveryEvent::Discovered(peer_id, addr) => {
+                                                    send_log_to_flutter(
+                                                        "INFO",
+                                                        "discovery",
+                                                        format!("发现节点: {} @ {}", peer_id, addr)
+                                                    );
                                                     let event = bridge::P2PEvent {
                                                         event_type: 1,
                                                         data: format!(r#"{{"peer_id":"{}","addr":"{}"}}"#, peer_id, addr),
@@ -294,6 +329,11 @@ pub fn internal_start() -> Result<(), String> {
                                                     queue.push(event);
                                                 }
                                                 DiscoveryEvent::Verified(peer_id) => {
+                                                    send_log_to_flutter(
+                                                        "INFO",
+                                                        "discovery",
+                                                        format!("验证节点: {}", peer_id)
+                                                    );
                                                     let display_name = peer_id.to_string();
                                                     let event = bridge::P2PEvent {
                                                         event_type: 3,
@@ -305,6 +345,11 @@ pub fn internal_start() -> Result<(), String> {
                                                     queue.push(event);
                                                 }
                                                 DiscoveryEvent::NodeOffline(peer_id) => {
+                                                    send_log_to_flutter(
+                                                        "WARN",
+                                                        "discovery",
+                                                        format!("节点离线: {}", peer_id)
+                                                    );
                                                     let event = bridge::P2PEvent {
                                                         event_type: 4,
                                                         data: format!(r#"{{"peer_id":"{}"}}"#, peer_id),
@@ -347,7 +392,9 @@ pub fn internal_start() -> Result<(), String> {
                                             }
                                         }
                                         Err(e) => {
-                                            tracing::error!("Discovery error: {:?}", e);
+                                            let error_msg = format!("Discovery error: {:?}", e);
+                                            tracing::error!("{}", error_msg);
+                                            send_log_to_flutter("ERROR", "discovery", error_msg);
                                             break;
                                         }
                                     }
@@ -390,6 +437,10 @@ pub fn internal_start() -> Result<(), String> {
                                                 let result = discovery.broadcast_message(peer_ids, chat_msg).await;
                                                 let _ = response_tx.send(result.map(|_| "OK".to_string()).map_err(|e| format!("{:?}", e)));
                                             }
+                                        }
+                                        P2PCommand::Ping { response_tx } => {
+                                            // Ping 命令用于健康检查
+                                            let _ = response_tx.send(Ok(()));
                                         }
                                         P2PCommand::Stop => {
                                             tracing::info!("Received stop command");
@@ -441,6 +492,7 @@ pub fn internal_start() -> Result<(), String> {
                         }
 
                         tracing::info!("FRB Discovery 线程结束");
+                        send_log_to_flutter("WARN", "ffi", "Discovery 线程结束".to_string());
                     });
                 });
 
@@ -458,6 +510,7 @@ pub fn internal_start() -> Result<(), String> {
 
         // 设置运行标志
         P2P_IS_RUNNING = true;
+        send_log_to_flutter("INFO", "ffi", "P2P 服务已启动".to_string());
 
         Ok(())
     }
@@ -485,6 +538,9 @@ pub async fn get_event_receiver() -> Result<tokio::sync::mpsc::UnboundedReceiver
                         result = discovery.run() => {
                             match result {
                                 Ok(event) => {
+                                    // 更新最后事件时间（任何 discovery 事件都算）
+                                    update_last_event_time();
+
                                     use mdns::managed_discovery::DiscoveryEvent;
                                     if let Some(tx) = event_tx.as_ref() {
                                         match event {
@@ -521,6 +577,10 @@ pub async fn get_event_receiver() -> Result<tokio::sync::mpsc::UnboundedReceiver
                         // 处理命令
                         Some(command) = command_rx.recv() => {
                             match command {
+                                P2PCommand::Ping { response_tx } => {
+                                    // Ping 命令用于健康检查
+                                    let _ = response_tx.send(Ok(()));
+                                }
                                 P2PCommand::Stop => {
                                     tracing::info!("Received stop command");
                                     break;
@@ -583,6 +643,7 @@ pub fn internal_stop() -> Result<(), String> {
 
         // 清除运行标志
         P2P_IS_RUNNING = false;
+        send_log_to_flutter("INFO", "ffi", "P2P 服务已停止".to_string());
 
         P2P_INSTANCE = None;
         Ok(())
@@ -627,6 +688,208 @@ pub fn internal_is_initialized() -> bool {
 /// 检查 P2P 服务是否正在运行
 pub fn internal_is_running() -> bool {
     unsafe { P2P_IS_RUNNING }
+}
+
+/// 检查 discovery 线程是否真的活着
+///
+/// 通过两个条件检查：
+/// 1. Ping 命令检查线程是否响应
+/// 2. 检查是否在最近收到过 discovery 事件（验证 mDNS 是否工作）
+pub fn internal_is_discovery_thread_alive() -> bool {
+    send_log_to_flutter("INFO", "ffi", "开始 Discovery 健康检查...".to_string());
+
+    unsafe {
+        if P2P_INSTANCE.is_none() {
+            send_log_to_flutter("WARN", "ffi", "P2P 实例不存在，无法检查健康状态".to_string());
+            return false;
+        }
+
+        let instance = P2P_INSTANCE.as_ref().unwrap();
+        let inst = instance.lock().unwrap();
+
+        // 发送 Ping 命令
+        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
+        let ping_command = P2PCommand::Ping { response_tx };
+
+        if let Err(_) = inst.command_tx.send(ping_command) {
+            send_log_to_flutter("ERROR", "ffi", "Ping 发送失败，线程已死".to_string());
+            return false;
+        }
+        drop(inst);
+
+        let runtime = RUNTIME.as_ref();
+        if let Some(rt) = runtime {
+            let ping_result = rt.block_on(async {
+                tokio::time::timeout(
+                    std::time::Duration::from_millis(100),
+                    response_rx
+                ).await
+            });
+
+            let ping_alive = ping_result.is_ok() && ping_result.unwrap().is_ok();
+
+            // 检查最后事件时间
+            let event_alive = if let Some(elapsed) = time_since_last_event() {
+                // 如果超过 10 秒没有事件，认为 discovery 已停止工作
+                // 降低阈值以更快检测到从后台恢复时的 mDNS 问题
+                let is_alive = elapsed.as_secs() < 10;
+                if !is_alive {
+                    send_log_to_flutter(
+                        "WARN",
+                        "ffi",
+                        format!("距离上次事件已 {:.1} 秒，超过阈值 10 秒，discovery 可能已停止", elapsed.as_secs_f64())
+                    );
+                }
+                send_log_to_flutter(
+                    "INFO",
+                    "ffi",
+                    format!("距离上次事件 {:.1} 秒", elapsed.as_secs_f64())
+                );
+                is_alive
+            } else {
+                send_log_to_flutter("INFO", "ffi", "尚未收到过 discovery 事件".to_string());
+                true // 如果还没有收到过事件，暂时认为健康
+            };
+
+            let alive = ping_alive && event_alive;
+            send_log_to_flutter(
+                "INFO",
+                "ffi",
+                format!("Discovery 健康检查结果: Ping={} 事件时间={} => {}", ping_alive, event_alive, alive)
+            );
+
+            alive
+        } else {
+            send_log_to_flutter("ERROR", "ffi", "运行时不存在".to_string());
+            false
+        }
+    }
+}
+
+/// 重启 discovery 服务
+///
+/// 用于应用从后台恢复时，如果发现线程已死，重启它
+/// 如果服务仍在运行，会先停止再重启
+pub fn internal_restart_discovery() -> Result<(), String> {
+    send_log_to_flutter("INFO", "ffi", "开始重启 Discovery 服务".to_string());
+
+    unsafe {
+        if P2P_INSTANCE.is_none() {
+            return Err("Not initialized".to_string());
+        }
+
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+
+        // 发送停止命令给 discovery 线程
+        if let Some(instance) = P2P_INSTANCE.as_ref() {
+            let inst = instance.lock().unwrap();
+            let _ = inst.command_tx.send(P2PCommand::Stop);
+            drop(inst);
+        }
+
+        // 清除运行标志（但不删除 P2P_INSTANCE）
+        P2P_IS_RUNNING = false;
+        send_log_to_flutter("INFO", "ffi", "已停止旧 Discovery 服务".to_string());
+
+        // 等待一小段时间确保线程退出
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // 记录 identity 使用情况
+        let has_identity = {
+            let inst = P2P_INSTANCE.as_ref().unwrap().lock().unwrap();
+            inst.identity.is_some()
+        };
+
+        if has_identity {
+            send_log_to_flutter("INFO", "ffi", "重启时使用保存的密钥对，Peer ID 将保持不变".to_string());
+        } else {
+            send_log_to_flutter("INFO", "ffi", "重启时生成新密钥对，Peer ID 将变化".to_string());
+        }
+
+        // 重新创建 discovery 资源
+        let (node_manager, device_name, local_peer_id, identity) = {
+            let inst = P2P_INSTANCE.as_ref().unwrap().lock().unwrap();
+            (
+                inst.node_manager.clone(),
+                inst.device_name.clone(),
+                inst.local_peer_id.clone(),
+                inst.identity.clone(), // 获取保存的 identity
+            )
+        };
+
+        // 在运行时中创建新的 discovery
+        let result = runtime.block_on(async {
+            // 创建用户信息
+            let user_info = UserInfo::new(device_name.clone())
+                .with_status("在线".to_string());
+
+            // 创建健康检查配置
+            let health_config = HealthCheckConfig {
+                heartbeat_interval: std::time::Duration::from_secs(10),
+                max_failures: 3,
+            };
+
+            // 解析监听地址
+            let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
+
+            // 创建新的 discovery，使用保存的 identity 以保持 Peer ID 稳定
+            let discovery_result = ManagedDiscovery::new(
+                node_manager.clone(),
+                listen_addresses,
+                health_config,
+                user_info,
+                identity, // 使用保存的密钥对
+            ).await;
+
+            match discovery_result {
+                Ok(mut discovery) => {
+                    // 启用聊天功能
+                    if let Err(e) = discovery.enable_chat().await {
+                        tracing::error!("Failed to enable chat: {:?}", e);
+                    }
+
+                    // 获取 chat 事件接收器
+                    let chat_event_rx = discovery.take_chat_events();
+
+                    // 创建新的命令通道
+                    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+
+                    // 创建新的事件通道
+                    let (event_tx, _) = tokio::sync::mpsc::unbounded_channel();
+
+                    // 更新 P2P_INSTANCE 中的 command_tx
+                    if let Some(instance) = P2P_INSTANCE.as_ref() {
+                        let mut inst = instance.lock().unwrap();
+                        inst.command_tx = command_tx.clone();
+                    }
+
+                    Ok((discovery, chat_event_rx, command_rx, event_tx, command_tx))
+                }
+                Err(e) => {
+                    Err(format!("Failed to create discovery: {:?}", e))
+                }
+            }
+        });
+
+        let (discovery, chat_event_rx, command_rx, event_tx, command_tx) = result?;
+
+        // 将新资源放入 DISCOVERY_RESOURCES
+        DISCOVERY_RESOURCES = Some(GlobalDiscoveryResources {
+            discovery: Some(discovery),
+            chat_event_rx,
+            command_rx: Some(command_rx),
+            event_tx: Some(event_tx),
+        });
+
+        // 等待一小段时间
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // 调用 internal_start 启动 discovery 线程
+        internal_start()?;
+        send_log_to_flutter("INFO", "ffi", "Discovery 服务重启成功".to_string());
+
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -880,6 +1143,30 @@ fn send_event_to_stream(event: crate::bridge::P2PBridgeEvent) {
             let _: Result<(), flutter_rust_bridge::Rust2DartSendError> = sink.add(event);
         }
     }
+}
+
+/// 发送 Rust 日志到 Flutter
+///
+/// 将 Rust 的 tracing 日志转发到 Flutter，便于调试
+///
+/// # Arguments
+/// * `level` - 日志级别 (ERROR, WARN, INFO, DEBUG, TRACE)
+/// * `target` - 日志目标 (模块名)
+/// * `message` - 日志消息
+fn send_log_to_flutter(level: &str, target: &str, message: String) {
+    let data = format!(
+        r#"{{"level":"{}","target":"{}","message":"{}"}}"#,
+        level,
+        target,
+        message.replace('"', "\\\"")
+    );
+
+    let event = bridge::P2PBridgeEvent {
+        event_type: 9, // Log 事件
+        data,
+    };
+
+    send_event_to_stream(event);
 }
 
 /// 轮询事件（返回所有待处理的事件并清空队列）

@@ -29,6 +29,7 @@ pub struct P2PBridgeEvent {
     /// 6 = MessageReceived
     /// 7 = MessageSent
     /// 8 = PeerTyping
+    /// 9 = Log (Rust 日志)
     pub event_type: i32,
     /// 事件数据 (JSON 字符串)
     pub data: String,
@@ -90,6 +91,24 @@ pub fn p2p_is_initialized() -> bool {
 #[frb(sync)]
 pub fn p2p_is_running() -> bool {
     crate::internal_is_running()
+}
+
+/// 检查 discovery 线程是否真的活着
+///
+/// 通过发送 Ping 命令来检查线程是否响应
+/// 比 p2p_is_running() 更可靠，因为它实际检查线程状态
+#[frb(sync)]
+pub fn p2p_is_discovery_thread_alive() -> bool {
+    crate::internal_is_discovery_thread_alive()
+}
+
+/// 重启 discovery 服务
+///
+/// 用于应用从后台恢复时，如果发现线程已死，重启它
+/// 如果服务仍在运行，会先停止再重启
+#[frb(sync)]
+pub fn p2p_restart_discovery() -> Result<(), String> {
+    crate::internal_restart_discovery()
 }
 
 /// 初始化 P2P 模块

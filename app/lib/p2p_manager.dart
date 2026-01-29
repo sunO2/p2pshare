@@ -186,6 +186,68 @@ class P2PManager {
     }
   }
 
+  /// 重启事件流（用于应用从后台恢复时）
+  ///
+  /// 当应用从后台返回前台时，Stream 订阅可能处于中断状态
+  /// 此方法会：
+  /// 1. 重新订阅事件流（确保能接收日志）
+  /// 2. 立即重启 discovery 服务（无条件）
+  ///
+  /// 使用无条件重启的原因：
+  /// - 智能检查（先检查再重启）会导致连接恢复慢
+  /// - 直接重启可以快速恢复 mDNS 和设备发现
+  /// - 虽然会破坏正常工作的连接，但恢复后可以快速重新发现
+  void resumeEventStream() {
+    if (!_initialized) {
+      _log.w('resumeEventStream 但未初始化');
+      return;
+    }
+
+    _log.i('resumeEventStream: 应用恢复，立即重启 discovery...');
+
+    // 1. 先重新订阅 Stream（确保能接收日志）
+    _log.i('重启事件 Stream 订阅');
+    _restartEventStream();
+
+    // 2. 立即重启 discovery 服务（无条件）
+    // 因为 Android 在后台会暂停 mDNS，恢复后需要立即重启
+    _log.i('从后台恢复，立即重启 discovery');
+    debugPrint('从后台恢复，立即重启 P2P discovery...');
+
+    try {
+      RustLib.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
+      _log.i('P2P discovery 重启成功');
+      debugPrint('✓ P2P discovery 重启成功');
+    } catch (e, stackTrace) {
+      _log.e('重启 P2P discovery 失败: $e', e, stackTrace);
+      debugPrint('✗ 重启 P2P discovery 失败: $e');
+    }
+  }
+
+  /// 检查 discovery 线程是否真的活着
+  bool _isDiscoveryThreadAlive() {
+    try {
+      final result = RustLib.instance.api
+          .localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
+      _log.rustReturn('p2pIsDiscoveryThreadAlive', result: result);
+      return result;
+    } catch (e) {
+      _log.w('p2pIsDiscoveryThreadAlive 调用失败: $e');
+      debugPrint('p2pIsDiscoveryThreadAlive 调用失败: $e');
+      return false;
+    }
+  }
+
+  /// 重启事件流订阅（内部方法）
+  void _restartEventStream() {
+    // 取消之前的订阅
+    _eventStreamSubscription?.cancel();
+    _eventStreamSubscription = null;
+
+    // 启动新的订阅
+    _startEventStream();
+  }
+
   /// 事件流
   Stream<P2PEvent> get eventStream => _eventController.stream;
 
@@ -367,6 +429,17 @@ class P2PManager {
         }
         break;
 
+      case 9: // Rust 日志
+        final level = _extractLogLevel(event.data);
+        final target = _extractLogTarget(event.data);
+        final message = _extractLogMessage(event.data);
+        if (level != null && target != null && message != null) {
+          _handleRustLog(level, target, message);
+        } else {
+          _log.w('Rust 日志事件但无法解析: ${event.data}');
+        }
+        break;
+
       default:
         _log.w('未知事件类型: ${event.eventType}, data: ${event.data}');
     }
@@ -433,6 +506,54 @@ class P2PManager {
     final match = RegExp(r'"avatar_url":"([^"]*)"').firstMatch(data);
     final value = match?.group(1);
     return (value == null || value == 'null') ? null : value;
+  }
+
+  /// 处理 Rust 日志
+  void _handleRustLog(String level, String target, String message) {
+    // 使用 LogService 输出到日志文件
+    final logService = LogService.instance;
+
+    // 根据级别选择合适的日志方法
+    switch (level.toUpperCase()) {
+      case 'ERROR':
+        logService.e('[$target] $message');
+        break;
+      case 'WARN':
+        logService.w('[$target] $message');
+        break;
+      case 'INFO':
+        logService.i('[$target] $message');
+        break;
+      case 'DEBUG':
+        logService.d('[$target] $message');
+        break;
+      case 'TRACE':
+        logService.t('[$target] $message');
+        break;
+      default:
+        logService.i('[$target] $message');
+    }
+
+    // 同时输出到控制台（方便调试）
+    debugPrint('🔶 [$level] $target: $message');
+  }
+
+  String? _extractLogLevel(String data) {
+    final match = RegExp(r'"level":"([^"]*)"').firstMatch(data);
+    return match?.group(1);
+  }
+
+  String? _extractLogTarget(String data) {
+    final match = RegExp(r'"target":"([^"]*)"').firstMatch(data);
+    return match?.group(1);
+  }
+
+  String? _extractLogMessage(String data) {
+    // 匹配 message 字段，处理转义字符
+    final match = RegExp(r'"message":"((?:[^"\\]|\\.)*)"').firstMatch(data);
+    if (match == null) return null;
+    // 将转义字符转换回原始字符
+    return match.group(1)?.replaceAll(r'\"', '"').replaceAll(r'\\', r'\');
   }
 
   /// 停止 P2P 服务

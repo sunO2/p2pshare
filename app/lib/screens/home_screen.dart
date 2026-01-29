@@ -69,9 +69,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-        // 应用恢复 - 确保 UI 同步状态
-        debugPrint('应用恢复，检查 P2P 状态...');
+        // 应用恢复 - 确保 UI 同步状态并重启事件流
+        debugPrint('应用恢复，检查 P2P 状态并重启事件流...');
         _syncP2PState();
+        // 重启事件流订阅（修复后台恢复后无法接收事件的问题）
+        P2PManager.instance.resumeEventStream();
+        break;
+      case AppLifecycleState.paused:
+        // 应用退入后台 - 记录日志
+        debugPrint('应用退入后台，P2P 服务保持运行');
         break;
       case AppLifecycleState.detached:
         // 应用真正退出时才清理
@@ -80,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         break;
       default:
         // 其他状态不做处理
-        // paused: 应用退入后台，保持 P2P 运行以接收消息
         // inactive: 应用切换中，保持状态
         break;
     }
@@ -101,7 +106,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _initError = null;
         });
 
-        debugPrint('同步 P2P 状态: Peer ID = $_localPeerId, Device Name = $_deviceName');
+        debugPrint(
+          '同步 P2P 状态: Peer ID = $_localPeerId, Device Name = $_deviceName',
+        );
       }
     } catch (e) {
       debugPrint('同步 P2P 状态失败: $e');
