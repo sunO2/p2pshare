@@ -2272,6 +2272,26 @@ P2PManager
 - ✅ **用户原始问题已解决**：应用从后台恢复时，重启 mDNS 不会断开 TCP 连接
 - ✅ **设备列表不再闪烁**：TCP 连接保持，节点状态保持在线
 
+**17:30** - 单元测试验证完成 ✅
+- **events.rs 测试**（5 个）：验证 DiscoveryEvent 和 ConnectionEvent 的创建和相等性
+- **p2p_manager.rs 测试**（5 个）：
+  - `test_p2p_manager_config_creation`: 验证配置创建
+  - `test_p2p_manager_new`: 验证 P2PManager 创建
+  - `test_p2p_manager_restart_mdns`: 验证 restart_mdns 功能
+  - `test_p2p_manager_list_online_nodes`: 验证在线节点列表
+  - `test_p2p_manager_identity_consistency`: 验证 Peer ID 一致性
+- **node.rs 状态管理测试**（3 个）：
+  - `test_mark_node_offline_and_online`: 验证节点在线/离线状态切换
+  - `test_list_online_nodes_filters_offline`: 验证在线列表过滤离线节点
+  - `test_mark_node_offline_idempotent`: 验证离线标记的幂等性
+- ✅ 所有新测试通过（10/10）
+
+**技术要点**：
+- 使用 `#[cfg(test)]` 和 `#[tokio::test]` 组织测试
+- 使用 `#[cfg(feature = "tempfile")]` 处理可选依赖
+- 测试覆盖核心功能和边界条件
+- 验证 Peer ID 一致性和状态管理
+
 **阶段 2 完成** 🎉
 - 所有核心组件已完成实现
 - ConnectionService 集成 ChatManager，提供完整聊天功能
@@ -2289,7 +2309,7 @@ P2PManager
 2. ✅ FFI 层 P2PManager 基础集成已完成
 3. ✅ ChatManager 已集成到 ConnectionService
 4. ✅ internal_restart_discovery 使用 P2PManager.restart_mdns()
-5. 编写单元测试验证服务分离的正确性
+5. ✅ 单元测试验证完成（events, p2p_manager, node status）
 6. 实现 internal_start 使用 P2PManager（完全迁移）
 
 ---

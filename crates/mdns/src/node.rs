@@ -335,21 +335,29 @@ impl NodeManager {
     ) -> bool {
         let mut nodes = self.nodes.write().await;
         if let Some(node) = nodes.get_mut(peer_id) {
+            // 只在节点从在线变为离线时返回 true
+            let was_online = matches!(node.status, NodeStatus::Online);
+
             node.status = NodeStatus::Offline;
             node.offline_reason = Some(reason.to_string());
             node.offline_since = Some(Instant::now());
+
             let display_name = if let Some(ref name) = node.name {
                 name.clone()
             } else {
                 peer_id.to_string()
             };
-            tracing::info!(
-                "节点 {} 已标记为离线: {} (原因: {})",
-                display_name,
-                peer_id,
-                reason
-            );
-            true
+
+            if was_online {
+                tracing::info!(
+                    "节点 {} 已标记为离线: {} (原因: {})",
+                    display_name,
+                    peer_id,
+                    reason
+                );
+            }
+
+            was_online
         } else {
             false
         }
@@ -568,5 +576,109 @@ mod tests {
         node.last_seen = Instant::now() - Duration::from_secs(100);
 
         assert!(node.is_timeout(Duration::from_secs(10)));
+    }
+
+    #[tokio::test]
+    async fn test_mark_node_offline_and_online() {
+        let peer_id = PeerId::random();
+        let config = NodeManagerConfig::default();
+        let manager = NodeManager::new(config);
+
+        // 添加节点
+        let node = VerifiedNode::new(
+            peer_id,
+            vec![],
+            "/localp2p/1.0.0".to_string(),
+            "localp2p-rust/1.0.0".to_string(),
+        );
+
+        manager.add_or_update_node(node).await;
+        assert!(manager.is_node_verified(&peer_id).await);
+
+        // 标记为离线
+        let marked = manager.mark_node_offline(&peer_id, "测试离线").await;
+        assert!(marked);
+
+        // 验证节点仍然存在
+        assert!(manager.is_node_verified(&peer_id).await);
+
+        // 检查节点状态为离线
+        let all_nodes = manager.list_all_nodes().await;
+        let node = &all_nodes[0];
+        assert_eq!(node.status, NodeStatus::Offline);
+        assert_eq!(node.offline_reason.as_ref().unwrap(), "测试离线");
+
+        // 标记为在线
+        manager.mark_node_online(&peer_id).await;
+
+        // 检查节点状态恢复为在线
+        let all_nodes = manager.list_all_nodes().await;
+        let node = &all_nodes[0];
+        assert_eq!(node.status, NodeStatus::Online);
+        assert!(node.offline_since.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_list_online_nodes_filters_offline() {
+        let peer_id1 = PeerId::random();
+        let peer_id2 = PeerId::random();
+        let config = NodeManagerConfig::default();
+        let manager = NodeManager::new(config);
+
+        // 添加两个节点
+        let node1 = VerifiedNode::new(
+            peer_id1,
+            vec![],
+            "/localp2p/1.0.0".to_string(),
+            "localp2p-rust/1.0.0".to_string(),
+        );
+
+        let node2 = VerifiedNode::new(
+            peer_id2,
+            vec![],
+            "/localp2p/1.0.0".to_string(),
+            "localp2p-rust/1.0.0".to_string(),
+        );
+
+        manager.add_or_update_node(node1).await;
+        manager.add_or_update_node(node2).await;
+
+        // 两个节点都应该在线
+        let online_nodes = manager.list_online_nodes().await;
+        assert_eq!(online_nodes.len(), 2);
+
+        // 将一个节点标记为离线
+        manager.mark_node_offline(&peer_id1, "测试").await;
+
+        // 在线节点列表应该只包含一个节点
+        let online_nodes = manager.list_online_nodes().await;
+        assert_eq!(online_nodes.len(), 1);
+        assert_eq!(online_nodes[0].peer_id, peer_id2);
+
+        // 所有节点列表应该包含两个节点
+        let all_nodes = manager.list_all_nodes().await;
+        assert_eq!(all_nodes.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_mark_node_offline_idempotent() {
+        let peer_id = PeerId::random();
+        let config = NodeManagerConfig::default();
+        let manager = NodeManager::new(config);
+
+        // 添加节点
+        let node = VerifiedNode::new(
+            peer_id,
+            vec![],
+            "/localp2p/1.0.0".to_string(),
+            "localp2p-rust/1.0.0".to_string(),
+        );
+
+        manager.add_or_update_node(node).await;
+
+        // 多次标记为离线应该返回 false（第一次除外）
+        assert!(manager.mark_node_offline(&peer_id, "第一次").await);
+        assert!(!manager.mark_node_offline(&peer_id, "第二次").await);
+        assert!(!manager.mark_node_offline(&peer_id, "第三次").await);
     }
 }

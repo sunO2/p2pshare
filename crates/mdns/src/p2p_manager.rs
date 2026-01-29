@@ -302,3 +302,113 @@ impl P2PManager {
         self.identity.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p::identity::Keypair;
+
+    #[tokio::test]
+    async fn test_p2p_manager_config_creation() {
+        let identity = Keypair::generate_ed25519();
+        let user_info = UserInfo::new("测试设备".to_string());
+        let node_config = NodeManagerConfig::new();
+
+        let config = P2PManagerConfig::new()
+            .with_identity(identity.clone())
+            .with_node_manager_config(node_config)
+            .with_local_user_info(user_info);
+
+        // 验证配置创建成功
+        assert!(config.identity.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_p2p_manager_new() {
+        let identity = Keypair::generate_ed25519();
+        let user_info = UserInfo::new("测试设备".to_string());
+        let node_config = NodeManagerConfig::new();
+        let connection_config = ConnectionServiceConfig::default();
+
+        let config = P2PManagerConfig::new()
+            .with_identity(identity)
+            .with_node_manager_config(node_config)
+            .with_local_user_info(user_info)
+            .with_connection_config(connection_config);
+
+        let result = P2PManager::new(config).await;
+
+        // 验证 P2PManager 创建成功
+        assert!(result.is_ok());
+        let manager = result.unwrap();
+        // Peer ID 字符串长度通常是 46 或 52（取决于编码）
+        assert!(manager.local_peer_id_string().len() >= 46);
+    }
+
+    #[tokio::test]
+    async fn test_p2p_manager_restart_mdns() {
+        let identity = Keypair::generate_ed25519();
+        let user_info = UserInfo::new("测试设备".to_string());
+        let node_config = NodeManagerConfig::new();
+        let connection_config = ConnectionServiceConfig::default();
+
+        let config = P2PManagerConfig::new()
+            .with_identity(identity)
+            .with_node_manager_config(node_config)
+            .with_local_user_info(user_info)
+            .with_connection_config(connection_config);
+
+        let mut manager = P2PManager::new(config).await.unwrap();
+
+        // 验证 restart_mdns 不会报错
+        let result = manager.restart_mdns().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_p2p_manager_list_online_nodes() {
+        let identity = Keypair::generate_ed25519();
+        let user_info = UserInfo::new("测试设备".to_string());
+        let node_config = NodeManagerConfig::new();
+        let connection_config = ConnectionServiceConfig::default();
+
+        let config = P2PManagerConfig::new()
+            .with_identity(identity)
+            .with_node_manager_config(node_config)
+            .with_local_user_info(user_info)
+            .with_connection_config(connection_config);
+
+        let manager = P2PManager::new(config).await.unwrap();
+
+        // 验证初始状态下在线节点列表为空
+        let online_nodes = manager.list_online_nodes().await;
+        assert!(online_nodes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_p2p_manager_identity_consistency() {
+        let identity = Keypair::generate_ed25519();
+        let peer_id1 = identity.public().to_peer_id();
+
+        let user_info = UserInfo::new("测试设备".to_string());
+        let node_config = NodeManagerConfig::new();
+        let connection_config = ConnectionServiceConfig::default();
+
+        let config = P2PManagerConfig::new()
+            .with_identity(identity.clone())
+            .with_node_manager_config(node_config)
+            .with_local_user_info(user_info)
+            .with_connection_config(connection_config);
+
+        let manager = P2PManager::new(config).await.unwrap();
+
+        // 验证 Peer ID 一致性
+        let peer_id2 = *manager.local_peer_id();
+        assert_eq!(peer_id1, peer_id2);
+
+        // 验证 identity_clone 能产生相同的 Peer ID
+        let identity2 = manager.identity_clone();
+        let peer_id3 = identity2.public().to_peer_id();
+        assert_eq!(peer_id1, peer_id3);
+    }
+}

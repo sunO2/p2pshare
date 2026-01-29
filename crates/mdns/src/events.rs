@@ -33,3 +33,77 @@ pub enum ConnectionEvent {
         reason: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p::{PeerId, Multiaddr};
+
+    #[test]
+    fn test_discovery_event_equality() {
+        let peer_id = PeerId::random();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8000".parse().unwrap();
+
+        let event1 = DiscoveryEvent::Discovered {
+            peer_id,
+            addr: addr.clone(),
+        };
+
+        let event2 = DiscoveryEvent::Discovered {
+            peer_id,
+            addr,
+        };
+
+        assert_eq!(event1, event2);
+    }
+
+    #[test]
+    fn test_discovery_event_expired() {
+        let peer_id = PeerId::random();
+        let event = DiscoveryEvent::Expired { peer_id };
+
+        match event {
+            DiscoveryEvent::Expired { peer_id: pid } => {
+                assert_eq!(pid, peer_id);
+            }
+            _ => panic!("Expected Expired event"),
+        }
+    }
+
+    #[test]
+    fn test_connection_event_connected() {
+        let peer_id = PeerId::random();
+        let event = ConnectionEvent::Connected { peer_id };
+
+        assert_eq!(event, ConnectionEvent::Connected { peer_id });
+    }
+
+    #[test]
+    fn test_connection_event_disconnected() {
+        let peer_id = PeerId::random();
+        let reason = "连接超时".to_string();
+        let event = ConnectionEvent::Disconnected {
+            peer_id,
+            reason: reason.clone(),
+        };
+
+        match event {
+            ConnectionEvent::Disconnected { peer_id: pid, reason: r } => {
+                assert_eq!(pid, peer_id);
+                assert_eq!(r, reason);
+            }
+            _ => panic!("Expected Disconnected event"),
+        }
+    }
+
+    #[test]
+    fn test_connection_event_not_equal() {
+        let peer_id1 = PeerId::random();
+        let peer_id2 = PeerId::random();
+
+        let event1 = ConnectionEvent::Connected { peer_id: peer_id1 };
+        let event2 = ConnectionEvent::Connected { peer_id: peer_id2 };
+
+        assert_ne!(event1, event2);
+    }
+}

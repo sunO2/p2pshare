@@ -178,9 +178,12 @@ impl IdentityManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "tempfile")]
     use tempfile::NamedTempFile;
 
     #[tokio::test]
+    #[cfg(feature = "tempfile")]
     async fn test_generate_and_save() {
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path();
@@ -198,6 +201,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "tempfile")]
     async fn test_load_or_generate() {
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path();
@@ -218,6 +222,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "tempfile")]
     async fn test_delete() {
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path();

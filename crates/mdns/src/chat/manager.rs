@@ -369,14 +369,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_chat_session_send() {
+    async fn test_chat_session_encode_message() {
         let peer_id = PeerId::random();
         let mut session = ChatSession::new(peer_id);
 
         let msg = ChatMessage::text("Test".to_string());
-        let result = session.send(msg.clone()).await;
+        let result = session.encode_message(msg.clone());
 
         assert!(result.is_ok());
+        let encoded = result.unwrap();
+
+        // 验证编码包含长度前缀和数据
+        assert!(encoded.len() >= 4);
+
+        // 验证消息已添加到历史
         let history = session.get_history();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0], msg);
