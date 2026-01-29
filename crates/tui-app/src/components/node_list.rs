@@ -132,9 +132,20 @@ impl NodeListState {
         }
     }
 
-    /// 添加节点
+    /// 添加节点（去重）
     pub fn add_node(&mut self, node: NodeItem) {
-        self.items.push(node);
+        // 检查是否已存在相同 peer_id 的节点
+        if !self.items.iter().any(|n| n.peer_id == node.peer_id) {
+            self.items.push(node);
+        } else {
+            // 已存在，更新现有节点
+            self.update_node(&node.peer_id, |existing| {
+                existing.display_name = node.display_name.clone();
+                existing.device_name = node.device_name.clone();
+                existing.status = node.status;
+                existing.addresses = node.addresses.clone();
+            });
+        }
     }
 
     /// 移除节点

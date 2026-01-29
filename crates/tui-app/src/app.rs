@@ -10,13 +10,11 @@ use libp2p::PeerId;
 use mdns::{
     ManagedDiscovery, ManagedDiscoveryEvent, NodeManager, NodeManagerConfig,
     HealthCheckConfig, UserInfo, ChatExtension, ChatMessage, ChatEvent,
-    IdentityManager,
 };
 use ratatui::{
     backend::CrosstermBackend,
     Terminal,
 };
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -31,10 +29,10 @@ pub struct TuiApp {
     user_info_map: std::collections::HashMap<PeerId, mdns::UserInfo>,
     /// 设备名称
     device_name: String,
-    /// 本地 Peer ID（在 run() 中设置）
+    /// 本地 Peer ID
     local_peer_id: Option<PeerId>,
-    /// 密钥文件路径
-    identity_path: PathBuf,
+    /// 临时密钥对（每次运行随机生成，不保存到文件）
+    identity: Option<libp2p::identity::Keypair>,
     /// 当前选中的 Tab
     current_tab: AppTab,
     /// 聊天面板状态
@@ -46,31 +44,7 @@ pub struct TuiApp {
 }
 
 impl TuiApp {
-    /// 获取密钥文件存储路径
-    fn get_identity_path() -> PathBuf {
-        // 使用 XDG 数据目录规范
-        if let Ok(data_dir) = std::env::var("XDG_DATA_HOME") {
-            let mut path = PathBuf::from(data_dir);
-            path.push("localp2p_tui");
-            path.push("identity.key");
-            return path;
-        }
-
-        // 回退到 ~/.local/share
-        if let Ok(home) = std::env::var("HOME") {
-            let mut path = PathBuf::from(home);
-            path.push(".local");
-            path.push("share");
-            path.push("localp2p_tui");
-            path.push("identity.key");
-            return path;
-        }
-
-        // 最终回退到当前目录
-        PathBuf::from(".localp2p_tui_identity.key")
-    }
-
-    /// 创建新的 TUI 应用
+    /// 创建新的 TUI 应用（使用临时密钥，每个实例有不同的 Peer ID）
     pub async fn new(device_name: String) -> AppResult<Self> {
         // 创建节点管理器配置
         let config = NodeManagerConfig::new()
@@ -84,24 +58,23 @@ impl TuiApp {
         // 启动后台清理任务
         let _cleanup_handle = node_manager.clone().spawn_cleanup_task();
 
-        // 获取密钥文件路径
-        let identity_path = Self::get_identity_path();
+        // ⚠️ TUI 使用临时密钥，不保存到文件
+        // 这样同一台设备的多个 TUI 实例会有不同的 Peer ID，便于测试
+        let identity = libp2p::identity::Keypair::generate_ed25519();
+        let peer_id = identity.public().to_peer_id();
 
-        tracing::info!("TUI 密钥文件路径: {}", identity_path.display());
-
-        // 使用临时 Peer ID 创建 ChatPanelState，稍后在 run() 中更新
-        let temp_peer_id = PeerId::random();
-        let identity_path_clone = identity_path.clone();
+        tracing::info!("TUI 使用临时密钥（不保存到文件），Peer ID: {}", peer_id);
+        tracing::info!("💡 提示：每次运行都会生成新的 Peer ID");
 
         Ok(Self {
             node_manager,
             node_list_state: NodeListState::default(),
             user_info_map: std::collections::HashMap::new(),
             device_name,
-            local_peer_id: Some(temp_peer_id),
-            identity_path: identity_path_clone,
+            local_peer_id: Some(peer_id),
+            identity: Some(identity),
             current_tab: AppTab::Panel1,
-            chat_panel_state: ChatPanelState::new(temp_peer_id),
+            chat_panel_state: ChatPanelState::new(peer_id),
             cmd_tx: None,
             running: true,
         })
@@ -111,23 +84,8 @@ impl TuiApp {
     pub async fn run(&mut self) -> AppResult<()> {
         use crossterm::event::EventStream;
 
-        // 加载或生成持久化密钥对
-        let _identity = match IdentityManager::load_or_generate(&self.identity_path) {
-            Ok(keypair) => {
-                let peer_id = keypair.public().to_peer_id();
-                tracing::info!("使用持久化密钥对，Peer ID: {}", peer_id);
-                self.local_peer_id = Some(peer_id);
-
-                // 更新 ChatPanelState 的 Peer ID
-                self.chat_panel_state = ChatPanelState::new(peer_id);
-
-                Some(keypair)
-            }
-            Err(e) => {
-                tracing::warn!("加载密钥对失败，将生成临时密钥: {}", e);
-                None
-            }
-        };
+        // ⚠️ TUI 使用在 new() 中生成的临时密钥
+        // 不再从文件加载密钥对
 
         // 启用原始模式
         crossterm::terminal::enable_raw_mode()?;
@@ -155,22 +113,16 @@ impl TuiApp {
         let discovery_tx = event_tx.clone();
         let node_manager = self.node_manager.clone();
         let device_name = self.device_name.clone();
-        let identity_path = self.identity_path.clone();
+
+        // ⚠️ 使用主线程中生成的临时密钥
+        let identity = self.identity.clone().unwrap_or_else(|| {
+            tracing::error!("密钥未初始化，生成新的临时密钥");
+            libp2p::identity::Keypair::generate_ed25519()
+        });
+
+        tracing::info!("后台任务使用临时密钥对，Peer ID: {}", identity.public().to_peer_id());
 
         tokio::spawn(async move {
-            // 加载或生成持久化密钥对（在后台任务中也使用相同的密钥）
-            let identity = match IdentityManager::load_or_generate(&identity_path) {
-                Ok(keypair) => {
-                    let peer_id = keypair.public().to_peer_id();
-                    tracing::info!("后台任务使用持久化密钥对，Peer ID: {}", peer_id);
-                    Some(keypair)
-                }
-                Err(e) => {
-                    tracing::warn!("后台任务加载密钥对失败: {}", e);
-                    None
-                }
-            };
-
             // 创建用户信息
             let user_info = UserInfo::new(device_name.clone())
                 .with_status("在线".to_string());
@@ -182,13 +134,13 @@ impl TuiApp {
 
             let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
 
-            // 使用持久化密钥对创建发现器
+            // 使用临时密钥对创建发现器
             let discovery = ManagedDiscovery::new(
                 node_manager,
                 listen_addresses,
                 health_config,
                 user_info,
-                identity,  // 传入密钥对
+                Some(identity),  // 传入临时密钥对
             ).await;
 
             if let Err(err) = &discovery {
