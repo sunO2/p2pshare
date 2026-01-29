@@ -310,6 +310,10 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
 }
 
 /// 内部启动函数（供 FRB 调用）
+///
+/// ⭐ 渐进式迁移策略：
+/// 1. 优先使用 P2PManager 的 ManagedDiscovery（新架构路径）
+/// 2. 如果 P2PManager 不可用，回退到独立的 discovery（旧架构路径）
 pub fn internal_start() -> Result<(), String> {
     unsafe {
         if P2P_INSTANCE.is_none() {
@@ -320,7 +324,18 @@ pub fn internal_start() -> Result<(), String> {
 
         // 启动 discovery 事件循环
         if let Some(resources) = DISCOVERY_RESOURCES.as_mut() {
-            let discovery = resources.discovery.take();
+            // ⭐ 优先尝试从 P2PManager 获取 ManagedDiscovery（新架构）
+            let discovery = if let Some(ref mut p2p_manager) = resources.p2p_manager {
+                tracing::info!("使用 P2PManager 的 ManagedDiscovery 启动服务");
+                send_log_to_flutter("INFO", "ffi", "使用 P2PManager 启动服务".to_string());
+                p2p_manager.take_discovery()
+            } else {
+                // 回退到独立的 discovery（旧架构）
+                tracing::info!("使用独立的 ManagedDiscovery 启动服务（回退模式）");
+                send_log_to_flutter("INFO", "ffi", "回退到旧架构启动服务".to_string());
+                resources.discovery.take()
+            };
+
             let chat_event_rx = resources.chat_event_rx.take();
             let command_rx = resources.command_rx.take();
 

@@ -148,15 +148,23 @@ mod tests {
 
     #[test]
     fn test_chat_event_message_received() {
+        let peer_id = PeerId::random();
+        let msg = ChatMessage::text("Hello".to_string());
         let event = ChatEvent::MessageReceived {
-            from: "12D3KooWABCDEFGHIJKLMNOPQRSTUVWXYZ".parse().unwrap(),
-            message: ChatMessage::text("Hello".to_string()),
+            from: peer_id,
+            message: msg.clone(),
         };
 
         match event {
             ChatEvent::MessageReceived { from, message } => {
-                assert!(from.to_string().starts_with("12D3"));
-                assert_eq!(message, ChatMessage::text("Hello".to_string()));
+                assert!(!from.to_string().is_empty());
+                assert_eq!(message, msg);
+                // 验证消息内容
+                if let ChatMessage::Text(text) = message {
+                    assert_eq!(text.content, "Hello");
+                } else {
+                    panic!("Expected Text message");
+                }
             }
             _ => panic!("Expected MessageReceived event"),
         }
@@ -164,15 +172,16 @@ mod tests {
 
     #[test]
     fn test_chat_event_peer_typing() {
+        let peer_id = PeerId::random();
         let event = ChatEvent::PeerTyping {
-            from: "12D3KooWABCDEFGHIJKLMNOPQRSTUVWXYZ".parse().unwrap(),
+            from: peer_id,
             is_typing: true,
         };
 
         match event {
             ChatEvent::PeerTyping { from, is_typing } => {
                 assert!(is_typing);
-                assert!(from.to_string().starts_with("12D3"));
+                assert!(!from.to_string().is_empty());
             }
             _ => panic!("Expected PeerTyping event"),
         }

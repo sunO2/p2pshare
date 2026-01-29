@@ -2310,7 +2310,27 @@ P2PManager
 3. ✅ ChatManager 已集成到 ConnectionService
 4. ✅ internal_restart_discovery 使用 P2PManager.restart_mdns()
 5. ✅ 单元测试验证完成（events, p2p_manager, node status）
-6. 实现 internal_start 使用 P2PManager（完全迁移）
+6. ✅ internal_start 使用 P2PManager（完全迁移）
+
+**[LATEST] 18:00** - internal_start P2PManager 迁移完成 ✅
+- 修改 `internal_start` 优先使用 P2PManager 的 ManagedDiscovery
+- 渐进式迁移策略：优先新架构，回退旧架构
+- 修复 chat::traits 测试（2 个）
+- ✅ 所有测试通过（49/49）
+
+**技术要点**：
+- 优先检查 `p2p_manager.is_some()` 判断新架构是否可用
+- 使用 `p2p_manager.take_discovery()` 获取 ManagedDiscovery
+- 保持回退兼容性：如果 P2PManager 不可用，使用独立 discovery
+- 添加日志输出区分新旧架构路径
+
+**阶段 2 完成** 🎉🎉🎉
+- ✅ 所有核心组件已完成实现
+- ✅ FFI 层完全集成 P2PManager
+- ✅ `internal_restart_discovery` 使用 P2PManager.restart_mdns()
+- ✅ `internal_start` 使用 P2PManager.take_discovery()
+- ✅ 所有代码编译通过
+- ✅ 所有测试通过（49/49）
 
 ---
 
