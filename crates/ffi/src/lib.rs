@@ -166,7 +166,7 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
             );
 
             let event = bridge::P2PBridgeEvent {
-                event_type: 5, // MessageReceived
+                event_type: 6, // MessageReceived (Flutter 端定义: 6)
                 data,
             };
 
