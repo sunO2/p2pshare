@@ -22,6 +22,7 @@ use super::{
 use libp2p::{identity::Keypair, PeerId, Multiaddr};
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use crate::send_log;  // 使用全局日志回调
 
 /// P2P 管理器配置
 #[derive(Debug, Clone)]
@@ -127,6 +128,9 @@ pub struct P2PManager {
     /// 本地用户信息
     local_user_info: UserInfo,
 
+    /// 监听地址列表
+    listen_addresses: Vec<Multiaddr>,
+
     /// 发现事件发送器（用于服务间通信）
     discovery_tx: mpsc::UnboundedSender<DiscoveryEvent>,
 
@@ -181,7 +185,10 @@ impl P2PManager {
         // 步骤 3: 保存本地用户信息
         let local_user_info = config.local_user_info;
 
-        // 步骤 4: 创建事件通道（服务间通信）
+        // 步骤 4: 保存监听地址
+        let listen_addresses = config.listen_addresses;
+
+        // 步骤 5: 创建事件通道（服务间通信）
         let (discovery_tx, discovery_rx) = mpsc::unbounded_channel();
 
         tracing::info!("✓ P2P 管理器初始化成功");
@@ -191,6 +198,7 @@ impl P2PManager {
             peer_id,
             node_manager,
             local_user_info,
+            listen_addresses,  // ⚠️ 保存监听地址
             discovery_tx,
             discovery_rx: Some(discovery_rx),
             connection_service: None,
@@ -204,17 +212,28 @@ impl P2PManager {
 
     /// 启动 mDNS 服务（服务分离架构）
     pub async fn start_mdns(&mut self) -> Result<(), MdnsError> {
+        tracing::info!("🔍 P2PManager: 正在启动 mDNS 发现服务（服务分离架构）...");
+
         if self.mdns_running {
             return Err(MdnsError::SwarmBuild("mDNS 服务已在运行".to_string()));
         }
 
-        tracing::info!("正在启动 mDNS 发现服务（服务分离架构）...");
+        send_log("INFO", "p2p_manager", "🔍 正在启动 mDNS 发现服务（服务分离架构）...".to_string());
 
-        // 创建 MdnsDiscoveryService
+        // 创建 MdnsDiscoveryService，传递监听地址
+        send_log("INFO", "p2p_manager", format!("📡 传入 {} 个监听地址", self.listen_addresses.len()));
+        for addr in &self.listen_addresses {
+            send_log("DEBUG", "p2p_manager", format!("  地址: {}", addr));
+        }
+
         let mdns_service = MdnsDiscoveryService::new(
             self.identity.clone(),
             self.discovery_tx.clone(),
-        ).map_err(|e| MdnsError::SwarmBuild(format!("创建 mDNS 服务失败: {}", e)))?;
+            self.listen_addresses.clone(),  // ⚠️ 传递监听地址
+        ).map_err(|e| {
+            send_log("ERROR", "p2p_manager", format!("❌ 创建 mDNS 服务失败: {:?}", e));
+            MdnsError::SwarmBuild(format!("创建 mDNS 服务失败: {}", e))
+        })?;
 
         // 启动后台任务（spawn 消费 self）
         let task = mdns_service.spawn();
@@ -222,7 +241,7 @@ impl P2PManager {
         self.mdns_task = Some(task);
         self.mdns_running = true;
 
-        tracing::info!("✓ mDNS 发现服务已启动（服务分离架构）");
+        send_log("INFO", "p2p_manager", "✅ mDNS 发现服务已启动（服务分离架构）".to_string());
         Ok(())
     }
 
@@ -283,19 +302,23 @@ impl P2PManager {
 
     /// 启动所有服务（服务分离架构）
     pub async fn start_all(&mut self) -> Result<(), MdnsError> {
+        tracing::info!("🚀 P2PManager: 正在启动所有服务（服务分离架构）...");
+
         if self.mdns_running || self.connection_running {
             return Err(MdnsError::SwarmBuild("服务已在运行".to_string()));
         }
 
-        tracing::info!("正在启动所有服务（服务分离架构）...");
+        send_log("INFO", "p2p_manager", "🚀 正在启动所有服务（服务分离架构）...".to_string());
 
         // 先启动连接服务（接收者先就绪）
+        send_log("INFO", "p2p_manager", "📊 步骤 1/2: 启动连接服务...".to_string());
         self.start_connection().await?;
 
         // 再启动 mDNS 服务（发送者）
+        send_log("INFO", "p2p_manager", "📡 步骤 2/2: 启动 mDNS 服务...".to_string());
         self.start_mdns().await?;
 
-        tracing::info!("✓ 所有服务已启动（服务分离架构）");
+        send_log("INFO", "p2p_manager", "✅ 所有服务已启动（服务分离架构）".to_string());
         Ok(())
     }
 

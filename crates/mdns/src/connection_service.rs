@@ -3,7 +3,7 @@
 //! 负责与已发现的节点建立连接、验证身份、维护心跳等功能。
 
 use super::{
-    node::{NodeManager, NodeManagerConfig},
+    node::NodeManager,
     user_info, MdnsError, events::DiscoveryEvent,
     chat::{ChatManager, ChatMessage},
 };
@@ -11,7 +11,7 @@ use futures::StreamExt;
 use libp2p::{
     identify, ping, request_response, Swarm, SwarmBuilder,
     identity::{Keypair, PeerId},
-    Multiaddr, swarm::{NetworkBehaviour, ConnectionHandler},
+    Multiaddr, swarm::NetworkBehaviour,
 };
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -111,6 +111,7 @@ impl ConnectionService {
         config: ConnectionServiceConfig,
     ) -> Result<Self, MdnsError> {
         tracing::info!("正在初始化连接服务...");
+        crate::send_log("INFO", "connection_service", "🔗 正在初始化连接服务...".to_string());
 
         let local_peer_id = identity.public().to_peer_id();
         let protocol_version = node_manager.config().expected_protocol_version.clone();
@@ -172,6 +173,7 @@ impl ConnectionService {
         }
 
         tracing::info!("✓ 连接服务初始化成功，Peer ID: {}", local_peer_id);
+        crate::send_log("INFO", "connection_service", format!("✅ 连接服务初始化成功，Peer ID: {}", local_peer_id));
 
         Ok(Self {
             swarm,
@@ -191,9 +193,13 @@ impl ConnectionService {
     /// 连接到指定的节点
     pub async fn connect(&mut self, peer_id: PeerId, addr: Multiaddr) {
         tracing::info!("正在连接到 {} at {}", peer_id, addr);
+        crate::send_log("INFO", "connection_service", format!("🔌 正在连接到 {} at {}", peer_id, addr));
 
         if let Err(e) = self.swarm.dial(addr.clone()) {
             tracing::warn!("无法连接到 {} at {}: {}", peer_id, addr, e);
+            crate::send_log("ERROR", "connection_service", format!("❌ 无法连接到 {} at {}: {}", peer_id, addr, e));
+        } else {
+            crate::send_log("INFO", "connection_service", format!("✓ 已向 {} 发起连接", peer_id));
         }
     }
 
@@ -235,6 +241,7 @@ impl ConnectionService {
             event = self.discovery_rx.recv() => {
                 match event {
                     Some(DiscoveryEvent::Discovered { peer_id, addr }) => {
+                        crate::send_log("INFO", "connection_service", format!("📨 收到发现事件: {} at {}", peer_id, addr));
                         self.connect(peer_id, addr).await;
                     }
                     Some(DiscoveryEvent::Expired { peer_id }) => {
@@ -364,15 +371,39 @@ impl ConnectionService {
     ) -> Result<(), MdnsError> {
         match event {
             // 连接建立
-            libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+            libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
                 tracing::info!("✓ 与 {} 建立新连接", peer_id);
+                crate::send_log("INFO", "connection_service", format!("✓ 与 {} 建立新连接", peer_id));
                 let conn_count = self.active_connections.entry(peer_id).or_insert(0);
                 let is_first_connection = *conn_count == 0;
                 *conn_count += 1;
 
                 if is_first_connection {
-                    tracing::info!("与 {} 建立首个连接，请求用户信息", peer_id);
-                    // 仅在首个连接建立时请求用户信息
+                    // ⚠️ 关键修复：在连接建立时立即添加节点到 NodeManager
+                    // 因为对方可能没有 Identify behaviour（如 MdnsDiscoveryService）
+                    tracing::info!("与 {} 建立首个连接，立即添加节点", peer_id);
+                    crate::send_log("INFO", "connection_service", format!("🆔 与 {} 建立首个连接，立即添加节点", peer_id));
+
+                    // 从 Swarm 获取当前监听的地址列表
+                    let addresses: Vec<Multiaddr> = self.swarm.listeners().cloned().collect();
+
+                    // 创建节点（使用默认协议版本，因为还没有 Identify 信息）
+                    let node = super::VerifiedNode::new(
+                        peer_id,
+                        addresses,
+                        self.node_manager.config().expected_protocol_version.clone(),
+                        "localp2p-unknown".to_string(),  // 未知 agent 版本
+                    );
+
+                    self.node_manager.add_or_update_node(node).await;
+                    crate::send_log("INFO", "connection_service", format!("✅ 节点 {} 已添加到 NodeManager", peer_id));
+
+                    // 标记节点为在线
+                    self.node_manager.mark_node_online(&peer_id).await;
+                    crate::send_log("INFO", "connection_service", format!("✅ 节点 {} 已标记为在线", peer_id));
+
+                    // 请求用户信息（获取设备名称等）
+                    crate::send_log("INFO", "connection_service", format!("📋 向 {} 请求用户信息", peer_id));
                     let _ = self.swarm.behaviour_mut().request_response.send_request(
                         &peer_id,
                         user_info::UserInfoRequest,
@@ -408,6 +439,7 @@ impl ConnectionService {
             libp2p::swarm::SwarmEvent::Behaviour(ConnectionBehaviourEvent::Identify(event)) => {
                 match event {
                     identify::Event::Received { peer_id, info, .. } => {
+                        crate::send_log("INFO", "connection_service", format!("🔍 收到来自 {} 的 Identify 信息", peer_id));
                         // 验证节点信息
                         match self.node_manager.verify_node_info(
                             &info.protocol_version,
@@ -419,6 +451,7 @@ impl ConnectionService {
                                     tracing::debug!("跳过自己: {}", peer_id);
                                 } else {
                                     tracing::info!("✓ 节点 {} 验证通过", peer_id);
+                                    crate::send_log("INFO", "connection_service", format!("✓ 节点 {} 验证通过，添加到管理器", peer_id));
 
                                     // 添加到节点管理器
                                     let addresses = info.listen_addrs.iter().cloned().collect();
@@ -430,9 +463,11 @@ impl ConnectionService {
                                     );
 
                                     self.node_manager.add_or_update_node(node).await;
+                                    crate::send_log("INFO", "connection_service", format!("✅ 节点 {} 已添加到 NodeManager", peer_id));
 
                                     // 标记节点为在线
                                     self.node_manager.mark_node_online(&peer_id).await;
+                                    crate::send_log("INFO", "connection_service", format!("✅ 节点 {} 已标记为在线", peer_id));
 
                                     // 如果还未收到用户信息，请求用户信息
                                     if !self.peer_user_info.contains_key(&peer_id) {
@@ -445,10 +480,19 @@ impl ConnectionService {
                             }
                             Err(e) => {
                                 tracing::warn!("节点 {} 验证失败: {}", peer_id, e);
+                                crate::send_log("WARN", "connection_service", format!("⚠️ 节点 {} 验证失败: {}", peer_id, e));
                             }
                         }
                     }
-                    _ => {}
+                    identify::Event::Sent { .. } => {
+                        crate::send_log("DEBUG", "connection_service", "📤 Identify 信息已发送".to_string());
+                    }
+                    identify::Event::Error { peer_id, error, .. } => {
+                        crate::send_log("ERROR", "connection_service", format!("❌ Identify 错误: peer={}, error={:?}", peer_id, error));
+                    }
+                    _ => {
+                        crate::send_log("TRACE", "connection_service", format!("🔄 其他 Identify 事件: {:?}", event));
+                    }
                 }
             }
 
@@ -476,6 +520,7 @@ impl ConnectionService {
                                 request: _,
                             } => {
                                 tracing::debug!("收到来自 {} 的用户信息请求", peer);
+                                crate::send_log("INFO", "connection_service", format!("📥 收到来自 {} 的用户信息请求", peer));
 
                                 // 响应用户信息请求
                                 let response = user_info::UserInfoResponse {
@@ -490,12 +535,14 @@ impl ConnectionService {
                                     channel,
                                     response,
                                 );
+                                crate::send_log("INFO", "connection_service", format!("📤 已向 {} 发送用户信息响应", peer));
                             }
                             request_response::Message::Response {
                                 request_id: _,
                                 response,
                             } => {
                                 tracing::info!("✓ 收到来自 {} 的用户信息: {:?}", peer, response.device_name);
+                                crate::send_log("INFO", "connection_service", format!("✅ 收到来自 {} 的用户信息: {}", peer, response.device_name));
                                 // 保存用户信息
                                 self.peer_user_info.insert(peer, user_info::UserInfo {
                                     device_name: response.device_name,
@@ -548,7 +595,15 @@ impl ConnectionService {
                 }
             }
 
-            _ => {}
+            _ => {
+                // 记录未被处理的事件（帮助调试）
+                if !matches!(event,
+                    libp2p::swarm::SwarmEvent::NewListenAddr { .. }
+                    | libp2p::swarm::SwarmEvent::ExpiredListenAddr { .. }
+                ) {
+                    crate::send_log("TRACE", "connection_service", "🔄 其他 Swarm 事件（已忽略）".to_string());
+                }
+            }
         }
         Ok(())
     }

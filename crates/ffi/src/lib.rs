@@ -16,7 +16,7 @@ use tokio::runtime::Runtime;
 use mdns::{
     NodeManager, NodeManagerConfig,
     HealthCheckConfig, UserInfo, ChatExtension,
-    IdentityManager, P2PManager, P2PManagerConfig,
+    IdentityManager, P2PManager, P2PManagerConfig, set_log_callback, send_log as mdns_send_log,
 };
 
 mod types;
@@ -171,6 +171,12 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
             };
 
             send_event_to_stream(event);
+        });
+
+        // ⚠️ 设置 mdns crate 的日志回调，将 Rust 日志传递到 Flutter
+        mdns::set_log_callback(|level, target, message| {
+            // 将 mdns crate 的日志转发到 Flutter
+            send_log_to_flutter(level, target, message);
         });
     }
 

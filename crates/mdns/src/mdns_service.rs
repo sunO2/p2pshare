@@ -4,11 +4,12 @@
 
 use futures::StreamExt;
 use libp2p::{
-    mdns, identity::Keypair, PeerId, swarm::{Swarm, SwarmEvent}, SwarmBuilder,
+    mdns, identity::Keypair, PeerId, Multiaddr, swarm::{Swarm, SwarmEvent}, SwarmBuilder,
     tcp, noise, yamux,
 };
 use tokio::sync::mpsc;
 use crate::events::DiscoveryEvent;
+use crate::send_log;  // 使用全局日志回调
 
 /// mDNS 发现服务
 ///
@@ -26,15 +27,22 @@ pub struct MdnsDiscoveryService {
 
 impl MdnsDiscoveryService {
     /// 创建新的 mDNS 发现服务
+    ///
+    /// # Arguments
+    /// * `identity` - 身份密钥对
+    /// * `discovery_tx` - 发现事件发送器
+    /// * `listen_addresses` - 监听地址列表
     pub fn new(
         identity: Keypair,
         discovery_tx: mpsc::UnboundedSender<DiscoveryEvent>,
+        listen_addresses: Vec<Multiaddr>,
     ) -> Result<Self, MdnsServiceError> {
-        tracing::info!("正在初始化 mDNS 发现服务...");
+        tracing::info!("🔍 MdnsDiscoveryService::new() 开始初始化...");
+        send_log("INFO", "mdns_service", "🔍 正在初始化 mDNS 发现服务...".to_string());
 
         // 计算 Peer ID
         let local_peer_id = identity.public().to_peer_id();
-        tracing::info!("mDNS 服务 Peer ID: {}", local_peer_id);
+        send_log("INFO", "mdns_service", format!("📛 mDNS 服务 Peer ID: {}", local_peer_id));
 
         // 创建 mDNS behaviour（在创建之前以避免 Result 嵌套问题）
         let config = mdns::Config::default();
@@ -42,8 +50,10 @@ impl MdnsDiscoveryService {
         let mdns_behaviour = mdns::tokio::Behaviour::new(config, peer)
             .map_err(|e| MdnsServiceError::InitializationFailed(e.to_string()))?;
 
+        send_log("INFO", "mdns_service", "✓ mDNS behaviour 创建成功".to_string());
+
         // 创建 mDNS Swarm（使用 TCP transport）
-        let swarm = SwarmBuilder::with_existing_identity(identity)
+        let mut swarm = SwarmBuilder::with_existing_identity(identity)
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),
@@ -56,7 +66,18 @@ impl MdnsDiscoveryService {
             .with_swarm_config(|c| c)
             .build();
 
-        tracing::info!("✓ mDNS 发现服务初始化成功");
+        send_log("INFO", "mdns_service", "✓ Swarm 创建成功".to_string());
+
+        // ⚠️ 关键修复：开始监听地址，使其他设备能通过 mDNS 发现此服务
+        send_log("INFO", "mdns_service", format!("📍 准备监听 {} 个地址", listen_addresses.len()));
+        for addr in listen_addresses {
+            send_log("DEBUG", "mdns_service", format!("  开始监听: {}", addr));
+            swarm.listen_on(addr)
+                .map_err(|e| MdnsServiceError::InitializationFailed(format!("监听地址失败: {}", e)))?;
+        }
+
+        send_log("INFO", "mdns_service", "✅ mDNS 发现服务初始化成功（已开始监听）".to_string());
+        tracing::info!("✅ MdnsDiscoveryService::new() 初始化成功，返回实例");
 
         Ok(Self {
             swarm,
@@ -68,25 +89,29 @@ impl MdnsDiscoveryService {
     /// 启动服务（返回任务句柄，消费 self）
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            tracing::info!("🔍 mDNS 发现服务已启动");
+            send_log("INFO", "mdns_service", "🚀 mDNS 发现服务已启动（开始事件循环）".to_string());
             self.run().await;
         })
     }
 
     /// 运行 mDNS 事件循环（消费 self）
     async fn run(mut self) {
+        send_log("INFO", "mdns_service", "⭕ mDNS 事件循环开始运行".to_string());
         loop {
             match self.swarm.select_next_some().await {
                 SwarmEvent::Behaviour(event) => {
                     if let Err(e) = self.handle_mdns_event(event).await {
-                        tracing::error!("处理 mDNS 事件失败: {}", e);
+                        send_log("ERROR", "mdns_service", format!("❌ 处理 mDNS 事件失败: {}", e));
                     }
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    tracing::debug!("mDNS 服务监听地址: {}", address);
+                    send_log("INFO", "mdns_service", format!("🎉 mDNS 服务监听地址已就绪: {}", address));
+                }
+                SwarmEvent::ExpiredListenAddr { address, .. } => {
+                    send_log("WARN", "mdns_service", format!("⚠️ 监听地址已过期: {}", address));
                 }
                 _ => {
-                    tracing::trace!("mDNS 服务收到其他 Swarm 事件");
+                    send_log("TRACE", "mdns_service", "📨 mDNS 服务收到其他 Swarm 事件".to_string());
                 }
             }
         }
@@ -99,14 +124,16 @@ impl MdnsDiscoveryService {
     ) -> Result<(), MdnsServiceError> {
         match event {
             mdns::Event::Discovered(list) => {
+                send_log("INFO", "mdns_service", format!("🔍 mDNS 发现 {} 个设备", list.len()));
                 for (peer_id, addr) in list {
-                    tracing::info!("🔍 mDNS 发现设备: {} at {}", peer_id, addr);
+                    send_log("INFO", "mdns_service", format!("  ➕ 发现: {} at {}", peer_id, addr));
                     let _ = self.discovery_tx.send(DiscoveryEvent::Discovered { peer_id, addr });
                 }
             }
             mdns::Event::Expired(list) => {
+                send_log("DEBUG", "mdns_service", format!("⏰ mDNS {} 个设备记录过期", list.len()));
                 for (peer_id, _addr) in list {
-                    tracing::debug!("🔍 mDNS 设备过期: {}", peer_id);
+                    send_log("DEBUG", "mdns_service", format!("  ➖ 过期: {}", peer_id));
                     let _ = self.discovery_tx.send(DiscoveryEvent::Expired { peer_id });
                 }
             }
@@ -140,9 +167,10 @@ mod tests {
         // 创建测试用 identity 和事件通道
         let identity = Keypair::generate_ed25519();
         let (discovery_tx, _discovery_rx) = mpsc::unbounded_channel();
+        let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
 
         // 创建 mDNS 服务
-        let result = MdnsDiscoveryService::new(identity, discovery_tx);
+        let result = MdnsDiscoveryService::new(identity, discovery_tx, listen_addresses);
 
         // 验证创建成功
         assert!(result.is_ok(), "mDNS 服务创建应该成功");
@@ -161,9 +189,10 @@ mod tests {
         // 创建测试用 identity 和事件通道
         let identity = Keypair::generate_ed25519();
         let (discovery_tx, _discovery_rx) = mpsc::unbounded_channel();
+        let listen_addresses = vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()];
 
         // 创建 mDNS 服务
-        let service = MdnsDiscoveryService::new(identity, discovery_tx).unwrap();
+        let service = MdnsDiscoveryService::new(identity, discovery_tx, listen_addresses).unwrap();
 
         // 启动服务（返回任务句柄）
         let task = service.spawn();

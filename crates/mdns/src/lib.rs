@@ -4,6 +4,30 @@
 
 use thiserror::Error;
 
+/// 全局日志回调函数类型
+/// 参数：(level, target, message)
+pub type LogCallback = fn(&'static str, &'static str, String);
+
+/// 全局日志回调（由 FFI 层设置）
+static mut LOG_CALLBACK: Option<LogCallback> = None;
+
+/// 设置全局日志回调
+///
+/// # Safety
+/// 此函数应在初始化时调用一次
+pub unsafe fn set_log_callback(callback: LogCallback) {
+    LOG_CALLBACK = Some(callback);
+}
+
+/// 发送日志到回调（如果已设置）
+pub fn send_log(level: &'static str, target: &'static str, message: String) {
+    unsafe {
+        if let Some(callback) = LOG_CALLBACK {
+            callback(level, target, message);
+        }
+    }
+}
+
 pub mod config;
 pub mod discovery;
 pub mod publisher;

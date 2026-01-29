@@ -271,10 +271,12 @@ class P2PManager {
     }
 
     try {
+      // ⚠️ 关键修复：先订阅事件流，再调用 start()
+      // 这样才能收到 start() 执行期间的日志
+      _startEventStream();
+
       RustLib.instance.api.localp2PFfiBridgeP2PStart();
       _log.rustReturn('start', result: 'started');
-      // 启动事件 Stream 订阅（推荐方式）
-      _startEventStream();
       _log.performance('start', stopwatch.elapsed);
     } catch (e, stackTrace) {
       _log.rustError('localp2PFfiBridgeP2PStart', e, stackTrace);
