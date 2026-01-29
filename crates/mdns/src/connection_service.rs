@@ -286,12 +286,42 @@ impl ConnectionService {
                 }
             }
 
+            // 定时检查并发送待发送的聊天消息
+            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
+                self.process_pending_chat_messages().await?;
+            }
+
             // 处理 Swarm 事件
             event = self.swarm.select_next_some() => {
                 self.handle_swarm_event(event).await?;
             }
         }
         Ok(true)
+    }
+
+    /// 处理待发送的聊天消息
+    async fn process_pending_chat_messages(&mut self) -> Result<(), MdnsError> {
+        if let Some(ref chat_manager) = self.chat_manager {
+            // 获取所有有活跃连接的节点
+            let connected_peers: Vec<_> = self.active_connections
+                .keys()
+                .cloned()
+                .collect();
+
+            for peer_id in connected_peers {
+                // 检查是否有待发送的消息
+                if let Some(chat_message) = chat_manager.get_pending_chat_message(&peer_id).await {
+                    tracing::debug!("发送待发送消息给 {}", peer_id);
+
+                    // 通过 Swarm 发送消息（ChatRequest 就是 ChatMessage）
+                    let _ = self.swarm.behaviour_mut().chat.send_request(
+                        &peer_id,
+                        chat_message,
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     /// 运行连接服务

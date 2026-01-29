@@ -172,6 +172,17 @@ impl ChatManager {
         None
     }
 
+    /// 获取待发送的 ChatMessage（用于通过 request_response 发送）
+    ///
+    /// 此方法会自动从待发送队列中移除消息
+    pub async fn get_pending_chat_message(&self, peer_id: &PeerId) -> Option<ChatMessage> {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.get_mut(peer_id) {
+            return session.dequeue_message();
+        }
+        None
+    }
+
     /// 获取待发送消息数量
     pub async fn pending_message_count(&self, peer_id: &PeerId) -> usize {
         let sessions = self.sessions.read().await;
