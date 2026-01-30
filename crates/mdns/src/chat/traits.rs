@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// # 示例
 ///
 /// ```no_run
-/// use mdns::{ManagedDiscovery, ChatExtension};
+/// use mdns::{ManagedDiscovery, ChatExtension, chat::ChatMessage};
 ///
 /// # async fn example(mut discovery: ManagedDiscovery) -> Result<(), Box<dyn std::error::Error>> {
 /// // 启用聊天功能
@@ -23,7 +23,7 @@ use std::sync::Arc;
 /// // 发送消息
 /// let peer_id = "12D3KooW...".parse()?;
 /// let message = ChatMessage::text("Hello!".to_string());
-/// discovery.send_message(peer_id, message).await?;
+/// discovery.send_message(peer_id, message.clone()).await?;
 ///
 /// // 广播消息（一对多）
 /// let targets = vec![peer_id];

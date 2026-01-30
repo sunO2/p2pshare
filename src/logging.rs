@@ -15,7 +15,7 @@ use std::path::PathBuf;
 const LOG_FILE_PREFIX: &str = "localp2p";
 
 /// 日志级别
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)]
 pub enum LogLevel {
     Trace,

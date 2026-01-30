@@ -8,26 +8,40 @@ use std::env;
 
 mod logging;
 
+/// 架构类型
+enum Architecture {
+    Old,  // 旧架构：ManagedDiscovery（单 Swarm）
+    New,  // 新架构：P2PManager（服务分离）
+}
+
 /// CLI 参数配置
 struct CliArgs {
     device_name: String,
     tui_mode: bool,
+    architecture: Architecture,
 }
 
 fn print_usage(program_name: &str) {
     println!("用法: {} <设备名称> [选项]", program_name);
     println!();
     println!("参数:");
-    println!("  设备名称    本设备的显示名称");
+    println!("  设备名称      本设备的显示名称");
     println!();
     println!("选项:");
-    println!("  --tui, -t   启用 TUI 图形界面模式");
-    println!("  --help, -h  显示帮助信息");
+    println!("  --tui, -t     启用 TUI 图形界面模式");
+    println!("  --arch <类型> 选择架构类型: old（旧架构）或 new（新架构）");
+    println!("                默认: old（旧架构）");
+    println!("  --help, -h    显示帮助信息");
+    println!();
+    println!("架构说明:");
+    println!("  old (旧架构)  使用 ManagedDiscovery（单 Swarm，集成 mDNS + 连接）");
+    println!("  new (新架构)  使用 P2PManager（服务分离，mDNS 和连接独立）");
     println!();
     println!("示例:");
-    println!("  {} \"我的电脑\"              # 控制台模式", program_name);
-    println!("  {} \"客厅电视\" --tui         # TUI 模式", program_name);
-    println!("  {} \"卧室NAS\" -t            # TUI 模式（简写）", program_name);
+    println!("  {} \"我的电脑\"                    # 控制台模式（旧架构）", program_name);
+    println!("  {} \"客厅电视\" --tui               # TUI 模式（旧架构）", program_name);
+    println!("  {} \"卧室NAS\" -t --arch new        # TUI 模式（新架构）", program_name);
+    println!("  {} \"我的电脑\" --tui --arch=old    # TUI 模式（旧架构，显式指定）", program_name);
 }
 
 fn parse_args() -> CliArgs {
@@ -42,11 +56,46 @@ fn parse_args() -> CliArgs {
     // 检查是否启用 TUI 模式
     let tui_mode = args.iter().any(|a| a == "--tui" || a == "-t");
 
+    // 解析架构参数
+    let mut architecture = Architecture::Old;  // 默认使用旧架构
+    for arg in &args {
+        if arg.starts_with("--arch=") {
+            let value = arg.split('=').nth(1).unwrap_or("");
+            architecture = match value.to_lowercase().as_str() {
+                "new" => Architecture::New,
+                "old" => Architecture::Old,
+                _ => {
+                    eprintln!("错误: 未知的架构类型 '{}'", value);
+                    eprintln!("支持的架构: old, new");
+                    std::process::exit(1);
+                }
+            };
+        } else if arg == "--arch" {
+            // 查找下一个参数作为值
+            if let Some(pos) = args.iter().position(|a| a == arg) {
+                if pos + 1 < args.len() {
+                    let value = &args[pos + 1];
+                    if !value.starts_with('-') {
+                        architecture = match value.to_lowercase().as_str() {
+                            "new" => Architecture::New,
+                            "old" => Architecture::Old,
+                            _ => {
+                                eprintln!("错误: 未知的架构类型 '{}'", value);
+                                eprintln!("支持的架构: old, new");
+                                std::process::exit(1);
+                            }
+                        };
+                    }
+                }
+            }
+        }
+    }
+
     // 获取设备名称（第一个非选项参数）
     let device_name = args
         .iter()
         .skip(1)
-        .find(|a| !a.starts_with('-'))
+        .find(|a| !a.starts_with('-') && *a != "old" && *a != "new")
         .cloned()
         .unwrap_or_else(|| {
         print_usage(&args[0]);
@@ -56,6 +105,7 @@ fn parse_args() -> CliArgs {
     CliArgs {
         device_name,
         tui_mode,
+        architecture,
     }
 }
 
@@ -214,10 +264,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 根据参数选择运行模式
     if args.tui_mode {
-        // TUI 模式
-        tui_app::run_tui(args.device_name).await?;
+        // TUI 模式 - 根据架构选择运行方式
+        match args.architecture {
+            Architecture::New => {
+                tracing::info!("使用新架构（P2PManager 服务分离）");
+                tui_app::run_tui_new(args.device_name).await?;
+            }
+            Architecture::Old => {
+                tracing::info!("使用旧架构（ManagedDiscovery 单 Swarm）");
+                tui_app::run_tui(args.device_name).await?;
+            }
+        }
     } else {
-        // 控制台模式（原有功能） 
+        // 控制台模式（原有功能）
         run_console_mode(args.device_name).await?;
     }
 

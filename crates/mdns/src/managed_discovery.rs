@@ -1,12 +1,15 @@
 //! 管理式服务发现模块
 //!
-//! 集成 mDNS 发现、identify 验证、用户信息交换和 ping 心跳，自动管理验证通过的节点。
+//! 集成 identify 验证、用户信息交换和 ping 心跳，自动管理验证通过的节点。
+//!
+//! ⚠️ 注意：此模块不再包含 mDNS 发现功能。
+//! mDNS 功能已迁移到 `mdns_discovery` 模块（基于 libmdns）。
 
 use super::{node::{NodeManager, VerifiedNode}, user_info, MdnsError};
 use super::chat::{ChatExtension, ChatManager, ChatMessage, ChatError};
 use futures::StreamExt;
 use libp2p::{
-    identify, mdns, ping, request_response, Swarm, SwarmBuilder, identity::Keypair, Multiaddr, PeerId,
+    identify, ping, request_response, Swarm, SwarmBuilder, identity::Keypair, Multiaddr, PeerId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -102,13 +105,15 @@ impl Default for HealthCheckConfig {
 
 /// 管理式服务发现器
 ///
-/// 通过 mDNS 发现节点，使用 identify 协议验证，交换用户信息，验证通过后添加到节点管理器。
+/// 使用 identify 协议验证，交换用户信息，验证通过后添加到节点管理器。
+///
+/// ⚠️ 注意：mDNS 发现功能已迁移到 `mdns_discovery` 模块。
+/// 此模块负责连接、验证、心跳和用户信息交换。
 ///
 /// ## 组合 Behaviour 说明
 ///
 /// libp2p 0.56 使用 `#[derive(NetworkBehaviour)]` 宏组合多个 behaviour。
 /// 这里我们组合了：
-/// - `mdns`: 用于局域网内节点发现
 /// - `identify`: 用于节点身份验证和信息交换
 /// - `request_response`: 用于用户信息交换（自定义协议）
 /// - `ping`: 用于心跳检测（自动发送）
@@ -130,12 +135,11 @@ pub struct ManagedDiscovery {
     chat_event_rx: Option<mpsc::UnboundedReceiver<super::chat::ChatEvent>>,
 }
 
-/// 组合的 Behaviour，包含 mDNS、identify、ping 和 request_response
+/// 组合的 Behaviour，包含 identify、ping 和 request_response
 ///
 /// 使用 libp2p 的 `#[derive(NetworkBehaviour)]` 宏组合多个 behaviour
 #[derive(libp2p::swarm::NetworkBehaviour)]
 struct ManagedBehaviour {
-    mdns: mdns::tokio::Behaviour,
     identify: identify::Behaviour,
     ping: ping::Behaviour,
     request_response: request_response::Behaviour<user_info::UserInfoCodec>,
@@ -185,11 +189,6 @@ impl ManagedDiscovery {
                 MdnsError::SwarmBuild(format!("TCP: {}", e))
             })?
             .with_behaviour(|_key| {
-                let mdns = mdns::tokio::Behaviour::new(
-                    mdns::Config::default(),
-                    _key.public().into()
-                ).expect("mdns behaviour creation failed");
-
                 let identify = identify::Behaviour::new(
                     identify::Config::new(protocol_version.clone(), _key.public())
                         .with_agent_version(agent_version.clone())
@@ -210,7 +209,7 @@ impl ManagedDiscovery {
                     request_response::Config::default(),
                 );
 
-                Ok(ManagedBehaviour { mdns, identify, ping, request_response, chat })
+                Ok(ManagedBehaviour { identify, ping, request_response, chat })
             })
             .map_err(|e| {
                 tracing::error!("Behaviour build failed: {:?}", e);
@@ -248,28 +247,6 @@ impl ManagedDiscovery {
     pub async fn run(&mut self) -> std::result::Result<DiscoveryEvent, MdnsError> {
         loop {
             match self.swarm.select_next_some().await {
-                libp2p::swarm::SwarmEvent::Behaviour(ManagedBehaviourEvent::Mdns(event)) => {
-                    match event {
-                        mdns::Event::Discovered(list) => {
-                            for (peer_id, addr) in list {
-                                tracing::info!("通过 mDNS 发现节点: {} at {}", peer_id, addr);
-
-                                // 尝试主动连接该节点以触发 identify 验证
-                                if let Err(e) = self.swarm.dial(addr.clone()) {
-                                    tracing::debug!("无法主动连接节点 {}: {}", peer_id, e);
-                                }
-
-                                return Ok(DiscoveryEvent::Discovered(peer_id, addr));
-                            }
-                        }
-                        mdns::Event::Expired(list) => {
-                            for (peer_id, _addr) in list {
-                                tracing::info!("节点 mDNS 记录过期: {}", peer_id);
-                                return Ok(DiscoveryEvent::Expired(peer_id));
-                            }
-                        }
-                    }
-                }
                 libp2p::swarm::SwarmEvent::Behaviour(ManagedBehaviourEvent::Identify(event)) => {
                     match event {
                         identify::Event::Received { peer_id, info, .. } => {

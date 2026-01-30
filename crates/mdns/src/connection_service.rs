@@ -19,14 +19,17 @@ use tokio::sync::mpsc;
 
 /// 全局聊天事件回调（可选）
 /// 由 FFI 层设置，用于将聊天事件发送到 Flutter
-static mut CHAT_EVENT_CALLBACK: Option<fn(from: String, content: String)> = None;
+static mut CHAT_EVENT_CALLBACK: Option<Box<dyn Fn(String, String) + Send + Sync>> = None;
 
 /// 设置聊天事件回调
 ///
 /// # Safety
 /// 此函数应在初始化时调用一次
-pub unsafe fn set_chat_event_callback(callback: fn(from: String, content: String)) {
-    CHAT_EVENT_CALLBACK = Some(callback);
+pub unsafe fn set_chat_event_callback<F>(callback: F)
+where
+    F: Fn(String, String) + Send + Sync + 'static,
+{
+    CHAT_EVENT_CALLBACK = Some(Box::new(callback));
 }
 
 /// 连接服务配置
@@ -213,6 +216,11 @@ impl ConnectionService {
         self.local_peer_id
     }
 
+    /// 获取当前监听的地址列表
+    pub fn listeners(&self) -> Vec<Multiaddr> {
+        self.swarm.listeners().cloned().collect()
+    }
+
     /// 获取聊天管理器（用于发送消息）
     pub fn chat_manager(&self) -> Option<&ChatManager> {
         self.chat_manager.as_ref()
@@ -236,32 +244,9 @@ impl ConnectionService {
     /// - Ok(false): 应该退出（通道关闭）
     /// - Err: 发生错误
     pub async fn run_once(&mut self) -> Result<bool, MdnsError> {
-        tokio::select! {
-            // 处理 mDNS 发现事件
-            event = self.discovery_rx.recv() => {
-                match event {
-                    Some(DiscoveryEvent::Discovered { peer_id, addr }) => {
-                        crate::send_log("INFO", "connection_service", format!("📨 收到发现事件: {} at {}", peer_id, addr));
-                        self.connect(peer_id, addr).await;
-                    }
-                    Some(DiscoveryEvent::Expired { peer_id }) => {
-                        tracing::debug!("设备 {} mDNS 记录过期", peer_id);
-                    }
-                    None => {
-                        tracing::warn!("发现事件通道已关闭");
-                        return Ok(false); // 通道关闭，退出
-                    }
-                }
-            }
-
-            // 处理聊天事件
-            Some(event) = async {
-                if let Some(ref mut rx) = self.chat_event_rx {
-                    rx.recv().await
-                } else {
-                    std::future::pending().await
-                }
-            } => {
+        // 先检查聊天事件（非阻塞）
+        if let Some(ref mut rx) = self.chat_event_rx {
+            if let Ok(event) = rx.try_recv() {
                 match event {
                     super::chat::ChatEvent::MessageReceived { from, message } => {
                         if let super::chat::ChatMessage::Text(text) = message {
@@ -271,7 +256,7 @@ impl ConnectionService {
 
                             // 调用全局回调函数（如果已设置）
                             unsafe {
-                                if let Some(callback) = CHAT_EVENT_CALLBACK {
+                                if let Some(callback) = &CHAT_EVENT_CALLBACK {
                                     callback(from_str, content_str);
                                 }
                             }
@@ -289,6 +274,25 @@ impl ConnectionService {
                     _ => {
                         // 其他事件类型暂不处理
                         tracing::trace!("收到其他聊天事件: {:?}", event);
+                    }
+                }
+            }
+        }
+
+        tokio::select! {
+            // 处理 mDNS 发现事件
+            event = self.discovery_rx.recv() => {
+                match event {
+                    Some(DiscoveryEvent::Discovered { peer_id, addr }) => {
+                        crate::send_log("INFO", "connection_service", format!("📨 收到发现事件: {} at {}", peer_id, addr));
+                        self.connect(peer_id, addr).await;
+                    }
+                    Some(DiscoveryEvent::Expired { peer_id }) => {
+                        tracing::debug!("设备 {} mDNS 记录过期", peer_id);
+                    }
+                    None => {
+                        tracing::warn!("发现事件通道已关闭");
+                        return Ok(false); // 通道关闭，退出
                     }
                 }
             }
@@ -488,7 +492,10 @@ impl ConnectionService {
                         crate::send_log("DEBUG", "connection_service", "📤 Identify 信息已发送".to_string());
                     }
                     identify::Event::Error { peer_id, error, .. } => {
-                        crate::send_log("ERROR", "connection_service", format!("❌ Identify 错误: peer={}, error={:?}", peer_id, error));
+                        // 添加详细的错误信息
+                        let error_detail = format!("协议协商失败 - 原因：{}", error);
+                        crate::send_log("ERROR", "connection_service", format!("❌ Identify 错误: peer={}, error={}", peer_id, error_detail));
+                        tracing::error!("❌ Identify 错误: peer={}, error={:?}", peer_id, error);
                     }
                     _ => {
                         crate::send_log("TRACE", "connection_service", format!("🔄 其他 Identify 事件: {:?}", event));
@@ -543,14 +550,18 @@ impl ConnectionService {
                             } => {
                                 tracing::info!("✓ 收到来自 {} 的用户信息: {:?}", peer, response.device_name);
                                 crate::send_log("INFO", "connection_service", format!("✅ 收到来自 {} 的用户信息: {}", peer, response.device_name));
-                                // 保存用户信息
-                                self.peer_user_info.insert(peer, user_info::UserInfo {
-                                    device_name: response.device_name,
-                                    nickname: response.nickname,
-                                    avatar_url: response.avatar_url,
-                                    status: response.status,
-                                    custom_data: response.custom_data,
-                                });
+                                // 保存用户信息到本地 HashMap
+                                let user_info = user_info::UserInfo {
+                                    device_name: response.device_name.clone(),
+                                    nickname: response.nickname.clone(),
+                                    avatar_url: response.avatar_url.clone(),
+                                    status: response.status.clone(),
+                                    custom_data: response.custom_data.clone(),
+                                };
+                                self.peer_user_info.insert(peer, user_info.clone());
+
+                                // ⭐ 同时保存到 NodeManager 的 attributes 中（供 FFI 层读取）
+                                self.node_manager.update_node_user_info(&peer, &user_info).await;
                             }
                         }
                     }
@@ -606,5 +617,25 @@ impl ConnectionService {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connection_service_config_default() {
+        let config = ConnectionServiceConfig::default();
+        assert!(!config.listen_addresses.is_empty());
+        assert_eq!(config.identify_interval, std::time::Duration::from_secs(30));
+        assert_eq!(config.idle_connection_timeout, std::time::Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_connection_service_config_clone() {
+        let config = ConnectionServiceConfig::default();
+        let config2 = config.clone();
+        assert_eq!(config.listen_addresses.len(), config2.listen_addresses.len());
     }
 }

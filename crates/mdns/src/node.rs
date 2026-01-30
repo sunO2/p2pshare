@@ -389,6 +389,29 @@ impl NodeManager {
         }
     }
 
+    /// 更新节点的用户信息（存储在 attributes 中）
+    pub async fn update_node_user_info(
+        &self,
+        peer_id: &PeerId,
+        user_info: &crate::user_info::UserInfo,
+    ) {
+        let mut nodes = self.nodes.write().await;
+        if let Some(node) = nodes.get_mut(peer_id) {
+            // 将用户信息存储到 attributes 中
+            node.attributes.insert("device_name".to_string(), user_info.device_name.clone());
+            if let Some(ref nickname) = user_info.nickname {
+                node.attributes.insert("nickname".to_string(), nickname.clone());
+            }
+            if let Some(ref status) = user_info.status {
+                node.attributes.insert("status".to_string(), status.clone());
+            }
+            if let Some(ref avatar_url) = user_info.avatar_url {
+                node.attributes.insert("avatar_url".to_string(), avatar_url.clone());
+            }
+            tracing::debug!("更新节点 {} 的用户信息: {}", peer_id, user_info.device_name);
+        }
+    }
+
     /// 列出所有节点（包括离线）
     pub async fn list_all_nodes(&self) -> Vec<VerifiedNode> {
         let nodes = self.nodes.read().await;

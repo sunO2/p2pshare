@@ -1,6 +1,13 @@
 //! mDNS 服务发现模块
 //!
-//! 基于 libp2p 的 mDNS 实现，用于局域网内的服务发布和发现。
+//! 基于 mdns-sd 的 mDNS 服务发现实现，用于局域网内的设备发现和连接。
+//!
+//! ## 架构
+//!
+//! - **mdns_discovery**: mDNS 服务发现（使用 mdns-sd 库，同时支持广播和浏览）
+//! - **connection_service**: 连接服务（使用 libp2p Swarm，处理 TCP 连接、Identify、Ping、聊天）
+//! - **managed_discovery**: 管理式发现（兼容层，集成 identify 验证、ping 心跳、用户信息交换）
+//! - **p2p_manager**: P2P 管理器（统一管理 mDNS 发现和连接服务）
 
 use thiserror::Error;
 
@@ -29,25 +36,21 @@ pub fn send_log(level: &'static str, target: &'static str, message: String) {
 }
 
 pub mod config;
-pub mod discovery;
-pub mod publisher;
 pub mod node;
 pub mod managed_discovery;
 pub mod user_info;
 pub mod chat;
 pub mod identity;
 pub mod events;
-pub mod mdns_service;
 pub mod connection_service;
 pub mod p2p_manager;
+pub mod mdns_discovery;
 
 pub use config::{MdnsConfig, ServiceInfo};
-pub use discovery::{MdnsDiscovery, DiscoveredPeer, DiscoveredEvent};
-pub use publisher::MdnsPublisher;
 pub use node::{VerifiedNode, NodeManager, NodeManagerConfig, NodeStatus};
-pub use mdns_service::{MdnsDiscoveryService, MdnsServiceError};
 pub use connection_service::{ConnectionService, ConnectionServiceConfig, set_chat_event_callback};
 pub use p2p_manager::{P2PManager, P2PManagerConfig};
+pub use mdns_discovery::{MdnsServiceDiscovery, MdnsDiscoveryError, DeviceMetadata};
 pub use managed_discovery::{
     ManagedDiscovery,
     DiscoveryEvent as ManagedDiscoveryEvent,

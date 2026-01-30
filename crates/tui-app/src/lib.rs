@@ -7,8 +7,8 @@ pub mod event;
 pub mod ui;
 pub mod components;
 
-pub use app::TuiApp;
+pub use app::{TuiApp, TuiAppNew};
 pub use event::{Event, EventHandler, AppResult};
 
 /// 运行 TUI 应用的便捷函数
-pub use app::run_tui;
+pub use app::{run_tui, run_tui_new};

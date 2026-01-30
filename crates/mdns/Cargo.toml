@@ -7,9 +7,14 @@ edition = "2021"
 path = "src/lib.rs"
 
 [dependencies]
-libp2p = { version = "0.56.0", features = ["mdns", "tokio", "tcp", "noise", "yamux", "identify", "macros", "ping", "request-response", "cbor"] }
+# libp2p 用于连接服务（Identify, Ping, RequestResponse, Chat）
+# 注意：不再使用 libp2p 的 mdns feature
+libp2p = { version = "0.56.0", features = ["tokio", "tcp", "noise", "yamux", "identify", "macros", "ping", "request-response", "cbor"] }
+# mdns-sd 用于 mDNS 服务发现（同时支持广播和浏览）
+mdns-sd = "0.17"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+futures-util = "0.3"
 thiserror = "2.0"
 tracing = "0.1"
 serde = { version = "1.0", features = ["derive"] }

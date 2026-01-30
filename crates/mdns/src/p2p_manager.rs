@@ -12,7 +12,7 @@
 use super::{
     node::{NodeManager, NodeManagerConfig, VerifiedNode},
     user_info::UserInfo,
-    mdns_service::MdnsDiscoveryService,
+    mdns_discovery::MdnsServiceDiscovery,
     connection_service::{ConnectionService, ConnectionServiceConfig},
     managed_discovery::{ManagedDiscovery, HealthCheckConfig},
     chat::traits::ChatExtension,
@@ -210,53 +210,106 @@ impl P2PManager {
         })
     }
 
-    /// 启动 mDNS 服务（服务分离架构）
-    pub async fn start_mdns(&mut self) -> Result<(), MdnsError> {
-        tracing::info!("🔍 P2PManager: 正在启动 mDNS 发现服务（服务分离架构）...");
+    /// 启动 mDNS 服务（使用 libmdns）
+    pub async fn start_mdns(&mut self, external_addresses: Vec<Multiaddr>) -> Result<(), MdnsError> {
+        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+        tracing::info!("║ 🔍 [P2PManager] 启动 libmdns 服务发现");
+        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
 
         if self.mdns_running {
             return Err(MdnsError::SwarmBuild("mDNS 服务已在运行".to_string()));
         }
 
-        send_log("INFO", "p2p_manager", "🔍 正在启动 mDNS 发现服务（服务分离架构）...".to_string());
+        // 从 external_addresses 提取端口和地址
+        let port = external_addresses.first()
+            .and_then(|addr| {
+                addr.iter().find_map(|p| {
+                    if let libp2p::multiaddr::Protocol::Tcp(p) = p {
+                        Some(p)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .ok_or_else(|| MdnsError::SwarmBuild("无法获取监听端口".to_string()))?;
 
-        // 创建 MdnsDiscoveryService，传递监听地址
-        send_log("INFO", "p2p_manager", format!("📡 传入 {} 个监听地址", self.listen_addresses.len()));
-        for addr in &self.listen_addresses {
-            send_log("DEBUG", "p2p_manager", format!("  地址: {}", addr));
-        }
+        // 从 multiaddr 中提取纯 IP 地址（mdns-sd 需要纯 IP 格式）
+        // 例如: /ip4/127.0.0.1/tcp/37831 -> 127.0.0.1
+        let addresses: Vec<String> = external_addresses.iter()
+            .filter_map(|addr| {
+                // 遍历 multiaddr 的协议栈，查找 IP 地址
+                for protocol in addr.iter() {
+                    match protocol {
+                        libp2p::multiaddr::Protocol::Ip4(ipv4) => {
+                            return Some(ipv4.to_string());
+                        }
+                        libp2p::multiaddr::Protocol::Ip6(ipv6) => {
+                            return Some(ipv6.to_string());
+                        }
+                        _ => continue,
+                    }
+                }
+                None
+            })
+            .collect();
 
-        let mdns_service = MdnsDiscoveryService::new(
-            self.identity.clone(),
+        tracing::info!("📝 [mDNS 配置] 端口: {}, 地址: {:?}", port, addresses);
+
+        // 创建 libmdns 服务发现
+        use super::mdns_discovery::MdnsServiceDiscovery;
+        let mut mdns_discovery = MdnsServiceDiscovery::new(
+            self.peer_id.to_string(),
+            self.local_user_info.device_name.clone(),
+            self.node_manager.config().expected_protocol_version.clone(),
             self.discovery_tx.clone(),
-            self.listen_addresses.clone(),  // ⚠️ 传递监听地址
-        ).map_err(|e| {
-            send_log("ERROR", "p2p_manager", format!("❌ 创建 mDNS 服务失败: {:?}", e));
+        ).await.map_err(|e| {
+            tracing::error!("❌ 创建 MdnsServiceDiscovery 失败: {:?}", e);
             MdnsError::SwarmBuild(format!("创建 mDNS 服务失败: {}", e))
         })?;
 
-        // 启动后台任务（spawn 消费 self）
-        let task = mdns_service.spawn();
+        // 注册服务（广播自己的存在）
+        let mut extra_metadata = std::collections::HashMap::new();
+        extra_metadata.insert("agent_version".to_string(), "localp2p/1.0".to_string());
 
+        mdns_discovery.register_service(port, addresses, extra_metadata).map_err(|e| {
+            tracing::error!("❌ 注册 mDNS 服务失败: {:?}", e);
+            MdnsError::SwarmBuild(format!("注册 mDNS 服务失败: {}", e))
+        })?;
+
+        // 启动后台任务
+        let task = mdns_discovery.spawn();
         self.mdns_task = Some(task);
         self.mdns_running = true;
 
-        send_log("INFO", "p2p_manager", "✅ mDNS 发现服务已启动（服务分离架构）".to_string());
+        tracing::info!("✅ libmdns 服务发现已启动");
+        tracing::info!("  └─ 广播端口: UDP 5353");
+        tracing::info!("  └─ 服务类型: _localp2p._tcp");
+
         Ok(())
     }
 
     /// 启动连接服务（服务分离架构）
-    pub async fn start_connection(&mut self) -> Result<(), MdnsError> {
+    pub async fn start_connection(&mut self) -> Result<Vec<Multiaddr>, MdnsError> {
+        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+        tracing::info!("║ 🔗 [P2PManager] 启动连接服务（服务分离架构）");
+        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
+
         if self.connection_running {
             return Err(MdnsError::SwarmBuild("连接服务已在运行".to_string()));
         }
 
-        tracing::info!("正在启动连接服务（服务分离架构）...");
+        send_log("INFO", "p2p_manager", "🔗 正在启动连接服务...".to_string());
 
+        tracing::debug!("📝 [连接服务] 获取发现事件接收器...");
         // 转移 discovery_rx（使用 Option::take）
         let discovery_rx = self.discovery_rx.take().ok_or_else(|| {
+            tracing::error!("❌ [连接服务] discovery_rx 已被使用或不存在");
             MdnsError::SwarmBuild("discovery_rx 已被使用".to_string())
         })?;
+        tracing::debug!("✓ [连接服务] 发现事件接收器已获取");
+
+        tracing::debug!("📝 [连接服务] 创建 ConnectionService 实例...");
+        send_log("INFO", "p2p_manager", "  └─ 创建 ConnectionService...".to_string());
 
         // 创建 ConnectionService
         let connection_service = ConnectionService::new(
@@ -265,44 +318,79 @@ impl P2PManager {
             self.local_user_info.clone(),
             discovery_rx,
             ConnectionServiceConfig::default(),
-        ).await?;
+        ).await.map_err(|e| {
+            tracing::error!("❌ [连接服务] 创建 ConnectionService 失败: {:?}", e);
+            send_log("ERROR", "p2p_manager", format!("❌ 创建连接服务失败: {:?}", e));
+            MdnsError::SwarmBuild(format!("创建连接服务失败: {}", e))
+        })?;
+
+        tracing::info!("✓ [连接服务] ConnectionService 实例创建成功");
+        send_log("INFO", "p2p_manager", "  └─ ConnectionService 创建成功".to_string());
 
         // ⚠️ 关键：使用 Arc<Mutex<>> 包装 ConnectionService，允许外部访问
+        tracing::debug!("📝 [连接服务] 包装 ConnectionService 为 Arc<Mutex<>>...");
         let connection_service_shared = Arc::new(tokio::sync::Mutex::new(connection_service));
 
         // 在后台任务中运行 ConnectionService 事件循环
+        tracing::debug!("📝 [连接服务] 启动事件循环任务...");
         let connection_service_for_task = connection_service_shared.clone();
         let task = tokio::spawn(async move {
-            tracing::info!("🔗 连接服务事件循环已启动");
+            tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+            tracing::info!("║ 🔗 [连接服务] 事件循环已启动");
+            tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
+            send_log("INFO", "connection_service", "🔗 连接服务事件循环已启动".to_string());
+
             loop {
                 let mut service = connection_service_for_task.lock().await;
                 match service.run_once().await {
                     Ok(true) => continue,  // 继续运行
                     Ok(false) => {
                         tracing::info!("连接服务正常退出");
+                        send_log("INFO", "connection_service", "连接服务正常退出".to_string());
                         break;
                     }
                     Err(e) => {
                         tracing::error!("连接服务错误: {:?}", e);
+                        send_log("ERROR", "connection_service", format!("连接服务错误: {:?}", e));
                         break;
                     }
                 }
             }
             tracing::info!("🔗 连接服务事件循环已结束");
+            send_log("INFO", "connection_service", "🔗 连接服务事件循环已结束".to_string());
         });
 
         // 保存 ConnectionService 的共享引用
-        self.connection_service = Some(connection_service_shared);
+        self.connection_service = Some(connection_service_shared.clone());
         self.connection_task = Some(task);
         self.connection_running = true;
 
-        tracing::info!("✓ 连接服务已启动（服务分离架构）");
-        Ok(())
+        tracing::info!("✓ [连接服务] 后台任务已启动");
+
+        // 等待一小段时间让监听地址就绪
+        tracing::debug!("📝 [连接服务] 等待监听地址就绪 (100ms)...");
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // 获取实际的监听地址
+        tracing::debug!("📝 [连接服务] 获取实际监听地址...");
+        let service = connection_service_shared.lock().await;
+        let listeners = service.listeners();
+        drop(service);
+
+        tracing::info!("✓ [连接服务] 连接服务启动完成");
+        tracing::info!("  └─ 监听地址: {:?}", listeners);
+        for addr in &listeners {
+            send_log("INFO", "p2p_manager", format!("  └─ 监听地址: {}", addr));
+        }
+
+        Ok(listeners)
     }
 
     /// 启动所有服务（服务分离架构）
     pub async fn start_all(&mut self) -> Result<(), MdnsError> {
-        tracing::info!("🚀 P2PManager: 正在启动所有服务（服务分离架构）...");
+        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+        tracing::info!("║ 🚀 [P2PManager] 启动所有服务（服务分离架构）");
+        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
 
         if self.mdns_running || self.connection_running {
             return Err(MdnsError::SwarmBuild("服务已在运行".to_string()));
@@ -311,14 +399,40 @@ impl P2PManager {
         send_log("INFO", "p2p_manager", "🚀 正在启动所有服务（服务分离架构）...".to_string());
 
         // 先启动连接服务（接收者先就绪）
+        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+        tracing::info!("║ 📊 [步骤 1/2] 启动连接服务（ConnectionService）");
+        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
         send_log("INFO", "p2p_manager", "📊 步骤 1/2: 启动连接服务...".to_string());
-        self.start_connection().await?;
 
-        // 再启动 mDNS 服务（发送者）
+        let listeners = self.start_connection().await?;
+
+        tracing::info!("✓ [步骤 1/2] 连接服务启动成功");
+        tracing::info!("  └─ 监听地址: {:?}", listeners);
+        for addr in &listeners {
+            send_log("INFO", "p2p_manager", format!("  └─ 监听地址: {}", addr));
+        }
+
+        // 再启动 mDNS 服务（传递 ConnectionService 的监听地址）
+        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+        tracing::info!("║ 📡 [步骤 2/2] 启动 mDNS 服务（MdnsDiscoveryService）");
+        tracing::info!("║ 传递连接服务地址给 mDNS 服务广播");
+        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
         send_log("INFO", "p2p_manager", "📡 步骤 2/2: 启动 mDNS 服务...".to_string());
-        self.start_mdns().await?;
+
+        self.start_mdns(listeners).await?;
+
+        tracing::info!("✓ [步骤 2/2] mDNS 服务启动成功");
+        tracing::info!("  └─ UDP 5353: mDNS 广播端口");
+        tracing::info!("  └─ mDNS 将广播连接服务的地址");
 
         send_log("INFO", "p2p_manager", "✅ 所有服务已启动（服务分离架构）".to_string());
+
+        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+        tracing::info!("║ ✅ [P2PManager] 所有服务启动完成");
+        tracing::info!("║  ┌─ ConnectionService: 运行中 (处理 TCP 连接、Identify、Ping、聊天)");
+        tracing::info!("║  └─ MdnsDiscoveryService: 运行中 (处理 mDNS 广播)");
+        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
+
         Ok(())
     }
 
@@ -378,8 +492,16 @@ impl P2PManager {
         // 短暂等待（确保资源释放）
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        // 重新启动 mDNS 服务
-        self.start_mdns().await?;
+        // 获取 ConnectionService 的监听地址
+        let listeners = if let Some(ref service) = self.connection_service {
+            let s = service.lock().await;
+            s.listeners()
+        } else {
+            return Err(MdnsError::SwarmBuild("连接服务未运行，无法获取监听地址".to_string()));
+        };
+
+        // 重新启动 mDNS 服务（传递 ConnectionService 的监听地址）
+        self.start_mdns(listeners).await?;
 
         tracing::info!("✓ mDNS 服务重启成功（TCP 连接保持不变）");
         Ok(())
@@ -548,9 +670,10 @@ mod tests {
 
         let mut manager = P2PManager::new(config).await.unwrap();
 
-        // 验证 restart_mdns 不会报错
+        // restart_mdns 需要 connection_service 先运行才能获取监听地址
+        // 这是预期行为 - 在没有启动连接服务的情况下应该返回错误
         let result = manager.restart_mdns().await;
-        assert!(result.is_ok());
+        assert!(result.is_err(), "restart_mdns 应该在 connection_service 未运行时失败");
     }
 
     #[tokio::test]

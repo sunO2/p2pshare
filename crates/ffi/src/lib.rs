@@ -7,8 +7,7 @@
 
 #![allow(clippy::missing_safety_doc)]
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use once_cell::sync::Lazy;
@@ -40,12 +39,6 @@ pub fn get_runtime() -> Option<&'static Runtime> {
 
 /// 全局 P2P 实例
 static mut P2P_INSTANCE: Option<Arc<Mutex<P2PInstance>>> = None;
-
-/// 全局用户信息缓存（用于查询用户信息）
-/// 使用 RwLock 允许多读单写
-static GLOBAL_USER_INFO: Lazy<Mutex<RwLock<HashMap<String, mdns::UserInfo>>>> = Lazy::new(|| {
-    Mutex::new(RwLock::new(HashMap::new()))
-});
 
 /// 全局 Discovery 资源存储（在 init 和 start 之间传递）
 struct GlobalDiscoveryResources {
@@ -525,12 +518,6 @@ pub fn internal_cleanup() {
         P2P_IS_RUNNING = false;
         RUNTIME = None;
         DISCOVERY_RESOURCES = None;
-
-        // 清空用户信息缓存
-        if let Some(cache) = GLOBAL_USER_INFO.lock().ok() {
-            let mut cache = cache.write().unwrap();
-            cache.clear();
-        }
     }
 
     // 清空 StreamSink
@@ -719,32 +706,32 @@ pub fn internal_get_nodes_sync() -> Result<Vec<InternalNodeInfo>, String> {
             node_manager.list_all_nodes().await
         });
 
-        // 同时从用户信息缓存中获取详细信息
-        let user_info_cache: HashMap<String, mdns::UserInfo> = GLOBAL_USER_INFO
-            .lock()
-            .unwrap()
-            .read()
-            .unwrap()
-            .clone();
-
+        // ⭐ 从节点 attributes 中读取用户信息（ConnectionService 已存储）
         Ok(nodes.into_iter().map(|node| {
             let peer_id = node.peer_id.to_string();
-            if let Some(user_info) = user_info_cache.get(&peer_id) {
-                // 使用缓存的用户信息
+
+            // 尝试从 attributes 中获取用户信息
+            let device_name = node.attributes.get("device_name").cloned();
+            let nickname = node.attributes.get("nickname").cloned();
+            let status = node.attributes.get("status").cloned();
+            let avatar_url = node.attributes.get("avatar_url").cloned();
+
+            if let Some(device_name) = device_name {
+                // 使用 attributes 中的用户信息
                 InternalNodeInfo {
                     peer_id: peer_id.clone(),
-                    display_name: user_info.display_name(),
-                    device_name: user_info.device_name.clone(),
-                    nickname: user_info.nickname.clone(),
-                    status: user_info.status.clone(),
-                    avatar_url: user_info.avatar_url.clone(),
+                    display_name: nickname.clone().unwrap_or_else(|| device_name.clone()),
+                    device_name,
+                    nickname,
+                    status,
+                    avatar_url,
                 }
             } else {
-                // 使用基本信息
+                // 降级：使用基本信息（从 agent_version 解析的 name）
                 InternalNodeInfo {
                     peer_id: peer_id.clone(),
                     display_name: node.display_name(),
-                    device_name: node.name.unwrap_or_default(),
+                    device_name: node.name.clone().unwrap_or_default(),
                     nickname: None,
                     status: None,
                     avatar_url: None,
@@ -770,14 +757,36 @@ pub async fn internal_get_user_info(peer_id: String) -> Result<Option<bridge::P2
             return Err("Not initialized".to_string());
         }
 
-        // 从用户信息缓存中获取
-        if let Some(cache) = GLOBAL_USER_INFO.lock().ok() {
-            let cache = cache.read().unwrap();
-            if let Some(user_info) = cache.get(&peer_id) {
-                return Ok(Some(bridge::P2PBridgeNodeInfo::from_peer_id_and_info(
-                    peer_id.clone(),
-                    user_info
-                )));
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+        let node_manager = {
+            let instance = P2P_INSTANCE.as_ref().unwrap().lock().unwrap();
+            instance.node_manager.clone()
+        };
+
+        // 从 NodeManager 获取节点信息
+        let peer_id_parsed = peer_id.parse::<libp2p::PeerId>()
+            .map_err(|e| format!("Invalid peer ID: {}", e))?;
+
+        let node = runtime.block_on(async {
+            node_manager.get_node(&peer_id_parsed).await
+        });
+
+        if let Some(node) = node {
+            // 从 attributes 中读取用户信息
+            let device_name = node.attributes.get("device_name").cloned();
+            let nickname = node.attributes.get("nickname").cloned();
+            let status = node.attributes.get("status").cloned();
+            let avatar_url = node.attributes.get("avatar_url").cloned();
+
+            if device_name.is_some() {
+                return Ok(Some(bridge::P2PBridgeNodeInfo {
+                    peer_id: peer_id.clone(),
+                    display_name: nickname.clone().unwrap_or_else(|| device_name.clone().unwrap()),
+                    device_name: device_name.unwrap(),
+                    nickname,
+                    status,
+                    avatar_url: avatar_url,
+                }));
             }
         }
 
@@ -787,25 +796,19 @@ pub async fn internal_get_user_info(peer_id: String) -> Result<Option<bridge::P2
 
 /// 获取所有节点的用户信息
 pub async fn internal_list_user_info() -> Result<Vec<bridge::P2PBridgeNodeInfo>, String> {
-    unsafe {
-        if P2P_INSTANCE.is_none() {
-            return Err("Not initialized".to_string());
-        }
-
-        // 从用户信息缓存中获取所有信息
-        if let Some(cache) = GLOBAL_USER_INFO.lock().ok() {
-            let cache = cache.read().unwrap();
-            let result = cache.iter().map(|(peer_id, user_info)| {
-                bridge::P2PBridgeNodeInfo::from_peer_id_and_info(
-                    peer_id.clone(),
-                    user_info
-                )
-            }).collect();
-            return Ok(result);
-        }
-
-        Ok(Vec::new())
-    }
+    // 直接使用 internal_get_nodes 并过滤有用户信息的节点
+    let nodes = internal_get_nodes().await?;
+    Ok(nodes.into_iter()
+        .filter(|n| !n.device_name.is_empty())
+        .map(|n| bridge::P2PBridgeNodeInfo {
+            peer_id: n.peer_id.clone(),
+            display_name: n.display_name.clone(),
+            device_name: n.device_name.clone(),
+            nickname: n.nickname.clone(),
+            status: n.status.clone(),
+            avatar_url: n.avatar_url.clone(),
+        })
+        .collect())
 }
 
 // ============================================================================
