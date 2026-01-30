@@ -15,6 +15,7 @@ class DeviceListScreen extends StatefulWidget {
 class _DeviceListScreenState extends State<DeviceListScreen> {
   final List<P2PBridgeNodeInfo> _nodes = [];
   String _searchQuery = '';
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -34,6 +35,41 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       }
     } catch (e) {
       debugPrint('Failed to load nodes: $e');
+    }
+  }
+
+  Future<void> _refreshDevices() async {
+    if (_isRefreshing) return;
+
+    setState(() => _isRefreshing = true);
+
+    try {
+      // 触发主动刷新
+      await P2PManager.instance.triggerRefresh();
+
+      // 重新加载设备列表
+      await Future.delayed(const Duration(milliseconds: 500));
+      _loadNodes();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('刷新成功'), duration: Duration(seconds: 1)),
+        );
+      }
+    } catch (e) {
+      debugPrint('Failed to refresh devices: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('刷新失败: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
     }
   }
 
@@ -169,7 +205,60 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('在线设备', style: Theme.of(context).textTheme.displaySmall),
-              _buildStatusIndicator(_nodes.length),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildStatusIndicator(_nodes.length),
+                  const SizedBox(width: 12),
+                  // 刷新按钮
+                  InkWell(
+                    onTap: _isRefreshing ? null : _refreshDevices,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _isRefreshing
+                            ? Colors.grey[300]
+                            : const Color(0xFFC8F0D8).withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _isRefreshing
+                              ? Colors.grey[400]!
+                              : const Color(0xFF3D8A5A).withOpacity(0.5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.refresh,
+                            size: 16,
+                            color: _isRefreshing
+                                ? Colors.grey[500]
+                                : const Color(0xFF3D8A5A),
+                          ),
+                          if (_isRefreshing) ...[
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.grey[500]!,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 16),

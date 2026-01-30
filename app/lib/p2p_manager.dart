@@ -197,7 +197,9 @@ class P2PManager {
   /// - 智能检查（先检查再重启）会导致连接恢复慢
   /// - 直接重启可以快速恢复 mDNS 和设备发现
   /// - 虽然会破坏正常工作的连接，但恢复后可以快速重新发现
-  void resumeEventStream() {
+  ///
+  /// 🔄 改为异步：使用 async/await 避免阻塞 UI
+  Future<void> resumeEventStream() async {
     if (!_initialized) {
       _log.w('resumeEventStream 但未初始化');
       return;
@@ -209,10 +211,10 @@ class P2PManager {
     _log.i('重启事件 Stream 订阅');
     _restartEventStream();
 
-    // 2. 立即重启 discovery 服务（无条件）
+    // 2. 立即重启 discovery 服务（无条件，异步）
     // 因为 Android 在后台会暂停 mDNS，恢复后需要立即重启
-    _log.i('从后台恢复，立即重启 discovery');
-    debugPrint('从后台恢复，立即重启 P2P discovery...');
+    _log.i('从后台恢复，立即重启 discovery（异步）');
+    debugPrint('从后台恢复，立即重启 P2P discovery（异步）...');
 
     try {
       RustLib.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
@@ -649,7 +651,9 @@ class P2PManager {
   }
 
   /// 发送消息给指定节点
-  void sendMessage(String targetPeerId, String message) {
+  ///
+  /// 🔄 改为异步：使用 async/await 避免阻塞 UI
+  Future<void> sendMessage(String targetPeerId, String message) async {
     if (!_initialized) {
       _log.e('sendMessage 但未初始化');
       throw Exception('Not initialized');
@@ -674,7 +678,12 @@ class P2PManager {
   }
 
   /// 广播消息给多个节点
-  void broadcastMessage(List<String> targetPeerIds, String message) {
+  ///
+  /// 🔄 改为异步：使用 async/await 避免阻塞 UI
+  Future<void> broadcastMessage(
+    List<String> targetPeerIds,
+    String message,
+  ) async {
     if (!_initialized) {
       _log.e('broadcastMessage 但未初始化');
       throw Exception('Not initialized');
@@ -723,4 +732,25 @@ class P2PManager {
 
   /// 是否已初始化
   bool get isInitialized => _initialized;
+
+  /// 主动触发刷新
+  ///
+  /// 触发 mDNS 重新广播和重新发现，并尝试重新连接到所有已知节点
+  Future<void> triggerRefresh() async {
+    if (!_initialized) {
+      _log.e('triggerRefresh 但未初始化');
+      throw Exception('Not initialized');
+    }
+
+    _log.i('主动触发刷新');
+    _log.rustCall('triggerRefresh');
+
+    try {
+      RustLib.instance.api.localp2PFfiBridgeP2PTriggerRefresh();
+      _log.rustReturn('triggerRefresh', result: 'refreshed');
+    } catch (e, stackTrace) {
+      _log.rustError('localp2PFfiBridgeP2PTriggerRefresh', e, stackTrace);
+      rethrow;
+    }
+  }
 }

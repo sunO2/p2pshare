@@ -17,6 +17,7 @@ class LogService {
   late Logger _logger;
   late File _logFile;
   late IOSink _logSink;
+  late _FileLogOutput _logOutput;  // 保存 output 引用，用于更新 sink
   final _logsController = StreamController<String>.broadcast();
   bool _initialized = false;
 
@@ -47,13 +48,16 @@ class LogService {
       // 打开文件用于追加
       _logSink = _logFile.openWrite(mode: FileMode.append);
 
+      // 创建 LogOutput
+      _logOutput = _FileLogOutput(
+        sink: _logSink,
+        onLog: (log) => _logsController.add(log),
+      );
+
       // 初始化 Logger
       _logger = Logger(
         level: Level.trace,
-        output: _FileLogOutput(
-          sink: _logSink,
-          onLog: (log) => _logsController.add(log),
-        ),
+        output: _logOutput,
         printer: _PrettyFilePrinter(),
         filter: ProductionFilter(),
       );
@@ -163,7 +167,19 @@ class LogService {
   Future<void> clearLogs() async {
     try {
       if (await _logFile.exists()) {
+        // ⚠️ 关键修复：先关闭旧的 sink，避免文件句柄冲突
+        await _logSink.flush();
+        await _logSink.close();
+
+        // 清空文件
         await _logFile.writeAsString('');
+
+        // 重新打开 sink（append 模式）
+        _logSink = _logFile.openWrite(mode: FileMode.append);
+
+        // 更新 _FileLogOutput 使用的 sink
+        _logOutput.sink = _logSink;
+
         _logger.i('日志已清空 - ${DateTime.now()}');
       }
     } catch (e) {
@@ -224,7 +240,7 @@ class LogService {
 
 /// 自定义文件日志输出
 class _FileLogOutput extends LogOutput {
-  final IOSink sink;
+  IOSink sink;
   final void Function(String) onLog;
 
   _FileLogOutput({required this.sink, required this.onLog});

@@ -369,11 +369,23 @@ pub fn internal_start() -> Result<(), String> {
                                     Some(command) = command_rx.recv() => {
                                         match command {
                                             P2PCommand::SendMessage { target_peer_id, message, response_tx } => {
+                                                let send_start = std::time::Instant::now();
+                                                tracing::info!("📨 [事件线程] 收到 SendMessage 命令: target={}, message='{}'", target_peer_id, message);
+
                                                 // ⚠️ 使用 P2PManager 发送消息（需要 lock）
                                                 let result = {
+                                                    let lock_start = std::time::Instant::now();
+                                                    tracing::info!("⏱️  [事件线程] 等待 P2PManager lock...");
                                                     let pm = p2p_manager.lock().await;
-                                                    pm.send_message(target_peer_id, message).await
+                                                    tracing::info!("⏱️  [事件线程] 获取 lock 耗时: {:?}", lock_start.elapsed());
+
+                                                    let send_start = std::time::Instant::now();
+                                                    let result = pm.send_message(target_peer_id, message).await;
+                                                    tracing::info!("⏱️  [事件线程] send_message 耗时: {:?}, 结果: {:?}", send_start.elapsed(), result.is_ok());
+                                                    result
                                                 };
+
+                                                tracing::info!("⏱️  [事件线程] SendMessage 总耗时: {:?}", send_start.elapsed());
                                                 let _ = response_tx.send(result.map(|_| "OK".to_string()).map_err(|e| e.to_string()));
                                             }
                                             P2PCommand::BroadcastMessage { target_peer_ids: _, message: _, response_tx } => {
@@ -396,10 +408,17 @@ pub fn internal_start() -> Result<(), String> {
                                         let current_peer_ids: std::collections::HashSet<String> =
                                             current_nodes.iter().map(|n| n.peer_id.to_string()).collect();
 
-                                        // 检测新节点
+                                        // 用于跟踪节点状态的 HashMap
+                                        let mut node_statuses: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
+
+                                        // 检测新节点和状态变化
                                         for node in &current_nodes {
                                             let peer_id = node.peer_id.to_string();
+                                            let is_online = node.status.is_online();
+                                            node_statuses.insert(peer_id.clone(), is_online);
+
                                             if !known_nodes.contains(&peer_id) {
+                                                // 新节点
                                                 known_nodes.insert(peer_id.clone());
                                                 offline_nodes.remove(&peer_id);
 
@@ -432,10 +451,29 @@ pub fn internal_start() -> Result<(), String> {
 
                                                 // 更新最后事件时间
                                                 update_last_event_time();
+                                            } else {
+                                                // 已知节点，检查状态是否变化
+                                                if offline_nodes.contains(&peer_id) && is_online {
+                                                    // 从离线恢复在线
+                                                    offline_nodes.remove(&peer_id);
+                                                    send_log_to_flutter(
+                                                        "INFO",
+                                                        "monitor",
+                                                        format!("节点恢复在线: {}", peer_id)
+                                                    );
+
+                                                    // 可以发送 NodeOnline 事件（如果需要）
+                                                    let event = bridge::P2PEvent {
+                                                        event_type: 3, // Verified (复用 Verified 事件表示在线)
+                                                        data: format!(r#"{{"peer_id":"{}","display_name":"{}"}}"#, peer_id, node.display_name()),
+                                                    };
+                                                    send_event_to_stream(event);
+                                                }
                                             }
                                         }
 
-                                        // 检测离线节点（从已知节点中消失但不在当前列表中的）
+                                        // 检测离线节点
+                                        // 1. 从已知节点中消失的节点
                                         let offline: Vec<_> = known_nodes.difference(&current_peer_ids).cloned().collect();
                                         for peer_id in offline {
                                             if !offline_nodes.contains(&peer_id) {
@@ -444,12 +482,32 @@ pub fn internal_start() -> Result<(), String> {
                                                 send_log_to_flutter(
                                                     "WARN",
                                                     "monitor",
-                                                    format!("节点离线: {}", peer_id)
+                                                    format!("节点离线（消失）: {}", peer_id)
                                                 );
 
                                                 let event = bridge::P2PEvent {
                                                     event_type: 4, // NodeOffline
                                                     data: format!(r#"{{"peer_id":"{}"}}"#, peer_id),
+                                                };
+                                                send_event_to_stream(event);
+                                            }
+                                        }
+
+                                        // 2. 仍在列表中但状态变为离线的节点
+                                        for node in &current_nodes {
+                                            let peer_id = node.peer_id.to_string();
+                                            if !node.status.is_online() && !offline_nodes.contains(&peer_id) {
+                                                offline_nodes.insert(peer_id.clone());
+
+                                                send_log_to_flutter(
+                                                    "WARN",
+                                                    "monitor",
+                                                    format!("节点离线（状态变化）: {}", peer_id)
+                                                );
+
+                                                let event = bridge::P2PEvent {
+                                                    event_type: 4, // NodeOffline
+                                                    data: format!(r#"{{"peer_id":"{}","display_name":"{}"}}"#, peer_id, node.display_name()),
                                                 };
                                                 send_event_to_stream(event);
                                             }
@@ -508,6 +566,47 @@ pub fn internal_stop() -> Result<(), String> {
 
         P2P_INSTANCE = None;
         Ok(())
+    }
+}
+
+/// 内部刷新函数（同步版本）
+pub fn internal_trigger_refresh_sync() -> Result<(), String> {
+    let start = std::time::Instant::now();
+    tracing::info!("🔄 [FFI] 开始触发刷新");
+
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            return Err("P2P not initialized. Call p2p_init() first.".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        if resources.p2p_manager.is_none() {
+            return Err("P2PManager not available. Call p2p_start() first.".to_string());
+        }
+
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+        let result = runtime.block_on(async {
+            // 获取 p2p_manager 的引用
+            let p2p_manager = resources.p2p_manager.as_ref().unwrap();
+
+            // 调用 P2PManager 的 refresh 方法
+            match p2p_manager.lock().await.refresh().await {
+                Ok(()) => {
+                    tracing::info!("✓ [FFI] 刷新成功");
+                    send_log_to_flutter("INFO", "ffi", "✅ 刷新成功".to_string());
+                    Ok(())
+                }
+                Err(e) => {
+                    tracing::error!("❌ [FFI] 刷新失败: {:?}", e);
+                    send_log_to_flutter("ERROR", "ffi", format!("❌ 刷新失败: {:?}", e));
+                    Err(format!("刷新失败: {:?}", e))
+                }
+            }
+        });
+
+        tracing::info!("⏱️  [FFI] 刷新总耗时: {:?}", start.elapsed());
+
+        result
     }
 }
 
@@ -614,12 +713,15 @@ pub fn internal_is_discovery_thread_alive() -> bool {
     }
 }
 
-/// 重启 discovery 服务（新架构）
+/// 重启 discovery 服务（新架构）- 同步版本（已废弃，保留兼容性）
+///
+/// ⚠️ 此函数使用 block_on 会导致 UI 卡顿，建议使用 internal_restart_discovery_async 代替
 ///
 /// 用于应用从后台恢复时，如果发现服务已失效，重启它
 ///
 /// 🔄 使用 P2PManager.restart_mdns()，只重启 mDNS 部分，不影响 TCP 连接
 pub fn internal_restart_discovery() -> Result<(), String> {
+    send_log_to_flutter("WARN", "ffi", "⚠️ 使用同步版本的 restart_discovery 可能导致卡顿，建议使用异步版本".to_string());
     send_log_to_flutter("INFO", "ffi", "开始重启 Discovery 服务（新架构）".to_string());
 
     unsafe {
@@ -655,6 +757,120 @@ pub fn internal_restart_discovery() -> Result<(), String> {
 
         Err("P2PManager 未初始化".to_string())
     }
+}
+
+/// 重启 discovery 服务（新架构）- 异步版本（推荐）
+///
+/// 🔄 使用 P2PManager.restart_mdns()，只重启 mDNS 部分，不影响 TCP 连接
+///
+/// # 优势
+/// - 不使用 block_on，避免阻塞 FFI 调用线程
+/// - Flutter 端可以使用 async/await，不会卡顿 UI
+pub async fn internal_restart_discovery_async() -> Result<(), String> {
+    send_log_to_flutter("INFO", "ffi", "🔄 [异步] 开始重启 Discovery 服务".to_string());
+
+    unsafe {
+        if P2P_INSTANCE.is_none() {
+            return Err("Not initialized".to_string());
+        }
+
+        if let Some(ref resources) = DISCOVERY_RESOURCES {
+            if resources.p2p_manager.is_some() {
+                send_log_to_flutter("INFO", "ffi", "使用 P2PManager.restart_mdns()".to_string());
+
+                // 直接在异步上下文中调用，不需要 block_on
+                let p2p_manager = resources.p2p_manager.as_ref().unwrap();
+                let mut pm = p2p_manager.lock().await;
+                match pm.restart_mdns().await {
+                    Ok(()) => {
+                        send_log_to_flutter("INFO", "ffi", "✓ mDNS 服务重启成功（TCP 连接保持不变）".to_string());
+                        Ok(())
+                    }
+                    Err(e) => {
+                        send_log_to_flutter("ERROR", "ffi", format!("P2PManager.restart_mdns() 失败: {:?}", e));
+                        Err(format!("重启 mDNS 失败: {:?}", e))
+                    }
+                }
+            } else {
+                Err("P2PManager 未初始化".to_string())
+            }
+        } else {
+            Err("DISCOVERY_RESOURCES 不可用".to_string())
+        }
+    }
+}
+
+/// 重启 discovery 服务 - 非阻塞版本（使用 spawn_blocking）
+///
+/// 🔄 此函数使用 spawn_blocking 在后台线程执行，避免阻塞 FFI 调用线程
+/// 立即返回 Ok(())，实际操作在后台进行
+///
+/// # 适用场景
+/// - Flutter 调用时不想等待完成
+/// - 不需要知道重启是否成功
+pub fn internal_restart_discovery_non_blocking() -> Result<(), String> {
+    send_log_to_flutter("INFO", "ffi", "🔄 [非阻塞] 启动后台重启 Discovery 服务".to_string());
+
+    let runtime = unsafe { RUNTIME.as_ref().ok_or("No runtime")? };
+    let runtime_handle = runtime.handle();
+
+    // 在后台线程执行，不阻塞 FFI 调用线程
+    std::thread::spawn(move || {
+        runtime_handle.block_on(async {
+            if let Err(e) = internal_restart_discovery_async().await {
+                send_log_to_flutter("ERROR", "ffi", format!("后台重启失败: {}", e));
+            }
+        });
+    });
+
+    // 立即返回，不等待完成
+    Ok(())
+}
+
+/// 发送消息 - 非阻塞版本（使用 spawn_blocking）
+///
+/// 🔄 此函数使用 spawn_blocking 在后台线程执行，避免阻塞 FFI 调用线程
+/// 立即返回 Ok(())，实际操作在后台进行
+pub fn internal_send_message_non_blocking(target_peer_id: String, message: String) -> Result<(), String> {
+    send_log_to_flutter("INFO", "ffi", format!("📤 [非阻塞] 发送消息给 {}", target_peer_id));
+
+    let runtime = unsafe { RUNTIME.as_ref().ok_or("No runtime")? };
+    let runtime_handle = runtime.handle();
+
+    // 在后台线程执行
+    std::thread::spawn(move || {
+        runtime_handle.block_on(async {
+            if let Err(e) = internal_send_message(target_peer_id, message).await {
+                send_log_to_flutter("ERROR", "ffi", format!("发送消息失败: {}", e));
+            }
+        });
+    });
+
+    // 立即返回
+    Ok(())
+}
+
+/// 广播消息 - 非阻塞版本（使用 spawn_blocking）
+///
+/// 🔄 此函数使用 spawn_blocking 在后台线程执行，避免阻塞 FFI 调用线程
+/// 立即返回 Ok(())，实际操作在后台进行
+pub fn internal_broadcast_message_non_blocking(target_peer_ids: Vec<String>, message: String) -> Result<(), String> {
+    send_log_to_flutter("INFO", "ffi", format!("📡 [非阻塞] 广播消息给 {} 个节点", target_peer_ids.len()));
+
+    let runtime = unsafe { RUNTIME.as_ref().ok_or("No runtime")? };
+    let runtime_handle = runtime.handle();
+
+    // 在后台线程执行
+    std::thread::spawn(move || {
+        runtime_handle.block_on(async {
+            if let Err(e) = internal_broadcast_message(target_peer_ids, message).await {
+                send_log_to_flutter("ERROR", "ffi", format!("广播消息失败: {}", e));
+            }
+        });
+    });
+
+    // 立即返回
+    Ok(())
 }
 
 // ============================================================================
@@ -710,6 +926,15 @@ pub fn internal_get_nodes_sync() -> Result<Vec<InternalNodeInfo>, String> {
         Ok(nodes.into_iter().map(|node| {
             let peer_id = node.peer_id.to_string();
 
+            // 提取地址列表
+            let addresses: Vec<String> = node.addresses
+                .iter()
+                .map(|addr| addr.to_string())
+                .collect();
+
+            // 提取协议版本
+            let protocol_version = node.protocol_version.clone();
+
             // 尝试从 attributes 中获取用户信息
             let device_name = node.attributes.get("device_name").cloned();
             let nickname = node.attributes.get("nickname").cloned();
@@ -725,6 +950,8 @@ pub fn internal_get_nodes_sync() -> Result<Vec<InternalNodeInfo>, String> {
                     nickname,
                     status,
                     avatar_url,
+                    addresses,
+                    protocol_version,
                 }
             } else {
                 // 降级：使用基本信息（从 agent_version 解析的 name）
@@ -735,6 +962,8 @@ pub fn internal_get_nodes_sync() -> Result<Vec<InternalNodeInfo>, String> {
                     nickname: None,
                     status: None,
                     avatar_url: None,
+                    addresses,
+                    protocol_version,
                 }
             }
         }).collect())
@@ -778,6 +1007,15 @@ pub async fn internal_get_user_info(peer_id: String) -> Result<Option<bridge::P2
             let status = node.attributes.get("status").cloned();
             let avatar_url = node.attributes.get("avatar_url").cloned();
 
+            // 提取地址列表
+            let addresses: Vec<String> = node.addresses
+                .iter()
+                .map(|addr| addr.to_string())
+                .collect();
+
+            // 提取协议版本
+            let protocol_version = node.protocol_version.clone();
+
             if device_name.is_some() {
                 return Ok(Some(bridge::P2PBridgeNodeInfo {
                     peer_id: peer_id.clone(),
@@ -786,6 +1024,8 @@ pub async fn internal_get_user_info(peer_id: String) -> Result<Option<bridge::P2
                     nickname,
                     status,
                     avatar_url: avatar_url,
+                    addresses,
+                    protocol_version,
                 }));
             }
         }
@@ -807,6 +1047,8 @@ pub async fn internal_list_user_info() -> Result<Vec<bridge::P2PBridgeNodeInfo>,
             nickname: n.nickname.clone(),
             status: n.status.clone(),
             avatar_url: n.avatar_url.clone(),
+            addresses: n.addresses.clone(),
+            protocol_version: n.protocol_version.clone(),
         })
         .collect())
 }
@@ -817,10 +1059,16 @@ pub async fn internal_list_user_info() -> Result<Vec<bridge::P2PBridgeNodeInfo>,
 
 /// 发送消息（同步版本）
 fn internal_send_message_sync(target_peer_id: String, message: String) -> Result<(), String> {
+    let start = std::time::Instant::now();
+    tracing::info!("📤 [FFI] 开始发送消息: target={}, message='{}'", target_peer_id, message);
+
     unsafe {
         if P2P_INSTANCE.is_none() {
             return Err("Not initialized".to_string());
         }
+
+        let step1 = start.elapsed();
+        tracing::info!("⏱️  [FFI] 创建 oneshot channel: {:?}", step1);
 
         let (response_tx, response_rx) = tokio::sync::oneshot::channel();
         let command = P2PCommand::SendMessage {
@@ -829,18 +1077,35 @@ fn internal_send_message_sync(target_peer_id: String, message: String) -> Result
             response_tx,
         };
 
+        let step2 = start.elapsed();
+        tracing::info!("⏱️  [FFI] 获取 P2P_INSTANCE lock...");
+
         let instance = P2P_INSTANCE.as_ref().unwrap().lock().unwrap();
+
+        let step3 = start.elapsed();
+        tracing::info!("⏱️  [FFI] 获取锁成功: {:?}", step3);
+
         if let Err(_) = instance.command_tx.send(command) {
             return Err("Failed to send command".to_string());
         }
         drop(instance);
 
+        let step4 = start.elapsed();
+        tracing::info!("⏱️  [FFI] 命令已发送: {:?}", step4);
+
         let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
         let result = runtime.block_on(async {
-            response_rx.await
+            tracing::info!("⏱️  [FFI] 等待响应...");
+            let recv_start = std::time::Instant::now();
+            let result = response_rx.await
                 .map_err(|e| format!("Response error: {:?}", e))
-                .and_then(|r| r)
+                .and_then(|r| r);
+            tracing::info!("⏱️  [FFI] 响应收到: {:?}, 结果: {:?}", recv_start.elapsed(), result.is_ok());
+            result
         });
+
+        let total = start.elapsed();
+        tracing::info!("⏱️  [FFI] 发送消息总耗时: {:?}, 结果: {:?}", total, result.is_ok());
 
         result.map(|_| ())
     }

@@ -73,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('应用恢复，检查 P2P 状态并重启事件流...');
         _syncP2PState();
         // 重启事件流订阅（修复后台恢复后无法接收事件的问题）
+        // 🔄 改为异步：使用 async/await 避免阻塞 UI
         P2PManager.instance.resumeEventStream();
         break;
       case AppLifecycleState.paused:

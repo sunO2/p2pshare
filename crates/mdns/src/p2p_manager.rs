@@ -539,26 +539,67 @@ impl P2PManager {
 
     /// 发送聊天消息
     pub async fn send_message(&self, target_peer_id: String, message: String) -> Result<(), MdnsError> {
+        let start = std::time::Instant::now();
+        tracing::info!("📤 [P2PManager] send_message 开始: target={}", target_peer_id);
+
         use libp2p::PeerId;
 
         if let Some(connection_service) = &self.connection_service {
             let peer_id = target_peer_id.parse::<PeerId>()
                 .map_err(|e| MdnsError::SwarmBuild(format!("无效的 Peer ID: {}", e)))?;
 
+            let step1 = start.elapsed();
+            tracing::info!("⏱️  [P2PManager] Peer ID 解析完成: {:?}", step1);
+
+            let lock_start = std::time::Instant::now();
             let service = connection_service.lock().await;
+            tracing::info!("⏱️  [P2PManager] 获取 connection_service lock 耗时: {:?}", lock_start.elapsed());
+
             // 使用 ChatManager 发送消息
             if let Some(chat_manager) = service.chat_manager() {
+                let step2 = start.elapsed();
+                tracing::info!("⏱️  [P2PManager] 获取 chat_manager: {:?}", step2);
+
                 use crate::chat::ChatMessage;
-                let msg = ChatMessage::text(message);
-                chat_manager.send(peer_id, msg).await
-                    .map_err(|e| MdnsError::SwarmBuild(format!("发送消息失败: {}", e)))?;
-                Ok(())
+                let msg = ChatMessage::text(message.clone());
+                let send_start = std::time::Instant::now();
+
+                let result = chat_manager.send(peer_id, msg).await
+                    .map_err(|e| MdnsError::SwarmBuild(format!("发送消息失败: {}", e)));
+
+                tracing::info!("⏱️  [P2PManager] chat_manager.send 耗时: {:?}", send_start.elapsed());
+                tracing::info!("⏱️  [P2PManager] send_message 总耗时: {:?}", start.elapsed());
+
+                result
             } else {
+                tracing::error!("❌ [P2PManager] 聊天管理器未初始化");
                 Err(MdnsError::SwarmBuild("聊天管理器未初始化".to_string()))
             }
         } else {
+            tracing::error!("❌ [P2PManager] 连接服务未运行");
             Err(MdnsError::SwarmBuild("连接服务未运行".to_string()))
         }
+    }
+
+    /// 刷新设备发现
+    ///
+    /// 触发主动刷新：
+    /// 1. 重新广播自己的服务（mDNS 已自动处理）
+    /// 2. 重新扫描网络中的设备
+    /// 3. 尝试重新连接到所有已知节点
+    pub async fn refresh(&self) -> Result<(), MdnsError> {
+        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
+        tracing::info!("║ 🔄 [P2PManager] 主动刷新设备发现");
+        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
+        send_log("INFO", "p2p_manager", "🔄 主动刷新设备发现".to_string());
+
+        // 通过 discovery_tx 发送刷新事件
+        let _ = self.discovery_tx.send(super::events::DiscoveryEvent::Refresh);
+
+        tracing::info!("✓ [P2PManager] 刷新事件已发送");
+        send_log("INFO", "p2p_manager", "✅ 刷新完成".to_string());
+
+        Ok(())
     }
 
     /// 停止所有服务

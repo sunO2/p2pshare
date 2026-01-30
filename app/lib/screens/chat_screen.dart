@@ -181,11 +181,12 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _sendMessage(String text) {
+  /// 🔄 改为异步：使用 async/await 避免阻塞 UI
+  Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
 
     try {
-      P2PManager.instance.sendMessage(widget.peerId, text);
+      await P2PManager.instance.sendMessage(widget.peerId, text);
     } catch (e) {
       debugPrint('Failed to send message: $e');
       // Show error to user

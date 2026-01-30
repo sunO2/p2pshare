@@ -46,6 +46,10 @@ class P2PBridgeNodeInfo {
   final String? nickname;
   final String? status;
   final String? avatarUrl;
+  /// 节点地址列表（例如: ["/ip4/192.168.1.100/tcp/50001"]）
+  final List<String> addresses;
+  /// 协议版本（例如: "/localp2p/1.0.0"）
+  final String protocolVersion;
 
   const P2PBridgeNodeInfo({
     required this.peerId,
@@ -54,6 +58,8 @@ class P2PBridgeNodeInfo {
     this.nickname,
     this.status,
     this.avatarUrl,
+    required this.addresses,
+    required this.protocolVersion,
   });
 
   /// 简化版本，只有基本信息（用于兼容旧代码）
@@ -82,7 +88,9 @@ class P2PBridgeNodeInfo {
       deviceName.hashCode ^
       nickname.hashCode ^
       status.hashCode ^
-      avatarUrl.hashCode;
+      avatarUrl.hashCode ^
+      addresses.hashCode ^
+      protocolVersion.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -94,5 +102,7 @@ class P2PBridgeNodeInfo {
           deviceName == other.deviceName &&
           nickname == other.nickname &&
           status == other.status &&
-          avatarUrl == other.avatarUrl;
+          avatarUrl == other.avatarUrl &&
+          addresses == other.addresses &&
+          protocolVersion == other.protocolVersion;
 }

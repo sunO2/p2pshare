@@ -17,6 +17,9 @@ pub enum DiscoveryEvent {
     Expired {
         peer_id: PeerId,
     },
+
+    /// 刷新事件（用于触发重新扫描）
+    Refresh,
 }
 
 /// P2P 连接事件

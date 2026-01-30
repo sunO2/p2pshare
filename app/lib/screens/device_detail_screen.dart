@@ -34,6 +34,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
               peerId: widget.peerId,
               displayName: 'Unknown',
               deviceName: 'Unknown',
+              addresses: [],
+              protocolVersion: '',
             ),
           );
         });
@@ -46,17 +48,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
             peerId: widget.peerId,
             displayName: 'Unknown',
             deviceName: 'Unknown',
+            addresses: [],
+            protocolVersion: '',
           );
         });
       }
     }
-  }
-
-  String _shortenPeerId(String peerId) {
-    if (peerId.length > 16) {
-      return '${peerId.substring(0, 14)}...';
-    }
-    return peerId;
   }
 
   @override
@@ -89,6 +86,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
       color: const Color(0xFFF8F8F6),
       padding: const EdgeInsets.all(24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Device Info Card
           _buildDeviceInfoCard(),
@@ -111,6 +109,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Device Info Header
           Row(
@@ -156,15 +155,178 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           const SizedBox(height: 16),
 
           // Device Details
-          _buildDetailRow('Peer ID', _shortenPeerId(widget.peerId)),
+          _buildPeerIdSection(),
           const SizedBox(height: 16),
-          _buildDetailRow('地址', '/ip4/192.168.1.100/tcp/50001'),
+          _buildAddressesSection(),
           const SizedBox(height: 16),
-          _buildDetailRow('协议版本', '/localp2p/1.0.0'),
+          _buildProtocolVersionSection(),
           const SizedBox(height: 16),
-          _buildDetailRow('最后活跃', '刚刚'),
+          _buildLastSeenSection(),
         ],
       ),
+    );
+  }
+
+  Widget _buildPeerIdSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Peer ID', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onLongPress: () {
+            Clipboard.setData(ClipboardData(text: widget.peerId));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Peer ID 已复制')),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F0F0),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              widget.peerId,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddressesSection() {
+    final addresses = _nodeInfo?.addresses ?? [];
+
+    if (addresses.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('地址', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: addresses.map((addr) => _buildAddressTag(addr)).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddressTag(String address) {
+    // 解析地址类型
+    String label = 'IPv4';
+    Color labelColor = const Color(0xFF3D8A5A);
+
+    if (address.startsWith('/ip6')) {
+      label = 'IPv6';
+      labelColor = const Color(0xFF6C5CE7);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0F0),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: labelColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            _formatAddress(address),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatAddress(String address) {
+    // 将 /ip4/192.168.1.100/tcp/50001 格式化为 192.168.1.100:50001
+    final regex = RegExp(r'^/(ip[46])/([^/]+)/tcp/(\d+)$');
+    final match = regex.firstMatch(address);
+    if (match != null) {
+      final ip = match.group(2)!;
+      final port = match.group(3)!;
+      return '$ip:$port';
+    }
+    return address;
+  }
+
+  Widget _buildProtocolVersionSection() {
+    final protocolVersion = _nodeInfo?.protocolVersion ?? '';
+
+    if (protocolVersion.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // 使用 / 拆分协议版本，过滤掉空字符串
+    final parts = protocolVersion.split('/').where((part) => part.isNotEmpty).toList();
+
+    if (parts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('协议版本', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: parts.map((part) => _buildProtocolPart(part)).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProtocolPart(String part) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0F0),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE0E0E0)),
+      ),
+      child: Text(
+        part,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: const Color(0xFF424242),
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLastSeenSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('最后活跃', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 4),
+        Text('刚刚', style: Theme.of(context).textTheme.bodyLarge),
+      ],
     );
   }
 
@@ -195,17 +357,6 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 4),
-        Text(value, style: Theme.of(context).textTheme.bodyLarge),
-      ],
     );
   }
 

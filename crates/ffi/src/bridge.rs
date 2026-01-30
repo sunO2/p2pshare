@@ -47,6 +47,10 @@ pub struct P2PBridgeNodeInfo {
     pub nickname: Option<String>,
     pub status: Option<String>,
     pub avatar_url: Option<String>,
+    /// 节点地址列表（例如: ["/ip4/192.168.1.100/tcp/50001"]）
+    pub addresses: Vec<String>,
+    /// 协议版本（例如: "/localp2p/1.0.0"）
+    pub protocol_version: String,
 }
 
 impl P2PBridgeNodeInfo {
@@ -58,6 +62,8 @@ impl P2PBridgeNodeInfo {
             nickname: info.nickname.clone(),
             status: info.status.clone(),
             avatar_url: info.avatar_url.clone(),
+            addresses: Vec::new(),
+            protocol_version: String::new(),
         }
     }
 
@@ -70,6 +76,8 @@ impl P2PBridgeNodeInfo {
             nickname: None,
             status: None,
             avatar_url: None,
+            addresses: Vec::new(),
+            protocol_version: String::new(),
         }
     }
 }
@@ -106,9 +114,10 @@ pub fn p2p_is_discovery_thread_alive() -> bool {
 ///
 /// 用于应用从后台恢复时，如果发现线程已死，重启它
 /// 如果服务仍在运行，会先停止再重启
-#[frb(sync)]
-pub fn p2p_restart_discovery() -> Result<(), String> {
-    crate::internal_restart_discovery()
+///
+/// 🔄 改为异步：避免使用 block_on 导致 UI 卡顿
+pub async fn p2p_restart_discovery() -> Result<(), String> {
+    crate::internal_restart_discovery_async().await
 }
 
 /// 初始化 P2P 模块
@@ -146,10 +155,53 @@ pub fn p2p_cleanup() {
 /// 获取本地 Peer ID
 #[frb(sync)]
 pub fn p2p_get_local_peer_id() -> Result<String, String> {
-    // 简单的值访问，不需要异步
     let runtime = crate::get_runtime().ok_or("No runtime")?;
     let peer_id = runtime.block_on(crate::internal_get_local_peer_id())?;
     Ok(peer_id)
+}
+
+/// 获取已发现的节点列表
+///
+/// 返回当前所有已发现的设备，包括在线和离线的设备
+/// 可以用作刷新设备列表
+#[frb(sync)]
+pub fn p2p_get_devices() -> Result<Vec<P2PBridgeNodeInfo>, String> {
+    // 记录刷新请求
+    tracing::info!("🔄 [Bridge] Flutter 请求获取设备列表");
+
+    // 获取当前节点列表
+    crate::internal_get_nodes_sync()
+        .map(|nodes| {
+            nodes.into_iter().map(|n| P2PBridgeNodeInfo {
+                peer_id: n.peer_id.clone(),
+                display_name: n.display_name.clone(),
+                device_name: n.device_name.clone(),
+                nickname: n.nickname.clone(),
+                status: n.status.clone(),
+                avatar_url: n.avatar_url.clone(),
+                addresses: n.addresses.clone(),
+                protocol_version: n.protocol_version.clone(),
+            }).collect()
+        })
+}
+
+/// 刷新设备列表（别名，语义更清晰）
+///
+/// 功能同 p2p_get_devices，但语义上表示"刷新"操作
+/// mDNS 会自动发现设备，此函数用于获取最新的设备列表状态
+#[frb(sync)]
+pub fn p2p_refresh_devices() -> Result<Vec<P2PBridgeNodeInfo>, String> {
+    tracing::info!("🔄 [Bridge] Flutter 请求刷新设备列表");
+    p2p_get_devices()
+}
+
+/// 主动触发设备发现刷新
+///
+/// 触发 mDNS 重新广播和重新发现，并尝试重新连接到所有已知节点
+#[frb(sync)]
+pub fn p2p_trigger_refresh() -> Result<(), String> {
+    tracing::info!("🔄 [Bridge] Flutter 请求主动刷新");
+    crate::internal_trigger_refresh_sync()
 }
 
 /// 获取设备名称
@@ -172,6 +224,8 @@ pub fn p2p_get_verified_nodes() -> Result<Vec<P2PBridgeNodeInfo>, String> {
         nickname: n.nickname,
         status: n.status,
         avatar_url: n.avatar_url,
+        addresses: n.addresses,
+        protocol_version: n.protocol_version,
     }).collect())
 }
 
@@ -189,12 +243,13 @@ pub fn p2p_get_verified_nodes() -> Result<Vec<P2PBridgeNodeInfo>, String> {
 /// # Arguments
 /// * `target_peer_id` - 目标节点的 Peer ID
 /// * `message` - 消息内容
-#[frb(sync)]
-pub fn p2p_send_message(
+///
+/// 🔄 改为异步：避免使用 block_on 导致 UI 卡顿
+pub async fn p2p_send_message(
     target_peer_id: String,
     message: String,
 ) -> Result<(), String> {
-    crate::internal_send_message_sync(target_peer_id, message)
+    crate::internal_send_message(target_peer_id, message).await
 }
 
 /// 广播消息给多个节点
@@ -202,12 +257,13 @@ pub fn p2p_send_message(
 /// # Arguments
 /// * `target_peer_ids` - 目标节点的 Peer ID 列表
 /// * `message` - 消息内容
-#[frb(sync)]
-pub fn p2p_broadcast_message(
+///
+/// 🔄 改为异步：避免使用 block_on 导致 UI 卡顿
+pub async fn p2p_broadcast_message(
     target_peer_ids: Vec<String>,
     message: String,
 ) -> Result<(), String> {
-    crate::internal_broadcast_message_sync(target_peer_ids, message)
+    crate::internal_broadcast_message(target_peer_ids, message).await
 }
 
 // ============================================================================

@@ -290,6 +290,24 @@ impl ConnectionService {
                     Some(DiscoveryEvent::Expired { peer_id }) => {
                         tracing::debug!("设备 {} mDNS 记录过期", peer_id);
                     }
+                    Some(DiscoveryEvent::Refresh) => {
+                        tracing::info!("🔄 [连接服务] 收到刷新事件");
+                        crate::send_log("INFO", "connection_service", "🔄 收到刷新请求".to_string());
+
+                        // 触发重新连接到所有已知节点
+                        let known_nodes = self.node_manager.list_all_nodes().await;
+                        tracing::info!("🔄 [连接服务] 尝试重新连接到 {} 个已知节点", known_nodes.len());
+
+                        for node in known_nodes {
+                            for addr in &node.addresses {
+                                tracing::debug!("🔄 [连接服务] 尝试重新连接到 {} at {}", node.peer_id, addr);
+                                self.connect(node.peer_id, addr.clone()).await;
+                            }
+                        }
+
+                        tracing::info!("✓ [连接服务] 刷新完成");
+                        crate::send_log("INFO", "connection_service", "✅ 刷新完成".to_string());
+                    }
                     None => {
                         tracing::warn!("发现事件通道已关闭");
                         return Ok(false); // 通道关闭，退出

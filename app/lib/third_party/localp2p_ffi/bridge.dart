@@ -27,7 +27,9 @@ bool p2PIsDiscoveryThreadAlive() =>
 ///
 /// 用于应用从后台恢复时，如果发现线程已死，重启它
 /// 如果服务仍在运行，会先停止再重启
-void p2PRestartDiscovery() =>
+///
+/// 🔄 改为异步：避免使用 block_on 导致 UI 卡顿
+Future<void> p2PRestartDiscovery() =>
     P2PBridge.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
 
 /// 初始化 P2P 模块
@@ -54,6 +56,26 @@ void p2PCleanup() => P2PBridge.instance.api.localp2PFfiBridgeP2PCleanup();
 String p2PGetLocalPeerId() =>
     P2PBridge.instance.api.localp2PFfiBridgeP2PGetLocalPeerId();
 
+/// 获取已发现的节点列表
+///
+/// 返回当前所有已发现的设备，包括在线和离线的设备
+/// 可以用作刷新设备列表
+List<P2PBridgeNodeInfo> p2PGetDevices() =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PGetDevices();
+
+/// 刷新设备列表（别名，语义更清晰）
+///
+/// 功能同 p2p_get_devices，但语义上表示"刷新"操作
+/// mDNS 会自动发现设备，此函数用于获取最新的设备列表状态
+List<P2PBridgeNodeInfo> p2PRefreshDevices() =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PRefreshDevices();
+
+/// 主动触发设备发现刷新
+///
+/// 触发 mDNS 重新广播和重新发现，并尝试重新连接到所有已知节点
+void p2PTriggerRefresh() =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PTriggerRefresh();
+
 /// 获取设备名称
 String p2PGetDeviceName() =>
     P2PBridge.instance.api.localp2PFfiBridgeP2PGetDeviceName();
@@ -67,18 +89,24 @@ List<P2PBridgeNodeInfo> p2PGetVerifiedNodes() =>
 /// # Arguments
 /// * `target_peer_id` - 目标节点的 Peer ID
 /// * `message` - 消息内容
-void p2PSendMessage({required String targetPeerId, required String message}) =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PSendMessage(
-      targetPeerId: targetPeerId,
-      message: message,
-    );
+///
+/// 🔄 改为异步：避免使用 block_on 导致 UI 卡顿
+Future<void> p2PSendMessage({
+  required String targetPeerId,
+  required String message,
+}) => P2PBridge.instance.api.localp2PFfiBridgeP2PSendMessage(
+  targetPeerId: targetPeerId,
+  message: message,
+);
 
 /// 广播消息给多个节点
 ///
 /// # Arguments
 /// * `target_peer_ids` - 目标节点的 Peer ID 列表
 /// * `message` - 消息内容
-void p2PBroadcastMessage({
+///
+/// 🔄 改为异步：避免使用 block_on 导致 UI 卡顿
+Future<void> p2PBroadcastMessage({
   required List<String> targetPeerIds,
   required String message,
 }) => P2PBridge.instance.api.localp2PFfiBridgeP2PBroadcastMessage(
