@@ -21,15 +21,14 @@ pub enum DiscoveryEvent {
     /// 刷新事件（用于触发重新扫描）
     Refresh,
 
-    /// 检测到 VPN，需要 Flutter 启动辅助 mDNS
-    VpnDetected {
-        /// VPN 接口名称列表
-        vpn_interfaces: Vec<String>,
-        /// 物理接口名称
-        physical_interface: Option<String>,
-        /// 本地服务信息（用于 Flutter 广播）
+    /// mDNS 服务已启动，通知 Flutter 启动辅助 mDNS 广播
+    /// 用于测试 Flutter mDNS 能否正常工作，以及 Rust 能否接收到 Flutter 的广播
+    MdnsStarted {
+        /// 本地 Peer ID
         local_peer_id: String,
+        /// 监听端口
         port: u16,
+        /// 服务类型
         service_type: String,
     },
 }

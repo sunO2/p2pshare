@@ -337,22 +337,20 @@ impl ConnectionService {
                         tracing::info!("✓ [连接服务] 刷新完成");
                         crate::send_log("INFO", "connection_service", "✅ 刷新完成".to_string());
                     }
-                    Some(DiscoveryEvent::VpnDetected { vpn_interfaces, physical_interface, local_peer_id, port, service_type }) => {
-                        tracing::warn!("📡 [连接服务] 检测到 VPN: {:?}, 物理接口: {:?}", vpn_interfaces, physical_interface);
-                        crate::send_log("WARN", "connection_service",
-                            format!("📡 检测到 VPN 接口: {:?}\n🌐 物理接口: {:?}\n📋 服务: {}@{}\n🔄 转发到 Flutter 启动辅助 mDNS",
-                                vpn_interfaces, physical_interface, local_peer_id, port));
+                    Some(DiscoveryEvent::MdnsStarted { local_peer_id, port, service_type }) => {
+                        tracing::info!("🧪 [连接服务] mDNS 已启动: {}@{}", local_peer_id, port);
+                        crate::send_log("INFO", "connection_service",
+                            format!("🧪 mDNS 已启动\n📋 Peer ID: {}\n📋 端口: {}\n📋 服务类型: {}",
+                                local_peer_id, port, service_type));
 
-                        // ⭐ 将 VPN 检测事件转发到 Flutter（通过 FFI）
-                        // Flutter 端会收到这个事件，然后启动自己的 mDNS 服务
-                        if let Err(e) = crate::p2p_manager::send_vpn_detected_event_to_flutter(
-                            vpn_interfaces,
-                            physical_interface,
+                        // ⭐ 将 mDNS 启动事件转发到 Flutter（通过 FFI）
+                        // Flutter 端会收到这个事件，然后启动自己的 mDNS 广播（测试）
+                        if let Err(e) = crate::p2p_manager::send_mdns_started_event_to_flutter(
                             local_peer_id,
                             port,
                             service_type,
                         ) {
-                            tracing::error!("发送 VPN 事件到 Flutter 失败: {}", e);
+                            tracing::error!("发送 mDNS 启动事件到 Flutter 失败: {}", e);
                         }
                     }
                     None => {

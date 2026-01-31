@@ -218,52 +218,35 @@ class P2PManager {
   /// 当应用从后台返回前台时，Stream 订阅可能处于中断状态
   /// 此方法会：
   /// 1. 重新订阅事件流（确保能接收日志）
-  /// 2. 立即重启 discovery 服务（无条件）
+  /// 2. 触发刷新（重新广播 + 重新发现 + 重新连接）
   ///
-  /// 使用无条件重启的原因：
-  /// - 智能检查（先检查再重启）会导致连接恢复慢
-  /// - 直接重启可以快速恢复 mDNS 和设备发现
-  /// - 虽然会破坏正常工作的连接，但恢复后可以快速重新发现
-  ///
-  /// 🔄 改为异步：使用 async/await 避免阻塞 UI
+  /// ⭐ 使用和刷新按钮相同的逻辑（TriggerRefresh）
+  /// - 重新广播 mDNS 服务
+  /// - 重新扫描网络中的设备
+  /// - 尝试重新连接到所有已知节点
   Future<void> resumeEventStream() async {
     if (!_initialized) {
       _log.w('resumeEventStream 但未初始化');
       return;
     }
 
-    _log.i('resumeEventStream: 应用恢复，立即重启 discovery...');
+    _log.i('resumeEventStream: 应用恢复，触发刷新（和刷新按钮逻辑一致）');
 
     // 1. 先重新订阅 Stream（确保能接收日志）
     _log.i('重启事件 Stream 订阅');
     _restartEventStream();
 
-    // 2. 立即重启 discovery 服务（无条件，异步）
-    // 因为 Android 在后台会暂停 mDNS，恢复后需要立即重启
-    _log.i('从后台恢复，立即重启 discovery（异步）');
-    debugPrint('从后台恢复，立即重启 P2P discovery（异步）...');
+    // 2. 触发刷新（和刷新按钮一样的逻辑）
+    _log.i('从后台恢复，触发 P2P 刷新');
+    debugPrint('从后台恢复，触发 P2P 刷新...');
 
     try {
-      RustLib.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
-      _log.i('P2P discovery 重启成功');
-      debugPrint('✓ P2P discovery 重启成功');
+      RustLib.instance.api.localp2PFfiBridgeP2PTriggerRefresh();
+      _log.i('P2P 刷新触发成功');
+      debugPrint('✓ P2P 刷新触发成功');
     } catch (e, stackTrace) {
-      _log.e('重启 P2P discovery 失败: $e', e, stackTrace);
-      debugPrint('✗ 重启 P2P discovery 失败: $e');
-    }
-  }
-
-  /// 检查 discovery 线程是否真的活着
-  bool _isDiscoveryThreadAlive() {
-    try {
-      final result = RustLib.instance.api
-          .localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
-      _log.rustReturn('p2pIsDiscoveryThreadAlive', result: result);
-      return result;
-    } catch (e) {
-      _log.w('p2pIsDiscoveryThreadAlive 调用失败: $e');
-      debugPrint('p2pIsDiscoveryThreadAlive 调用失败: $e');
-      return false;
+      _log.e('触发 P2P 刷新失败: $e', e, stackTrace);
+      debugPrint('✗ 触发 P2P 刷新失败: $e');
     }
   }
 
@@ -633,10 +616,10 @@ class P2PManager {
       case 'TRACE':
         logService.t('[$target] $message');
         break;
-      case 'VPN_DETECTED':
-        // ⭐ 特殊处理：VPN 检测事件
-        _handleVpnDetected(message);
-        logService.w('[$target] $message');
+      case 'MDNS_STARTED':
+        // 🧪 特殊处理：mDNS 启动事件（测试用）
+        _handleMdnsStarted(message);
+        logService.i('[$target] $message');
         break;
       default:
         logService.i('[$target] $message');
@@ -646,44 +629,33 @@ class P2PManager {
     debugPrint('🔶 [$level] $target: $message');
   }
 
-  /// 处理 VPN 检测事件
-  void _handleVpnDetected(String message) {
-    _log.w('📡 收到 VPN 检测事件，准备启动 Flutter mDNS 辅助服务');
+  /// 处理 mDNS 启动事件（测试用）
+  void _handleMdnsStarted(String message) {
+    _log.i('🧪 收到 mDNS 启动事件，准备启动 Flutter mDNS 广播');
 
     try {
       // 解析 JSON 数据
-      // 格式：{"vpn_interfaces":["tun0"],"physical_interface":"wlan0","peer_id":"...","port":12345,"service_type":"..."}
+      // 格式：{"local_peer_id":"...","port":12345,"service_type":"..."}
       final data = _parseJsonOrNull(message);
       if (data == null) {
-        _log.e('无法解析 VPN 检测数据: $message');
+        _log.e('无法解析 mDNS 启动数据: $message');
         return;
       }
 
-      final vpnInterfaces = (data['vpn_interfaces'] as List?)?.cast<String>() ?? [];
-      final physicalInterface = data['physical_interface'] as String?;
       final localPeerId = data['local_peer_id'] as String? ?? '';
       final port = data['port'] as int? ?? 0;
       final serviceType = data['service_type'] as String? ?? '';
 
-      _log.i('VPN 接口: $vpnInterfaces, 物理接口: $physicalInterface');
+      _log.i('mDNS 启动: Peer ID=$localPeerId, Port=$port, Service=$serviceType');
 
-      // 发送 VPN 检测事件
-      _eventController.add(VpnDetectedEvent(
-        vpnInterfaces: vpnInterfaces,
-        physicalInterface: physicalInterface,
-        localPeerId: localPeerId,
-        port: port,
-        serviceType: serviceType,
-      ));
-
-      // ⭐ 启动 Flutter mDNS 辅助服务
-      _startFlutterMdns(
+      // ⭐ 启动 Flutter mDNS 广播（只注册，不浏览）
+      _startFlutterMdnsBroadcastOnly(
         name: localPeerId,
         port: port,
         serviceType: serviceType,
       );
     } catch (e, stackTrace) {
-      _log.e('处理 VPN 检测事件失败: $e', e, stackTrace);
+      _log.e('处理 mDNS 启动事件失败: $e', e, stackTrace);
     }
   }
 
@@ -726,6 +698,49 @@ class P2PManager {
       }
     } catch (e, stackTrace) {
       _log.e('[Flutter mDNS] 启动失败: $e', e, stackTrace);
+    }
+  }
+
+  /// 🧪 临时测试：仅启动 Flutter mDNS 广播（注册服务，不浏览）
+  ///
+  /// 测试目的：
+  /// - 验证 Flutter 能否正常发送 mDNS 广播
+  /// - 验证 Rust 能否接收到 Flutter 发送的广播
+  Future<void> _startFlutterMdnsBroadcastOnly({
+    required String name,
+    required int port,
+    required String serviceType,
+  }) async {
+    _log.i('[Flutter mDNS 测试] 启动广播模式（仅注册，不浏览）');
+    _log.i('[Flutter mDNS 测试] Peer ID: $name, Port: $port, Service: $serviceType');
+
+    try {
+      final mdnsService = FlutterMdnsService.instance;
+
+      // 如果已经在运行，先停止
+      if (mdnsService.isRunning) {
+        _log.d('[Flutter mDNS 测试] 服务已在运行，先停止');
+        await mdnsService.stop();
+      }
+
+      // ⭐ 只注册服务（发送广播），不浏览（不接收）
+      final success = await mdnsService.registerService(
+        name: name,
+        port: port,
+        serviceType: serviceType,
+      );
+
+      if (success) {
+        _log.i('[Flutter mDNS 测试] ✓ 广播注册成功');
+        _log.i('[Flutter mDNS 测试] 现在 Rust 应该能接收到这个广播');
+        debugPrint('✓ [Flutter mDNS 测试] 广播注册成功，等待 Rust 接收...');
+      } else {
+        _log.e('[Flutter mDNS 测试] ✗ 广播注册失败');
+        debugPrint('✗ [Flutter mDNS 测试] 广播注册失败');
+      }
+    } catch (e, stackTrace) {
+      _log.e('[Flutter mDNS 测试] 启动失败: $e', e, stackTrace);
+      debugPrint('✗ [Flutter mDNS 测试] 异常: $e');
     }
   }
 

@@ -224,18 +224,13 @@ impl MdnsServiceDiscovery {
         tracing::info!("✅ mDNS 服务注册成功: {}", fullname);
         send_log("INFO", "mdns_discovery", "✅ mDNS 服务注册成功".to_string());
 
-        // ⭐ 如果检测到 VPN，发送事件通知 Flutter 启动辅助 mDNS
+        // 🧪 如果检测到 VPN，记录日志（事件发送由 p2p_manager 统一处理）
         if !self.vpn_interfaces.is_empty() {
-            tracing::warn!("📡 检测到 VPN，通知 Flutter 启动辅助 mDNS");
-            send_log("WARN", "mdns_discovery", "📡 检测到 VPN，通知 Flutter 启动辅助 mDNS".to_string());
-
-            let _ = self.discovery_tx.send(DiscoveryEvent::VpnDetected {
-                vpn_interfaces: self.vpn_interfaces.clone(),
-                physical_interface: self.physical_interface.clone(),
-                local_peer_id: self.local_peer_id.clone(),
-                port,
-                service_type: SERVICE_TYPE.to_string(),
-            });
+            tracing::warn!("📡 检测到 VPN 接口: {:?}, 物理接口: {:?}",
+                self.vpn_interfaces, self.physical_interface);
+            send_log("WARN", "mdns_discovery",
+                format!("📡 检测到 VPN: {:?}, 物理接口: {:?}",
+                    self.vpn_interfaces, self.physical_interface));
         }
 
         Ok(())
@@ -364,7 +359,17 @@ impl MdnsServiceDiscovery {
                 // 只使用第一个（最佳）地址
                 if let Some((multiaddr, _)) = filtered_addrs.first() {
                     use libp2p::PeerId;
-                    let peer_id: PeerId = peer_id_str.parse().unwrap_or_else(|_| PeerId::random());
+                    let peer_id: PeerId = peer_id_str.parse().unwrap_or_else(|e| {
+                        tracing::warn!("⚠️ Peer ID 解析失败: {} -> 错误: {}", peer_id_str, e);
+                        send_log("WARN", "mdns_discovery", format!("⚠️ Peer ID 解析失败: {} | 错误: {}", peer_id_str, e));
+                        PeerId::random()
+                    });
+
+                    // 记录解析后的 Peer ID（用于调试）
+                    let peer_id_parsed = peer_id.to_string();
+                    if peer_id_str != peer_id_parsed {
+                        tracing::warn!("⚠️ Peer ID 不一致: 原始={} vs 解析后={}", peer_id_str, peer_id_parsed);
+                    }
 
                     // 检查是否已发现过
                     let peer_key = peer_id.to_string();

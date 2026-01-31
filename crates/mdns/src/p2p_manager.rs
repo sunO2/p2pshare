@@ -284,6 +284,19 @@ impl P2PManager {
         tracing::info!("  └─ 广播端口: UDP 5353");
         tracing::info!("  └─ 服务类型: _localp2p._tcp");
 
+        // 🧪 发送 mDNS 启动事件到 Flutter（测试用）
+        // 通知 Flutter 启动辅助 mDNS 广播，测试：
+        // 1. Flutter 能否正常发送 mDNS 广播
+        // 2. Rust 能否接收到 Flutter 发送的广播
+        let service_type = "_localp2p._tcp".to_string();
+        if let Err(e) = send_mdns_started_event_to_flutter(
+            self.peer_id.to_string(),
+            port,
+            service_type,
+        ) {
+            tracing::warn!("发送 mDNS 启动事件到 Flutter 失败: {:?}", e);
+        }
+
         Ok(())
     }
 
@@ -654,13 +667,11 @@ impl P2PManager {
     }
 }
 
-/// ⭐ 发送 VPN 检测事件到 Flutter（通过 FFI）
+/// ⭐ 发送 mDNS 启动事件到 Flutter（通过 FFI）
 ///
-/// 此函数被 connection_service 调用，当检测到 VPN 时，
-/// 将事件转发到 Flutter 端，让 Flutter 启动辅助 mDNS 服务
-pub fn send_vpn_detected_event_to_flutter(
-    vpn_interfaces: Vec<String>,
-    physical_interface: Option<String>,
+/// 此函数在 mDNS 服务启动时被调用，
+/// 将事件转发到 Flutter 端，让 Flutter 启动辅助 mDNS 服务（测试用）
+pub fn send_mdns_started_event_to_flutter(
     local_peer_id: String,
     port: u16,
     service_type: String,
@@ -669,18 +680,15 @@ pub fn send_vpn_detected_event_to_flutter(
 
     // 构建事件数据
     let event_data = json!({
-        "vpn_interfaces": vpn_interfaces,
-        "physical_interface": physical_interface,
         "local_peer_id": local_peer_id,
         "port": port,
         "service_type": service_type,
     });
 
-    tracing::info!("📡 [FFI] 发送 VPN 检测事件到 Flutter: {}", event_data);
+    tracing::info!("🧪 [FFI] 发送 mDNS 启动事件到 Flutter: {}", event_data);
 
-    // 通过全局日志回调发送（暂时使用日志机制）
-    // TODO: 未来应该通过专门的 FFI 事件通道发送
-    send_log("VPN_DETECTED", "mdns", event_data.to_string());
+    // 通过全局日志回调发送
+    send_log("MDNS_STARTED", "mdns", event_data.to_string());
 
     Ok(())
 }
