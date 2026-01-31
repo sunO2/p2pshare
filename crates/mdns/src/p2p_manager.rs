@@ -12,7 +12,6 @@
 use super::{
     node::{NodeManager, NodeManagerConfig, VerifiedNode},
     user_info::UserInfo,
-    mdns_discovery::MdnsServiceDiscovery,
     connection_service::{ConnectionService, ConnectionServiceConfig},
     managed_discovery::{ManagedDiscovery, HealthCheckConfig},
     chat::traits::ChatExtension,
@@ -400,19 +399,20 @@ impl P2PManager {
 
         // 先启动连接服务（接收者先就绪）
         tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
-        tracing::info!("║ 📊 [步骤 1/2] 启动连接服务（ConnectionService）");
+        tracing::info!("║ 📊 [步骤 1/3] 启动连接服务（ConnectionService）");
         tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
-        send_log("INFO", "p2p_manager", "📊 步骤 1/2: 启动连接服务...".to_string());
+        send_log("INFO", "p2p_manager", "📊 步骤 1/3: 启动连接服务...".to_string());
 
         let listeners = self.start_connection().await?;
 
-        tracing::info!("✓ [步骤 1/2] 连接服务启动成功");
+        tracing::info!("✓ [步骤 1/3] 连接服务启动成功");
         tracing::info!("  └─ 监听地址: {:?}", listeners);
         for addr in &listeners {
             send_log("INFO", "p2p_manager", format!("  └─ 监听地址: {}", addr));
         }
 
         // 再启动 mDNS 服务（传递 ConnectionService 的监听地址）
+        // 注意：mDNS 服务内部会在开始浏览前等待 500ms（在后台任务中，不阻塞 FFI）
         tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
         tracing::info!("║ 📡 [步骤 2/2] 启动 mDNS 服务（MdnsDiscoveryService）");
         tracing::info!("║ 传递连接服务地址给 mDNS 服务广播");
@@ -421,7 +421,7 @@ impl P2PManager {
 
         self.start_mdns(listeners).await?;
 
-        tracing::info!("✓ [步骤 2/2] mDNS 服务启动成功");
+        tracing::info!("✓ [步骤 3/3] mDNS 服务启动成功");
         tracing::info!("  └─ UDP 5353: mDNS 广播端口");
         tracing::info!("  └─ mDNS 将广播连接服务的地址");
 
@@ -652,6 +652,37 @@ impl P2PManager {
     pub fn identity_clone(&self) -> Keypair {
         self.identity.clone()
     }
+}
+
+/// ⭐ 发送 VPN 检测事件到 Flutter（通过 FFI）
+///
+/// 此函数被 connection_service 调用，当检测到 VPN 时，
+/// 将事件转发到 Flutter 端，让 Flutter 启动辅助 mDNS 服务
+pub fn send_vpn_detected_event_to_flutter(
+    vpn_interfaces: Vec<String>,
+    physical_interface: Option<String>,
+    local_peer_id: String,
+    port: u16,
+    service_type: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use serde_json::json;
+
+    // 构建事件数据
+    let event_data = json!({
+        "vpn_interfaces": vpn_interfaces,
+        "physical_interface": physical_interface,
+        "local_peer_id": local_peer_id,
+        "port": port,
+        "service_type": service_type,
+    });
+
+    tracing::info!("📡 [FFI] 发送 VPN 检测事件到 Flutter: {}", event_data);
+
+    // 通过全局日志回调发送（暂时使用日志机制）
+    // TODO: 未来应该通过专门的 FFI 事件通道发送
+    send_log("VPN_DETECTED", "mdns", event_data.to_string());
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -4,22 +4,27 @@ import '../bridge/bridge.dart';
 class DeviceCard extends StatelessWidget {
   final P2PBridgeNodeInfo node;
   final VoidCallback? onTap;
+  final VoidCallback? onAvatarTap;
   final VoidCallback? onChatTap;
 
-  const DeviceCard({super.key, required this.node, this.onTap, this.onChatTap});
+  const DeviceCard({
+    super.key,
+    required this.node,
+    this.onTap,
+    this.onAvatarTap,
+    this.onChatTap,
+  });
 
-  String _shortenPeerId(String peerId) {
-    if (peerId.length > 12) {
-      return '${peerId.substring(0, 10)}...';
-    }
-    return peerId;
-  }
+  Color _getStatusColor(String? status) {
+    if (status == null) return const Color(0xFF3D8A5A); // 默认在线
 
-  Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case '在线':
       case 'online':
         return const Color(0xFF3D8A5A);
+      case '离线':
+      case 'offline':
+        return const Color(0xFFD32F2F);
       case '忙碌':
       case 'busy':
         return const Color(0xFFF57C00);
@@ -31,8 +36,40 @@ class DeviceCard extends StatelessWidget {
     }
   }
 
+  String _getStatusText(String? status) {
+    if (status == null) return '在线';
+    final statusStr = status.toLowerCase();
+    if (statusStr == 'offline') return '离线';
+    return status;
+  }
+
+  Color _getStatusBackgroundColor(String? status) {
+    if (status == null) return const Color(0xFFC8F0D8);
+
+    switch (status.toLowerCase()) {
+      case '在线':
+      case 'online':
+        return const Color(0xFFC8F0D8);
+      case '离线':
+      case 'offline':
+        return const Color(0xFFFFEBEE);
+      case '忙碌':
+      case 'busy':
+        return const Color(0xFFFFE0B2);
+      case '离开':
+      case 'away':
+        return const Color(0xFFFFF9C4);
+      default:
+        return const Color(0xFFE8E8E6);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final statusColor = _getStatusColor(node.status);
+    final statusText = _getStatusText(node.status);
+    final statusBackgroundColor = _getStatusBackgroundColor(node.status);
+
     return Container(
       width: double.infinity,
       height: 80,
@@ -50,21 +87,24 @@ class DeviceCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             child: Row(
               children: [
-                // Device Icon
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8E8E6),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6D6C6A),
-                        shape: BoxShape.circle,
+                // Device Icon - 可点击进入详情
+                GestureDetector(
+                  onTap: onAvatarTap,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8E8E6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6D6C6A),
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ),
                   ),
@@ -87,55 +127,12 @@ class DeviceCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // 状态信息
-                      Row(
-                        children: [
-                          if (node.status != null) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(
-                                  node.status!,
-                                ).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                node.status!,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.normal,
-                                  color: _getStatusColor(node.status!),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
-                          Text(
-                            '${_shortenPeerId(node.peerId)} • 在线',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.normal,
-                              color: Color(0xFF9C9B99),
-                            ),
-                          ),
-                        ],
-                      ),
+                      // 状态指示器（和列表头部统一但更小）
+                      _buildStatusIndicator(statusText, statusColor, statusBackgroundColor),
                     ],
                   ),
                 ),
 
-                // Status Indicator
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF3D8A5A),
-                    shape: BoxShape.circle,
-                  ),
-                ),
                 const SizedBox(width: 12),
 
                 // Chat Button
@@ -159,6 +156,39 @@ class DeviceCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// 构建状态指示器（和列表头部统一但更小）
+  Widget _buildStatusIndicator(String text, Color statusColor, Color backgroundColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: statusColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.normal,
+              color: statusColor,
+            ),
+          ),
+        ],
       ),
     );
   }

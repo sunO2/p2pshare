@@ -10,7 +10,6 @@ import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'third_party/localp2p_ffi/bridge.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -65,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 2049776511;
+  int get rustContentHash => -635669165;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -76,61 +75,61 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Future<void> localp2PFfiBridgeP2PBroadcastMessage({
+  Future<void> crateBridgeP2PBroadcastMessage({
     required List<String> targetPeerIds,
     required String message,
   });
 
-  void localp2PFfiBridgeP2PCleanup();
+  void crateBridgeP2PCleanup();
 
-  String localp2PFfiBridgeP2PGetDeviceName();
+  String crateBridgeP2PGetDeviceName();
 
-  List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetDevices();
+  List<P2PBridgeNodeInfo> crateBridgeP2PGetDevices();
 
-  String localp2PFfiBridgeP2PGetLocalPeerId();
+  String crateBridgeP2PGetLocalPeerId();
 
-  List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes();
+  List<P2PBridgeNodeInfo> crateBridgeP2PGetVerifiedNodes();
 
-  void localp2PFfiBridgeP2PInit({
+  void crateBridgeP2PInit({
     required String deviceName,
     required String identityPath,
   });
 
-  bool localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
+  bool crateBridgeP2PIsDiscoveryThreadAlive();
 
-  bool localp2PFfiBridgeP2PIsInitialized();
+  bool crateBridgeP2PIsInitialized();
 
-  bool localp2PFfiBridgeP2PIsRunning();
+  bool crateBridgeP2PIsRunning();
 
-  List<P2PBridgeEvent> localp2PFfiBridgeP2PPollEvents();
+  List<P2PBridgeEvent> crateBridgeP2PPollEvents();
 
-  List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PRefreshDevices();
+  List<P2PBridgeNodeInfo> crateBridgeP2PRefreshDevices();
 
-  void localp2PFfiBridgeP2PReportExternalDeviceLost({required String peerId});
+  void crateBridgeP2PReportExternalDeviceLost({required String peerId});
 
-  void localp2PFfiBridgeP2PReportExternalDiscoveries({
+  void crateBridgeP2PReportExternalDiscoveries({
     required List<ExternalDiscovery> discoveries,
   });
 
-  void localp2PFfiBridgeP2PReportExternalDiscovery({
+  void crateBridgeP2PReportExternalDiscovery({
     required String peerId,
     required String address,
   });
 
-  Future<void> localp2PFfiBridgeP2PRestartDiscovery();
+  Future<void> crateBridgeP2PRestartDiscovery();
 
-  Future<void> localp2PFfiBridgeP2PSendMessage({
+  Future<void> crateBridgeP2PSendMessage({
     required String targetPeerId,
     required String message,
   });
 
-  Stream<P2PBridgeEvent> localp2PFfiBridgeP2PSetEventStream();
+  Stream<P2PBridgeEvent> crateBridgeP2PSetEventStream();
 
-  void localp2PFfiBridgeP2PStart();
+  void crateBridgeP2PStart();
 
-  void localp2PFfiBridgeP2PStop();
+  void crateBridgeP2PStop();
 
-  void localp2PFfiBridgeP2PTriggerRefresh();
+  void crateBridgeP2PTriggerRefresh();
 
   Future<P2PBridgeNodeInfo> crateBridgeP2PBridgeNodeInfoFromBasicInfo({
     required String peerId,
@@ -161,7 +160,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<void> localp2PFfiBridgeP2PBroadcastMessage({
+  Future<void> crateBridgeP2PBroadcastMessage({
     required List<String> targetPeerIds,
     required String message,
   }) {
@@ -182,21 +181,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PBroadcastMessageConstMeta,
+        constMeta: kCrateBridgeP2PBroadcastMessageConstMeta,
         argValues: [targetPeerIds, message],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PBroadcastMessageConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PBroadcastMessageConstMeta =>
       const TaskConstMeta(
         debugName: "p2p_broadcast_message",
         argNames: ["targetPeerIds", "message"],
       );
 
   @override
-  void localp2PFfiBridgeP2PCleanup() {
+  void crateBridgeP2PCleanup() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -207,18 +206,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PCleanupConstMeta,
+        constMeta: kCrateBridgeP2PCleanupConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PCleanupConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PCleanupConstMeta =>
       const TaskConstMeta(debugName: "p2p_cleanup", argNames: []);
 
   @override
-  String localp2PFfiBridgeP2PGetDeviceName() {
+  String crateBridgeP2PGetDeviceName() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -229,18 +228,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PGetDeviceNameConstMeta,
+        constMeta: kCrateBridgeP2PGetDeviceNameConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PGetDeviceNameConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PGetDeviceNameConstMeta =>
       const TaskConstMeta(debugName: "p2p_get_device_name", argNames: []);
 
   @override
-  List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetDevices() {
+  List<P2PBridgeNodeInfo> crateBridgeP2PGetDevices() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -251,18 +250,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PGetDevicesConstMeta,
+        constMeta: kCrateBridgeP2PGetDevicesConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PGetDevicesConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PGetDevicesConstMeta =>
       const TaskConstMeta(debugName: "p2p_get_devices", argNames: []);
 
   @override
-  String localp2PFfiBridgeP2PGetLocalPeerId() {
+  String crateBridgeP2PGetLocalPeerId() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -273,18 +272,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PGetLocalPeerIdConstMeta,
+        constMeta: kCrateBridgeP2PGetLocalPeerIdConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PGetLocalPeerIdConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PGetLocalPeerIdConstMeta =>
       const TaskConstMeta(debugName: "p2p_get_local_peer_id", argNames: []);
 
   @override
-  List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes() {
+  List<P2PBridgeNodeInfo> crateBridgeP2PGetVerifiedNodes() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -295,18 +294,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PGetVerifiedNodesConstMeta,
+        constMeta: kCrateBridgeP2PGetVerifiedNodesConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PGetVerifiedNodesConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PGetVerifiedNodesConstMeta =>
       const TaskConstMeta(debugName: "p2p_get_verified_nodes", argNames: []);
 
   @override
-  void localp2PFfiBridgeP2PInit({
+  void crateBridgeP2PInit({
     required String deviceName,
     required String identityPath,
   }) {
@@ -322,20 +321,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PInitConstMeta,
+        constMeta: kCrateBridgeP2PInitConstMeta,
         argValues: [deviceName, identityPath],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PInitConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateBridgeP2PInitConstMeta => const TaskConstMeta(
     debugName: "p2p_init",
     argNames: ["deviceName", "identityPath"],
   );
 
   @override
-  bool localp2PFfiBridgeP2PIsDiscoveryThreadAlive() {
+  bool crateBridgeP2PIsDiscoveryThreadAlive() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -346,21 +345,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PIsDiscoveryThreadAliveConstMeta,
+        constMeta: kCrateBridgeP2PIsDiscoveryThreadAliveConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PIsDiscoveryThreadAliveConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PIsDiscoveryThreadAliveConstMeta =>
       const TaskConstMeta(
         debugName: "p2p_is_discovery_thread_alive",
         argNames: [],
       );
 
   @override
-  bool localp2PFfiBridgeP2PIsInitialized() {
+  bool crateBridgeP2PIsInitialized() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -371,18 +370,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PIsInitializedConstMeta,
+        constMeta: kCrateBridgeP2PIsInitializedConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PIsInitializedConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PIsInitializedConstMeta =>
       const TaskConstMeta(debugName: "p2p_is_initialized", argNames: []);
 
   @override
-  bool localp2PFfiBridgeP2PIsRunning() {
+  bool crateBridgeP2PIsRunning() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -393,18 +392,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PIsRunningConstMeta,
+        constMeta: kCrateBridgeP2PIsRunningConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PIsRunningConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PIsRunningConstMeta =>
       const TaskConstMeta(debugName: "p2p_is_running", argNames: []);
 
   @override
-  List<P2PBridgeEvent> localp2PFfiBridgeP2PPollEvents() {
+  List<P2PBridgeEvent> crateBridgeP2PPollEvents() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -415,18 +414,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_list_p_2_p_bridge_event,
           decodeErrorData: null,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PPollEventsConstMeta,
+        constMeta: kCrateBridgeP2PPollEventsConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PPollEventsConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PPollEventsConstMeta =>
       const TaskConstMeta(debugName: "p2p_poll_events", argNames: []);
 
   @override
-  List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PRefreshDevices() {
+  List<P2PBridgeNodeInfo> crateBridgeP2PRefreshDevices() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -437,18 +436,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PRefreshDevicesConstMeta,
+        constMeta: kCrateBridgeP2PRefreshDevicesConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PRefreshDevicesConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PRefreshDevicesConstMeta =>
       const TaskConstMeta(debugName: "p2p_refresh_devices", argNames: []);
 
   @override
-  void localp2PFfiBridgeP2PReportExternalDeviceLost({required String peerId}) {
+  void crateBridgeP2PReportExternalDeviceLost({required String peerId}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -460,21 +459,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PReportExternalDeviceLostConstMeta,
+        constMeta: kCrateBridgeP2PReportExternalDeviceLostConstMeta,
         argValues: [peerId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PReportExternalDeviceLostConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PReportExternalDeviceLostConstMeta =>
       const TaskConstMeta(
         debugName: "p2p_report_external_device_lost",
         argNames: ["peerId"],
       );
 
   @override
-  void localp2PFfiBridgeP2PReportExternalDiscoveries({
+  void crateBridgeP2PReportExternalDiscoveries({
     required List<ExternalDiscovery> discoveries,
   }) {
     return handler.executeSync(
@@ -488,21 +487,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PReportExternalDiscoveriesConstMeta,
+        constMeta: kCrateBridgeP2PReportExternalDiscoveriesConstMeta,
         argValues: [discoveries],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PReportExternalDiscoveriesConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PReportExternalDiscoveriesConstMeta =>
       const TaskConstMeta(
         debugName: "p2p_report_external_discoveries",
         argNames: ["discoveries"],
       );
 
   @override
-  void localp2PFfiBridgeP2PReportExternalDiscovery({
+  void crateBridgeP2PReportExternalDiscovery({
     required String peerId,
     required String address,
   }) {
@@ -518,21 +517,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PReportExternalDiscoveryConstMeta,
+        constMeta: kCrateBridgeP2PReportExternalDiscoveryConstMeta,
         argValues: [peerId, address],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PReportExternalDiscoveryConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PReportExternalDiscoveryConstMeta =>
       const TaskConstMeta(
         debugName: "p2p_report_external_discovery",
         argNames: ["peerId", "address"],
       );
 
   @override
-  Future<void> localp2PFfiBridgeP2PRestartDiscovery() {
+  Future<void> crateBridgeP2PRestartDiscovery() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -548,18 +547,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PRestartDiscoveryConstMeta,
+        constMeta: kCrateBridgeP2PRestartDiscoveryConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PRestartDiscoveryConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PRestartDiscoveryConstMeta =>
       const TaskConstMeta(debugName: "p2p_restart_discovery", argNames: []);
 
   @override
-  Future<void> localp2PFfiBridgeP2PSendMessage({
+  Future<void> crateBridgeP2PSendMessage({
     required String targetPeerId,
     required String message,
   }) {
@@ -580,21 +579,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PSendMessageConstMeta,
+        constMeta: kCrateBridgeP2PSendMessageConstMeta,
         argValues: [targetPeerId, message],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PSendMessageConstMeta =>
-      const TaskConstMeta(
-        debugName: "p2p_send_message",
-        argNames: ["targetPeerId", "message"],
-      );
+  TaskConstMeta get kCrateBridgeP2PSendMessageConstMeta => const TaskConstMeta(
+    debugName: "p2p_send_message",
+    argNames: ["targetPeerId", "message"],
+  );
 
   @override
-  Stream<P2PBridgeEvent> localp2PFfiBridgeP2PSetEventStream() {
+  Stream<P2PBridgeEvent> crateBridgeP2PSetEventStream() {
     final streamSink = RustStreamSink<P2PBridgeEvent>();
     handler.executeSync(
       SyncTask(
@@ -607,7 +605,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PSetEventStreamConstMeta,
+        constMeta: kCrateBridgeP2PSetEventStreamConstMeta,
         argValues: [streamSink],
         apiImpl: this,
       ),
@@ -615,14 +613,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return streamSink.stream;
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PSetEventStreamConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PSetEventStreamConstMeta =>
       const TaskConstMeta(
         debugName: "p2p_set_event_stream",
         argNames: ["streamSink"],
       );
 
   @override
-  void localp2PFfiBridgeP2PStart() {
+  void crateBridgeP2PStart() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -633,18 +631,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PStartConstMeta,
+        constMeta: kCrateBridgeP2PStartConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PStartConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PStartConstMeta =>
       const TaskConstMeta(debugName: "p2p_start", argNames: []);
 
   @override
-  void localp2PFfiBridgeP2PStop() {
+  void crateBridgeP2PStop() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -655,18 +653,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PStopConstMeta,
+        constMeta: kCrateBridgeP2PStopConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PStopConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PStopConstMeta =>
       const TaskConstMeta(debugName: "p2p_stop", argNames: []);
 
   @override
-  void localp2PFfiBridgeP2PTriggerRefresh() {
+  void crateBridgeP2PTriggerRefresh() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -677,14 +675,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kLocalp2PFfiBridgeP2PTriggerRefreshConstMeta,
+        constMeta: kCrateBridgeP2PTriggerRefreshConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kLocalp2PFfiBridgeP2PTriggerRefreshConstMeta =>
+  TaskConstMeta get kCrateBridgeP2PTriggerRefreshConstMeta =>
       const TaskConstMeta(debugName: "p2p_trigger_refresh", argNames: []);
 
   @override

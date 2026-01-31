@@ -50,10 +50,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  ExternalDiscovery dco_decode_external_discovery(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<ExternalDiscovery> dco_decode_list_external_discovery(dynamic raw);
 
   @protected
   List<P2PBridgeEvent> dco_decode_list_p_2_p_bridge_event(dynamic raw);
@@ -109,10 +115,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  ExternalDiscovery sse_decode_external_discovery(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<ExternalDiscovery> sse_decode_list_external_discovery(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<P2PBridgeEvent> sse_decode_list_p_2_p_bridge_event(
@@ -180,10 +194,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_external_discovery(
+    ExternalDiscovery self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_external_discovery(
+    List<ExternalDiscovery> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_p_2_p_bridge_event(

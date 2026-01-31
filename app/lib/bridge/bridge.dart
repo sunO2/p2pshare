@@ -7,6 +7,25 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
 
+/// 外部发现的设备信息
+class ExternalDiscovery {
+  final String peerId;
+  final String address;
+
+  const ExternalDiscovery({required this.peerId, required this.address});
+
+  @override
+  int get hashCode => peerId.hashCode ^ address.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExternalDiscovery &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          address == other.address;
+}
+
 /// P2P 事件（用于 FRB）
 class P2PBridgeEvent {
   /// 事件类型

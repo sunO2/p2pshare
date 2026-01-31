@@ -288,3 +288,61 @@ pub fn p2p_set_event_stream(stream_sink: StreamSink<P2PBridgeEvent>) -> Result<(
 pub fn p2p_poll_events() -> Vec<P2PBridgeEvent> {
     crate::poll_events()
 }
+
+// ============================================================================
+// 外部 mDNS 发现（Flutter mDNS 辅助）
+// ============================================================================
+
+/// 报告外部发现的设备（由 Flutter mDNS 发现）
+///
+/// 当 Flutter 的 mDNS 辅助服务发现设备时，调用此方法通知 Rust 层
+/// Rust 层会尝试连接到该设备
+///
+/// # Arguments
+/// * `peer_id` - 对端的 Peer ID
+/// * `address` - 对端的地址（例如 "/ip4/192.168.1.100/tcp/50001"）
+///
+/// # Example
+/// ```dart
+/// RustLib.instance.api.p2pReportExternalDiscovery(
+///     peerId: "12D3KooW...",
+///     address: "/ip4/192.168.1.100/tcp/50001",
+/// );
+/// ```
+#[frb(sync)]
+pub fn p2p_report_external_discovery(
+    peer_id: String,
+    address: String,
+) -> Result<(), String> {
+    tracing::info!("📡 [FFI] Flutter mDNS 发现设备: {} at {}", peer_id, address);
+    crate::internal_report_external_discovery(peer_id, address)
+}
+
+/// 报告多个外部发现的设备
+///
+/// 批量报告设备，减少 FFI 调用次数
+#[frb(sync)]
+pub fn p2p_report_external_discoveries(
+    discoveries: Vec<ExternalDiscovery>,
+) -> Result<(), String> {
+    tracing::info!("📡 [FFI] Flutter mDNS 批量报告 {} 个设备", discoveries.len());
+    crate::internal_report_external_discoveries(discoveries)
+}
+
+/// 外部发现的设备信息
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ExternalDiscovery {
+    pub peer_id: String,
+    pub address: String,
+}
+
+/// 报告外部发现的设备离线
+///
+/// 当 Flutter 的 mDNS 辅助服务检测到设备离线时，调用此方法通知 Rust 层
+#[frb(sync)]
+pub fn p2p_report_external_device_lost(
+    peer_id: String,
+) -> Result<(), String> {
+    tracing::info!("📡 [FFI] Flutter mDNS 设备离线: {}", peer_id);
+    crate::internal_report_external_device_lost(peer_id)
+}

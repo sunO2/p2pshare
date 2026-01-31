@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../p2p_manager.dart';
 import '../bridge/bridge.dart';
 import '../widgets/unified_app_bar.dart';
+import '../services/p2p_event_bus.dart' as eb;
 import 'chat_screen.dart';
 
 class DeviceDetailScreen extends StatefulWidget {
@@ -16,11 +17,19 @@ class DeviceDetailScreen extends StatefulWidget {
 
 class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   P2PBridgeNodeInfo? _nodeInfo;
+  eb.P2PEventSubscription<eb.P2PEvent>? _statusSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadNodeInfo();
+    _listenToStatusChanges();
+  }
+
+  @override
+  void dispose() {
+    _statusSubscription?.cancel();
+    super.dispose();
   }
 
   void _loadNodeInfo() {
@@ -56,6 +65,20 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     }
   }
 
+  /// 使用 EventBus 监听指定设备的在线状态变化（带状态缓存）
+  void _listenToStatusChanges() {
+    // 使用 subscribe 方法，它会返回一个可以直接使用的 P2PEventSubscription
+    _statusSubscription = eb.P2PEventBus.instance.subscribe(
+      peerId: widget.peerId,
+      onData: (event) {
+        if (!mounted) return;
+        debugPrint('[EventBus] Device ${widget.peerId} status changed: ${event.type}');
+        // 重新加载节点信息以更新 UI
+        _loadNodeInfo();
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -88,11 +111,15 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Device Info Card
-          _buildDeviceInfoCard(),
+          // Device Info Card - 可滚动
+          Expanded(
+            child: SingleChildScrollView(
+              child: _buildDeviceInfoCard(),
+            ),
+          ),
           const SizedBox(height: 20),
 
-          // Action Buttons
+          // Action Buttons - 固定在底部
           _buildActionButtons(),
         ],
       ),
@@ -331,10 +358,55 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildStatusIndicator() {
+    final status = _nodeInfo?.status;
+    final isOffline = status != null && (status.toLowerCase() == '离线' || status.toLowerCase() == 'offline');
+
+    // 状态颜色
+    final Color statusColor;
+    final Color backgroundColor;
+    final String statusText;
+
+    if (isOffline) {
+      statusColor = const Color(0xFFD32F2F);
+      backgroundColor = const Color(0xFFFFEBEE);
+      statusText = '离线';
+    } else if (status != null) {
+      switch (status.toLowerCase()) {
+        case '在线':
+        case 'online':
+          statusColor = const Color(0xFF3D8A5A);
+          backgroundColor = const Color(0xFFC8F0D8);
+          statusText = status;
+          break;
+        case '忙碌':
+        case 'busy':
+          statusColor = const Color(0xFFF57C00);
+          backgroundColor = const Color(0xFFFFE0B2);
+          statusText = status;
+          break;
+        case '离开':
+        case 'away':
+          statusColor = const Color(0xFFF9A825);
+          backgroundColor = const Color(0xFFFFF9C4);
+          statusText = status;
+          break;
+        default:
+          statusColor = const Color(0xFF3D8A5A);
+          backgroundColor = const Color(0xFFC8F0D8);
+          statusText = status;
+          break;
+      }
+    } else {
+      // 默认在线
+      statusColor = const Color(0xFF3D8A5A);
+      backgroundColor = const Color(0xFFC8F0D8);
+      statusText = '在线';
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFC8F0D8),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(100),
       ),
       child: Row(
@@ -343,17 +415,17 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              color: Color(0xFF3D8A5A),
+            decoration: BoxDecoration(
+              color: statusColor,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 6),
           Text(
-            '在线',
+            statusText,
             style: Theme.of(
               context,
-            ).textTheme.labelSmall?.copyWith(color: const Color(0xFF3D8A5A)),
+            ).textTheme.labelSmall?.copyWith(color: statusColor),
           ),
         ],
       ),

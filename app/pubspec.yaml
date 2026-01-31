@@ -25,6 +25,10 @@ dependencies:
   # 存储
   shared_preferences: ^2.2.0
 
+  # mDNS 插件（用于 VPN 下的辅助 mDNS 服务）
+  # 使用 nsd（Android NsdManager 封装，支持注册和浏览）
+  nsd: ^4.1.0
+
   # freezed support (required by flutter_rust_bridge for complex types)
   freezed_annotation: ^2.4.0
 

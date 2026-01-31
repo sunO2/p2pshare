@@ -193,17 +193,46 @@ impl ConnectionService {
         })
     }
 
-    /// 连接到指定的节点
+    /// 连接到指定的节点（带重试机制）
+    ///
+    /// ⭐ 方案3: 添加重试机制，解决设备同时启动时的竞态条件
     pub async fn connect(&mut self, peer_id: PeerId, addr: Multiaddr) {
-        tracing::info!("正在连接到 {} at {}", peer_id, addr);
-        crate::send_log("INFO", "connection_service", format!("🔌 正在连接到 {} at {}", peer_id, addr));
+        const MAX_RETRIES: u32 = 3;
+        let mut last_error = None;
 
-        if let Err(e) = self.swarm.dial(addr.clone()) {
-            tracing::warn!("无法连接到 {} at {}: {}", peer_id, addr, e);
-            crate::send_log("ERROR", "connection_service", format!("❌ 无法连接到 {} at {}: {}", peer_id, addr, e));
-        } else {
-            crate::send_log("INFO", "connection_service", format!("✓ 已向 {} 发起连接", peer_id));
+        for attempt in 1..=MAX_RETRIES {
+            tracing::info!("🔌 [尝试 {}/{}] 连接到 {} at {}", attempt, MAX_RETRIES, peer_id, addr);
+
+            if attempt > 1 {
+                crate::send_log("INFO", "connection_service", format!("🔄 重试连接 [{}/{}]: {} at {}", attempt, MAX_RETRIES, peer_id, addr));
+            } else {
+                crate::send_log("INFO", "connection_service", format!("🔌 正在连接到 {} at {}", peer_id, addr));
+            }
+
+            match self.swarm.dial(addr.clone()) {
+                Ok(_) => {
+                    tracing::info!("✅ 成功连接到 {}", peer_id);
+                    crate::send_log("INFO", "connection_service", format!("✅ 成功连接到 {}", peer_id));
+                    return;
+                }
+                Err(e) => {
+                    tracing::warn!("⚠️  连接失败 [尝试 {}/{}]: {} - {}", attempt, MAX_RETRIES, peer_id, e);
+                    last_error = Some(e);
+
+                    // 如果不是最后一次尝试，等待一段时间后重试
+                    if attempt < MAX_RETRIES {
+                        let delay_ms = 500 * attempt as u64; // 指数退避：500ms, 1000ms, 1500ms
+                        tracing::debug!("⏱️  等待 {}ms 后重试...", delay_ms);
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
         }
+
+        // 所有重试都失败了
+        let error = last_error.expect("last_error should be Some after all retries failed");
+        tracing::error!("❌ 无法连接到 {} at {}: {} (已重试 {} 次)", peer_id, addr, error, MAX_RETRIES);
+        crate::send_log("ERROR", "connection_service", format!("❌ 无法连接到 {} at {}: {} (已重试 {} 次)", peer_id, addr, error, MAX_RETRIES));
     }
 
     /// 获取节点管理器
@@ -308,6 +337,24 @@ impl ConnectionService {
                         tracing::info!("✓ [连接服务] 刷新完成");
                         crate::send_log("INFO", "connection_service", "✅ 刷新完成".to_string());
                     }
+                    Some(DiscoveryEvent::VpnDetected { vpn_interfaces, physical_interface, local_peer_id, port, service_type }) => {
+                        tracing::warn!("📡 [连接服务] 检测到 VPN: {:?}, 物理接口: {:?}", vpn_interfaces, physical_interface);
+                        crate::send_log("WARN", "connection_service",
+                            format!("📡 检测到 VPN 接口: {:?}\n🌐 物理接口: {:?}\n📋 服务: {}@{}\n🔄 转发到 Flutter 启动辅助 mDNS",
+                                vpn_interfaces, physical_interface, local_peer_id, port));
+
+                        // ⭐ 将 VPN 检测事件转发到 Flutter（通过 FFI）
+                        // Flutter 端会收到这个事件，然后启动自己的 mDNS 服务
+                        if let Err(e) = crate::p2p_manager::send_vpn_detected_event_to_flutter(
+                            vpn_interfaces,
+                            physical_interface,
+                            local_peer_id,
+                            port,
+                            service_type,
+                        ) {
+                            tracing::error!("发送 VPN 事件到 Flutter 失败: {}", e);
+                        }
+                    }
                     None => {
                         tracing::warn!("发现事件通道已关闭");
                         return Ok(false); // 通道关闭，退出
@@ -393,7 +440,7 @@ impl ConnectionService {
     ) -> Result<(), MdnsError> {
         match event {
             // 连接建立
-            libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+            libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint: _, .. } => {
                 tracing::info!("✓ 与 {} 建立新连接", peer_id);
                 crate::send_log("INFO", "connection_service", format!("✓ 与 {} 建立新连接", peer_id));
                 let conn_count = self.active_connections.entry(peer_id).or_insert(0);

@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:nsd/nsd.dart';
 import 'bridge/bridge.dart';
 import 'bridge/frb_generated.dart';
+import 'bridge/third_party/localp2p_ffi/bridge.dart' as frb_bridge;
 import 'services/log_service.dart';
+import 'services/flutter_mdns_service.dart';
+import 'services/p2p_event_bus.dart';
 
 /// P2P 初始化配置
 ///
@@ -79,6 +84,28 @@ class PeerTypingEvent extends P2PEvent {
   final String from;
   final bool isTyping;
   PeerTypingEvent(this.from, this.isTyping);
+}
+
+/// VPN 检测事件 - 需要启动 Flutter mDNS 辅助服务
+class VpnDetectedEvent extends P2PEvent {
+  final List<String> vpnInterfaces;
+  final String? physicalInterface;
+  final String localPeerId;
+  final int port;
+  final String serviceType;
+
+  VpnDetectedEvent({
+    required this.vpnInterfaces,
+    this.physicalInterface,
+    required this.localPeerId,
+    required this.port,
+    required this.serviceType,
+  });
+
+  @override
+  String toString() {
+    return 'VpnDetectedEvent(vpn: $vpnInterfaces, physical: $physicalInterface, port: $port)';
+  }
 }
 
 class UserInfoReceivedEvent extends P2PEvent {
@@ -341,6 +368,12 @@ class P2PManager {
         if (peerId != null) {
           _log.node('discovered', peerId);
           _eventController.add(NodeDiscoveredEvent(peerId));
+          // 转发到 EventBus
+          P2PEventBus.instance.emit(
+            peerId: peerId,
+            type: 'discovery',
+            data: {'stage': 'discovered'},
+          );
         } else {
           _log.w('NodeDiscovered 事件但无法解析 peerId: ${event.data}');
         }
@@ -352,6 +385,12 @@ class P2PManager {
         if (peerId != null && displayName != null) {
           _log.node('verified', peerId, details: {'displayName': displayName});
           _eventController.add(NodeVerifiedEvent(peerId, displayName));
+          // 转发到 EventBus - 节点上线
+          P2PEventBus.instance.emit(
+            peerId: peerId,
+            type: 'online',
+            data: {'displayName': displayName},
+          );
         } else {
           _log.w('NodeVerified 事件但无法解析: ${event.data}');
         }
@@ -362,6 +401,11 @@ class P2PManager {
         if (peerId != null) {
           _log.node('offline', peerId);
           _eventController.add(NodeOfflineEvent(peerId));
+          // 转发到 EventBus
+          P2PEventBus.instance.emit(
+            peerId: peerId,
+            type: 'offline',
+          );
         } else {
           _log.w('NodeOffline 事件但无法解析 peerId: ${event.data}');
         }
@@ -392,6 +436,36 @@ class P2PManager {
               avatarUrl: avatarUrl,
             ),
           );
+
+          // 检查状态是否为离线
+          final isOffline = status != null &&
+              (status.toLowerCase() == '离线' || status.toLowerCase() == 'offline');
+
+          // 转发到 EventBus - 如果不是离线，发送 online 事件
+          if (!isOffline) {
+            P2PEventBus.instance.emit(
+              peerId: peerId,
+              type: 'online',
+              data: {
+                'deviceName': deviceName,
+                'nickname': nickname,
+                'status': status,
+                'avatarUrl': avatarUrl,
+              },
+            );
+          }
+
+          // 转发到 EventBus - 设备信息变更
+          P2PEventBus.instance.emit(
+            peerId: peerId,
+            type: 'info_changed',
+            data: {
+              'deviceName': deviceName,
+              'nickname': nickname,
+              'status': status,
+              'avatarUrl': avatarUrl,
+            },
+          );
         } else {
           _log.w('UserInfoReceived 事件但无法解析: ${event.data}');
         }
@@ -406,6 +480,16 @@ class P2PManager {
           _eventController.add(
             MessageReceivedEvent(from, content, timestamp ?? 0),
           );
+          // 转发到 EventBus
+          P2PEventBus.instance.emit(
+            peerId: from,
+            type: 'message',
+            data: {
+              'text': content,
+              'timestamp': timestamp ?? DateTime.now().millisecondsSinceEpoch,
+              'isFromMe': false,
+            },
+          );
         } else {
           _log.w('MessageReceived 事件但无法解析: ${event.data}');
         }
@@ -417,6 +501,15 @@ class P2PManager {
         if (to != null && messageId != null) {
           _log.message('SENT', to, 'messageId=$messageId');
           _eventController.add(MessageSentEvent(to, messageId));
+          // 转发到 EventBus
+          P2PEventBus.instance.emit(
+            peerId: to,
+            type: 'message_sent',
+            data: {
+              'messageId': messageId,
+              'timestamp': DateTime.now().millisecondsSinceEpoch,
+            },
+          );
         } else {
           _log.w('MessageSent 事件但无法解析: ${event.data}');
         }
@@ -428,6 +521,12 @@ class P2PManager {
         if (from != null && isTyping != null) {
           _log.d('Peer typing: $from isTyping=$isTyping');
           _eventController.add(PeerTypingEvent(from, isTyping));
+          // 转发到 EventBus
+          P2PEventBus.instance.emit(
+            peerId: from,
+            type: 'typing',
+            data: {'isTyping': isTyping},
+          );
         } else {
           _log.w('PeerTyping 事件但无法解析: ${event.data}');
         }
@@ -534,12 +633,228 @@ class P2PManager {
       case 'TRACE':
         logService.t('[$target] $message');
         break;
+      case 'VPN_DETECTED':
+        // ⭐ 特殊处理：VPN 检测事件
+        _handleVpnDetected(message);
+        logService.w('[$target] $message');
+        break;
       default:
         logService.i('[$target] $message');
     }
 
     // 同时输出到控制台（方便调试）
     debugPrint('🔶 [$level] $target: $message');
+  }
+
+  /// 处理 VPN 检测事件
+  void _handleVpnDetected(String message) {
+    _log.w('📡 收到 VPN 检测事件，准备启动 Flutter mDNS 辅助服务');
+
+    try {
+      // 解析 JSON 数据
+      // 格式：{"vpn_interfaces":["tun0"],"physical_interface":"wlan0","peer_id":"...","port":12345,"service_type":"..."}
+      final data = _parseJsonOrNull(message);
+      if (data == null) {
+        _log.e('无法解析 VPN 检测数据: $message');
+        return;
+      }
+
+      final vpnInterfaces = (data['vpn_interfaces'] as List?)?.cast<String>() ?? [];
+      final physicalInterface = data['physical_interface'] as String?;
+      final localPeerId = data['local_peer_id'] as String? ?? '';
+      final port = data['port'] as int? ?? 0;
+      final serviceType = data['service_type'] as String? ?? '';
+
+      _log.i('VPN 接口: $vpnInterfaces, 物理接口: $physicalInterface');
+
+      // 发送 VPN 检测事件
+      _eventController.add(VpnDetectedEvent(
+        vpnInterfaces: vpnInterfaces,
+        physicalInterface: physicalInterface,
+        localPeerId: localPeerId,
+        port: port,
+        serviceType: serviceType,
+      ));
+
+      // ⭐ 启动 Flutter mDNS 辅助服务
+      _startFlutterMdns(
+        name: localPeerId,
+        port: port,
+        serviceType: serviceType,
+      );
+    } catch (e, stackTrace) {
+      _log.e('处理 VPN 检测事件失败: $e', e, stackTrace);
+    }
+  }
+
+  /// 启动 Flutter mDNS 辅助服务
+  Future<void> _startFlutterMdns({
+    required String name,
+    required int port,
+    required String serviceType,
+  }) async {
+    _log.i('[Flutter mDNS] 启动辅助服务: $name@$port ($serviceType)');
+
+    try {
+      final mdnsService = FlutterMdnsService.instance;
+
+      // 如果已经在运行，先停止
+      if (mdnsService.isRunning) {
+        _log.d('[Flutter mDNS] 服务已在运行，先停止');
+        await mdnsService.stop();
+      }
+
+      // 启动完整的 mDNS 服务（注册 + 浏览）
+      final success = await mdnsService.start(
+        name: name,
+        port: port,
+        serviceType: serviceType,
+        onDeviceFound: (service) {
+          _log.i('[Flutter mDNS] 发现设备: ${service.name}');
+          _handleFlutterMdnsDiscovery(service);
+        },
+        onDeviceLost: (peerId) {
+          _log.i('[Flutter mDNS] 设备离线: $peerId');
+          _handleFlutterMdnsDeviceLost(peerId);
+        },
+      );
+
+      if (success) {
+        _log.i('[Flutter mDNS] 辅助服务启动成功');
+      } else {
+        _log.e('[Flutter mDNS] 辅助服务启动失败');
+      }
+    } catch (e, stackTrace) {
+      _log.e('[Flutter mDNS] 启动失败: $e', e, stackTrace);
+    }
+  }
+
+  /// 处理 Flutter mDNS 发现的设备
+  void _handleFlutterMdnsDiscovery(Service service) {
+    try {
+      // nsd 的 Service 对象包含:
+      // - name (服务名称/Peer ID)
+      // - host (主机名)
+      // - port
+      // - addresses (IP 地址列表 InternetAddress)
+      final name = service.name ?? '';
+      final host = service.host ?? '';
+      final port = service.port ?? 0;
+      final addresses = service.addresses;
+
+      _log.i('[Flutter mDNS] 发现设备: name=$name, host=$host, port=$port, addresses=$addresses');
+
+      // ⭐ 过滤：跳过自己的 Peer ID
+      // 因为 Rust 端仍在广播，Flutter mDNS 会收到自己的广播
+      final localPeerId = getLocalPeerId();
+      if (name == localPeerId) {
+        _log.d('[Flutter mDNS] 跳过自己的广播: $name');
+        return;
+      }
+
+      // ⭐ 获取 IP 地址
+      String? ip;
+
+      // 优先使用 addresses
+      if (addresses != null && addresses.isNotEmpty) {
+        ip = addresses.first.address;
+        _log.d('[Flutter mDNS] 使用 addresses: $ip');
+      }
+      // 其次使用 host
+      else if (host.isNotEmpty && host != 'localhost') {
+        ip = host;
+        _log.d('[Flutter mDNS] 使用 host: $ip');
+      }
+
+      // ⭐ 构造 multiaddr 格式
+      String address;
+      if (ip != null && ip.isNotEmpty && ip != 'localhost') {
+        address = '/ip4/$ip/tcp/$port';
+      } else {
+        // 降级：使用本地网络地址
+        address = '/ip4/0.0.0.0/tcp/$port';
+        _log.w('[Flutter mDNS] 未获取到有效 IP，使用 $address');
+      }
+
+      // ⭐ 调用 Rust 端的接口，让 Rust 去连接
+      _log.i('[Flutter mDNS] 通知 Rust 端连接到: $name at $address');
+
+      try {
+        // 调用生成的 FRB 函数（在 third_party/localp2p_ffi/bridge.dart 中定义）
+        frb_bridge.p2PReportExternalDiscovery(
+          peerId: name,
+          address: address,
+        );
+        _log.i('[Flutter mDNS] 已通知 Rust 端');
+      } catch (e, stackTrace) {
+        _log.e('[Flutter mDNS] 通知 Rust 失败: $e', e, stackTrace);
+      }
+
+      debugPrint('[Flutter mDNS] 发现设备: $name at $address');
+    } catch (e, stackTrace) {
+      _log.e('[Flutter mDNS] 处理发现事件失败: $e', e, stackTrace);
+    }
+  }
+
+  /// 处理 Flutter mDNS 设备离线
+  void _handleFlutterMdnsDeviceLost(String peerId) {
+    try {
+      _log.i('[Flutter mDNS] 设备离线: $peerId');
+
+      // ⭐ 过滤：跳过自己的 Peer ID
+      final localPeerId = getLocalPeerId();
+      if (peerId == localPeerId) {
+        _log.d('[Flutter mDNS] 跳过自己的离线事件: $peerId');
+        return;
+      }
+
+      // ⭐ 通知 Rust 端设备离线
+      _log.i('[Flutter mDNS] 通知 Rust 端设备离线: $peerId');
+
+      try {
+        // 调用生成的 FRB 函数（在 third_party/localp2p_ffi/bridge.dart 中定义）
+        frb_bridge.p2PReportExternalDeviceLost(
+          peerId: peerId,
+        );
+        _log.i('[Flutter mDNS] 已通知 Rust 端设备离线');
+      } catch (e, stackTrace) {
+        _log.e('[Flutter mDNS] 通知 Rust 设备离线失败: $e', e, stackTrace);
+      }
+
+      debugPrint('[Flutter mDNS] 设备离线: $peerId');
+    } catch (e, stackTrace) {
+      _log.e('[Flutter mDNS] 处理离线事件失败: $e', e, stackTrace);
+    }
+  }
+
+  /// 安全解析 JSON（返回 null 而不是抛出异常）
+  Map<String, dynamic>? _parseJsonOrNull(String jsonString) {
+    try {
+      final decoded = jsonDecode(jsonString);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      // 尝试处理嵌套格式（如果日志有额外的包装）
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      return null;
+    } catch (e) {
+      // 尝试从日志消息中提取 JSON 部分
+      // 格式可能是：[INFO] [mdns] {"key":"value"}
+      final jsonMatch = RegExp(r'\{[^}]*\}').firstMatch(jsonString);
+      if (jsonMatch != null) {
+        try {
+          final decoded = jsonDecode(jsonMatch.group(0)!);
+          if (decoded is Map<String, dynamic>) {
+            return decoded;
+          }
+        } catch (_) {
+          // 忽略
+        }
+      }
+      return null;
+    }
   }
 
   String? _extractLogLevel(String data) {

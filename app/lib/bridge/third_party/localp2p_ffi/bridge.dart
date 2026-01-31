@@ -7,7 +7,7 @@ import '../../bridge.dart';
 import '../../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
 
 /// 检查 P2P 是否已初始化
 bool p2PIsInitialized() =>
@@ -128,6 +128,47 @@ Stream<P2PBridgeEvent> p2PSetEventStream() =>
 /// 返回的事件按时间顺序排列
 List<P2PBridgeEvent> p2PPollEvents() =>
     RustLib.instance.api.localp2PFfiBridgeP2PPollEvents();
+
+/// 报告外部发现的设备（由 Flutter mDNS 发现）
+///
+/// 当 Flutter 的 mDNS 辅助服务发现设备时，调用此方法通知 Rust 层
+/// Rust 层会尝试连接到该设备
+///
+/// # Arguments
+/// * `peer_id` - 对端的 Peer ID
+/// * `address` - 对端的地址（例如 "/ip4/192.168.1.100/tcp/50001"）
+///
+/// # Example
+/// ```dart
+/// RustLib.instance.api.p2pReportExternalDiscovery(
+///     peerId: "12D3KooW...",
+///     address: "/ip4/192.168.1.100/tcp/50001",
+/// );
+/// ```
+void p2PReportExternalDiscovery({
+  required String peerId,
+  required String address,
+}) => RustLib.instance.api.localp2PFfiBridgeP2PReportExternalDiscovery(
+  peerId: peerId,
+  address: address,
+);
+
+/// 报告多个外部发现的设备
+///
+/// 批量报告设备，减少 FFI 调用次数
+void p2PReportExternalDiscoveries({
+  required List<ExternalDiscovery> discoveries,
+}) => RustLib.instance.api.localp2PFfiBridgeP2PReportExternalDiscoveries(
+  discoveries: discoveries,
+);
+
+/// 报告外部发现的设备离线
+///
+/// 当 Flutter 的 mDNS 辅助服务检测到设备离线时，调用此方法通知 Rust 层
+void p2PReportExternalDeviceLost({required String peerId}) => RustLib
+    .instance
+    .api
+    .localp2PFfiBridgeP2PReportExternalDeviceLost(peerId: peerId);
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UserInfo>>
 abstract class UserInfo implements RustOpaqueInterface {}

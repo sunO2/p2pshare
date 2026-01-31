@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../p2p_manager.dart';
 import '../bridge/bridge.dart';
 import '../widgets/device_card.dart';
+import '../services/p2p_event_bus.dart' as eb;
 import 'chat_screen.dart';
 import 'device_detail_screen.dart';
 
@@ -16,12 +18,22 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   final List<P2PBridgeNodeInfo> _nodes = [];
   String _searchQuery = '';
   bool _isRefreshing = false;
+  eb.P2PEventSubscription<eb.P2PEvent>? _eventBusSubscription;
+  StreamSubscription? _p2pManagerSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadNodes();
     _listenToEvents();
+    _listenToEventBus();
+  }
+
+  @override
+  void dispose() {
+    _eventBusSubscription?.cancel();
+    _p2pManagerSubscription?.cancel();
+    super.dispose();
   }
 
   void _loadNodes() {
@@ -74,7 +86,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   }
 
   void _listenToEvents() {
-    P2PManager.instance.eventStream.listen((event) {
+    _p2pManagerSubscription = P2PManager.instance.eventStream.listen((event) {
       if (!mounted) return;
 
       if (event is NodeVerifiedEvent ||
@@ -82,6 +94,29 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           event is UserInfoReceivedEvent) {
         _loadNodes();
       }
+    });
+  }
+
+  /// 使用 EventBus 监听所有设备的在线/离线状态变化（带状态缓存）
+  void _listenToEventBus() {
+    // 监听所有 online/offline 事件，立即获取当前缓存的最新状态
+    _eventBusSubscription = eb.P2PEventBus.instance.subscribe(
+      type: 'online',
+      onData: (event) {
+        if (!mounted) return;
+        debugPrint('[EventBus] Device online: ${event.peerId}');
+        _loadNodes();
+      },
+      errorCallback: (error) {
+        debugPrint('[EventBus] Error: $error');
+      },
+    );
+
+    // 同时监听 offline 事件
+    eb.P2PEventBus.instance.onType('offline').listen((event) {
+      if (!mounted) return;
+      debugPrint('[EventBus] Device offline: ${event.peerId}');
+      _loadNodes();
     });
   }
 
@@ -322,7 +357,8 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
         final node = _filteredNodes[index];
         return DeviceCard(
           node: node,
-          onTap: () => _openDeviceDetail(node),
+          onTap: () => _openChat(node),
+          onAvatarTap: () => _openDeviceDetail(node),
           onChatTap: () => _openChat(node),
         );
       },

@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -747225674;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 2049776511;
 
 // Section: executor
 
@@ -411,6 +411,100 @@ fn wire__localp2p_ffi__bridge__p2p_refresh_devices_impl(
         },
     )
 }
+fn wire__localp2p_ffi__bridge__p2p_report_external_device_lost_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "p2p_report_external_device_lost",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_peer_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::bridge::p2p_report_external_device_lost(api_peer_id)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__localp2p_ffi__bridge__p2p_report_external_discoveries_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "p2p_report_external_discoveries",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_discoveries =
+                <Vec<crate::bridge::ExternalDiscovery>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok =
+                    crate::bridge::p2p_report_external_discoveries(api_discoveries)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__localp2p_ffi__bridge__p2p_report_external_discovery_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "p2p_report_external_discovery",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_peer_id = <String>::sse_decode(&mut deserializer);
+            let api_address = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok =
+                    crate::bridge::p2p_report_external_discovery(api_peer_id, api_address)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__localp2p_ffi__bridge__p2p_restart_discovery_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -752,6 +846,18 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for crate::bridge::ExternalDiscovery {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_peerId = <String>::sse_decode(deserializer);
+        let mut var_address = <String>::sse_decode(deserializer);
+        return crate::bridge::ExternalDiscovery {
+            peer_id: var_peerId,
+            address: var_address,
+        };
+    }
+}
+
 impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -766,6 +872,18 @@ impl SseDecode for Vec<String> {
         let mut ans_ = vec![];
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::bridge::ExternalDiscovery> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::bridge::ExternalDiscovery>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -888,20 +1006,20 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        13 => wire__localp2p_ffi__bridge__p2p_restart_discovery_impl(
+        16 => wire__localp2p_ffi__bridge__p2p_restart_discovery_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => wire__localp2p_ffi__bridge__p2p_send_message_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__bridge__p_2_p_bridge_node_info_from_basic_info_impl(
+        17 => wire__localp2p_ffi__bridge__p2p_send_message_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__bridge__p_2_p_bridge_node_info_from_basic_info_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        20 => wire__crate__bridge__p_2_p_bridge_node_info_from_peer_id_and_info_impl(
+        23 => wire__crate__bridge__p_2_p_bridge_node_info_from_peer_id_and_info_impl(
             port,
             ptr,
             rust_vec_len,
@@ -934,16 +1052,52 @@ fn pde_ffi_dispatcher_sync_impl(
         10 => wire__localp2p_ffi__bridge__p2p_is_running_impl(ptr, rust_vec_len, data_len),
         11 => wire__localp2p_ffi__bridge__p2p_poll_events_impl(ptr, rust_vec_len, data_len),
         12 => wire__localp2p_ffi__bridge__p2p_refresh_devices_impl(ptr, rust_vec_len, data_len),
-        15 => wire__localp2p_ffi__bridge__p2p_set_event_stream_impl(ptr, rust_vec_len, data_len),
-        16 => wire__localp2p_ffi__bridge__p2p_start_impl(ptr, rust_vec_len, data_len),
-        17 => wire__localp2p_ffi__bridge__p2p_stop_impl(ptr, rust_vec_len, data_len),
-        18 => wire__localp2p_ffi__bridge__p2p_trigger_refresh_impl(ptr, rust_vec_len, data_len),
+        13 => wire__localp2p_ffi__bridge__p2p_report_external_device_lost_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        14 => wire__localp2p_ffi__bridge__p2p_report_external_discoveries_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        15 => wire__localp2p_ffi__bridge__p2p_report_external_discovery_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        18 => wire__localp2p_ffi__bridge__p2p_set_event_stream_impl(ptr, rust_vec_len, data_len),
+        19 => wire__localp2p_ffi__bridge__p2p_start_impl(ptr, rust_vec_len, data_len),
+        20 => wire__localp2p_ffi__bridge__p2p_stop_impl(ptr, rust_vec_len, data_len),
+        21 => wire__localp2p_ffi__bridge__p2p_trigger_refresh_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::bridge::ExternalDiscovery {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.peer_id.into_into_dart().into_dart(),
+            self.address.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::bridge::ExternalDiscovery
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::bridge::ExternalDiscovery>
+    for crate::bridge::ExternalDiscovery
+{
+    fn into_into_dart(self) -> crate::bridge::ExternalDiscovery {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::bridge::P2PBridgeEvent {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -1031,6 +1185,14 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for crate::bridge::ExternalDiscovery {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.peer_id, serializer);
+        <String>::sse_encode(self.address, serializer);
+    }
+}
+
 impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1044,6 +1206,16 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::bridge::ExternalDiscovery> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::bridge::ExternalDiscovery>::sse_encode(item, serializer);
         }
     }
 }

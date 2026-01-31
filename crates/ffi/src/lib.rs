@@ -938,8 +938,14 @@ pub fn internal_get_nodes_sync() -> Result<Vec<InternalNodeInfo>, String> {
             // 尝试从 attributes 中获取用户信息
             let device_name = node.attributes.get("device_name").cloned();
             let nickname = node.attributes.get("nickname").cloned();
-            let status = node.attributes.get("status").cloned();
             let avatar_url = node.attributes.get("avatar_url").cloned();
+
+            // ⭐ 优先使用连接状态（离线时显示"离线"），否则使用用户自定义状态
+            let status = if !node.status.is_online() {
+                Some("离线".to_string())
+            } else {
+                node.attributes.get("status").cloned()
+            };
 
             if let Some(device_name) = device_name {
                 // 使用 attributes 中的用户信息
@@ -960,7 +966,7 @@ pub fn internal_get_nodes_sync() -> Result<Vec<InternalNodeInfo>, String> {
                     display_name: node.display_name(),
                     device_name: node.name.clone().unwrap_or_default(),
                     nickname: None,
-                    status: None,
+                    status,
                     avatar_url: None,
                     addresses,
                     protocol_version,
@@ -1004,8 +1010,14 @@ pub async fn internal_get_user_info(peer_id: String) -> Result<Option<bridge::P2
             // 从 attributes 中读取用户信息
             let device_name = node.attributes.get("device_name").cloned();
             let nickname = node.attributes.get("nickname").cloned();
-            let status = node.attributes.get("status").cloned();
             let avatar_url = node.attributes.get("avatar_url").cloned();
+
+            // ⭐ 优先使用连接状态（离线时显示"离线"），否则使用用户自定义状态
+            let status = if !node.status.is_online() {
+                Some("离线".to_string())
+            } else {
+                node.attributes.get("status").cloned()
+            };
 
             // 提取地址列表
             let addresses: Vec<String> = node.addresses
@@ -1296,4 +1308,133 @@ fn clean_json_string(s: &str) -> String {
 pub fn poll_events() -> Vec<bridge::P2PEvent> {
     // Stream 模式下不需要轮询，直接返回空
     Vec::new()
+}
+
+// ============================================================================
+// 外部 mDNS 发现（Flutter mDNS 辅助）
+// ============================================================================
+
+/// 报告外部发现的设备（由 Flutter mDNS 发现）
+///
+/// 当 Flutter 的 mDNS 辅助服务发现设备时，调用此方法通知 Rust 层
+/// Rust 层会像处理正常 mDNS 发现一样，尝试连接到该设备
+pub fn internal_report_external_discovery(
+    peer_id: String,
+    address: String,
+) -> Result<(), String> {
+    tracing::info!("📡 [FFI] 收到 Flutter mDNS 发现: {} at {}", peer_id, address);
+    send_log_to_flutter(
+        "INFO",
+        "ffi",
+        format!("收到 Flutter mDNS 发现: {} at {}", peer_id, address)
+    );
+
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            return Err("P2P not initialized".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        if resources.p2p_manager.is_none() {
+            return Err("P2PManager not available".to_string());
+        }
+
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+
+        // 在运行时中异步处理连接
+        runtime.block_on(async {
+            let p2p_manager = resources.p2p_manager.as_ref().unwrap();
+            let pm_locked = p2p_manager.lock().await;
+
+            // 解析地址
+            let addr = address.parse::<libp2p::Multiaddr>()
+                .map_err(|e| format!("Invalid address {}: {:?}", address, e))?;
+
+            // 解析 Peer ID
+            let peer = peer_id.parse::<libp2p::PeerId>()
+                .map_err(|e| format!("Invalid peer ID {}: {:?}", peer_id, e))?;
+
+            tracing::info!("🔗 [FFI] 尝试连接到: {} at {}", peer_id, address);
+            send_log_to_flutter(
+                "INFO",
+                "ffi",
+                format!("尝试连接到: {} at {}", peer_id, address)
+            );
+
+            // 通过 ConnectionService 触发连接
+            if let Some(connection_service) = pm_locked.connection_service() {
+                let mut service = connection_service.lock().await;
+                service.connect(peer, addr).await;
+                Ok(())
+            } else {
+                Err("ConnectionService not available".to_string())
+            }
+        })
+    }
+}
+
+/// 批量报告外部发现的设备
+pub fn internal_report_external_discoveries(
+    discoveries: Vec<bridge::ExternalDiscovery>,
+) -> Result<(), String> {
+    tracing::info!("📡 [FFI] 收到 Flutter mDNS 批量发现: {} 个设备", discoveries.len());
+
+    for discovery in discoveries {
+        // 逐个报告
+        internal_report_external_discovery(discovery.peer_id, discovery.address)?;
+    }
+
+    Ok(())
+}
+
+/// 报告外部发现的设备离线（由 Flutter mDNS 检测到）
+///
+/// 当 Flutter 的 mDNS 辅助服务检测到设备离线时，调用此方法通知 Rust 层
+/// Rust 层会更新内部设备状态
+pub fn internal_report_external_device_lost(
+    peer_id: String,
+) -> Result<(), String> {
+    tracing::info!("📡 [FFI] 收到 Flutter mDNS 设备离线: {}", peer_id);
+    send_log_to_flutter(
+        "INFO",
+        "ffi",
+        format!("收到 Flutter mDNS 设备离线: {}", peer_id)
+    );
+
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            return Err("P2P not initialized".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        if resources.p2p_manager.is_none() {
+            return Err("P2PManager not available".to_string());
+        }
+
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+
+        // 在运行时中异步处理离线事件
+        runtime.block_on(async {
+            let p2p_manager = resources.p2p_manager.as_ref().unwrap();
+            let pm_locked = p2p_manager.lock().await;
+
+            // 解析 Peer ID
+            let peer = peer_id.parse::<libp2p::PeerId>()
+                .map_err(|e| format!("Invalid peer ID {}: {:?}", peer_id, e))?;
+
+            tracing::info!("🔴 [FFI] 设备离线: {}", peer_id);
+            send_log_to_flutter(
+                "INFO",
+                "ffi",
+                format!("设备离线: {}", peer_id)
+            );
+
+            // 通过 NodeManager 标记节点为离线
+            let node_manager = pm_locked.node_manager();
+            node_manager.mark_node_offline(&peer, "Flutter mDNS: 设备离线").await;
+
+            tracing::info!("✓ [FFI] 已标记节点为离线: {}", peer_id);
+            Ok(())
+        })
+    }
 }

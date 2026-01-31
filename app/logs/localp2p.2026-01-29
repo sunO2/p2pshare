@@ -1,0 +1,160 @@
+2026-01-29T05:19:23.606962Z  INFO tui_app::app: TUI 密钥文件路径: /home/hezhihu89/.local/share/localp2p_tui/identity.key
+2026-01-29T05:19:23.607281Z  INFO mdns::identity: 成功加载密钥对: /home/hezhihu89/.local/share/localp2p_tui/identity.key
+2026-01-29T05:19:23.607307Z  INFO tui_app::app: 使用持久化密钥对，Peer ID: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:19:23.607857Z  INFO mdns::identity: 成功加载密钥对: /home/hezhihu89/.local/share/localp2p_tui/identity.key
+2026-01-29T05:19:23.607880Z  INFO tui_app::app: 后台任务使用持久化密钥对，Peer ID: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:19:23.607956Z  INFO mdns::managed_discovery: 使用密钥对生成 Peer ID: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:19:23.608634Z  INFO libp2p_swarm: local_peer_id=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:19:23.608760Z  INFO mdns::managed_discovery: ✓ 聊天功能已启用
+2026-01-29T05:19:23.609076Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=192.168.0.119
+2026-01-29T05:19:23.609147Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.18.0.1
+2026-01-29T05:19:23.609214Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.25.0.1
+2026-01-29T05:19:23.609278Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.17.0.1
+2026-01-29T05:19:23.609343Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.21.0.1
+2026-01-29T05:19:23.609411Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.19.0.1
+2026-01-29T05:19:23.609479Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.22.0.1
+2026-01-29T05:19:23.609545Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.20.0.1
+2026-01-29T05:19:23.609891Z  INFO mdns::managed_discovery: 开始监听: /ip4/127.0.0.1/tcp/43093
+2026-01-29T05:19:23.610007Z  INFO mdns::managed_discovery: 开始监听: /ip4/192.168.0.119/tcp/43093
+2026-01-29T05:19:23.610166Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.18.0.1/tcp/43093
+2026-01-29T05:19:23.613728Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.25.0.1/tcp/43093
+2026-01-29T05:19:23.613875Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.17.0.1/tcp/43093
+2026-01-29T05:19:23.614076Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.21.0.1/tcp/43093
+2026-01-29T05:19:23.614134Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.19.0.1/tcp/43093
+2026-01-29T05:19:23.614381Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.22.0.1/tcp/43093
+2026-01-29T05:19:23.614671Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.20.0.1/tcp/43093
+2026-01-29T05:20:18.077150Z  INFO tui_app::app: TUI 密钥文件路径: /home/hezhihu89/.local/share/localp2p_tui/identity.key
+2026-01-29T05:20:18.077546Z  INFO mdns::identity: 成功加载密钥对: /home/hezhihu89/.local/share/localp2p_tui/identity.key
+2026-01-29T05:20:18.077577Z  INFO tui_app::app: 使用持久化密钥对，Peer ID: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:20:18.078248Z  INFO mdns::identity: 成功加载密钥对: /home/hezhihu89/.local/share/localp2p_tui/identity.key
+2026-01-29T05:20:18.078272Z  INFO tui_app::app: 后台任务使用持久化密钥对，Peer ID: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:20:18.078335Z  INFO mdns::managed_discovery: 使用密钥对生成 Peer ID: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:20:18.078979Z  INFO libp2p_swarm: local_peer_id=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:20:18.079100Z  INFO mdns::managed_discovery: ✓ 聊天功能已启用
+2026-01-29T05:20:18.079404Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=192.168.0.119
+2026-01-29T05:20:18.079468Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.18.0.1
+2026-01-29T05:20:18.079521Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.25.0.1
+2026-01-29T05:20:18.079567Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.17.0.1
+2026-01-29T05:20:18.079619Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.21.0.1
+2026-01-29T05:20:18.079669Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.19.0.1
+2026-01-29T05:20:18.079721Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.22.0.1
+2026-01-29T05:20:18.079773Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.20.0.1
+2026-01-29T05:20:18.094740Z  INFO mdns::managed_discovery: 开始监听: /ip4/127.0.0.1/tcp/38387
+2026-01-29T05:20:18.094953Z  INFO mdns::managed_discovery: 开始监听: /ip4/192.168.0.119/tcp/38387
+2026-01-29T05:20:18.095059Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.18.0.1/tcp/38387
+2026-01-29T05:20:18.095180Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.25.0.1/tcp/38387
+2026-01-29T05:20:18.095239Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.17.0.1/tcp/38387
+2026-01-29T05:20:18.095294Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.21.0.1/tcp/38387
+2026-01-29T05:20:18.095407Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.19.0.1/tcp/38387
+2026-01-29T05:20:18.095525Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.22.0.1/tcp/38387
+2026-01-29T05:20:18.095633Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.20.0.1/tcp/38387
+2026-01-29T05:21:24.044010Z  INFO mdns::managed_discovery: 生成新的 ed25519 密钥对
+2026-01-29T05:21:24.044219Z  INFO mdns::managed_discovery: 使用密钥对生成 Peer ID: 12D3KooW9tWsgHkS6CZDgm7rcc5sEg74Vcd1JZ4USdWmJ9dXpSpM
+2026-01-29T05:21:24.044957Z  INFO libp2p_swarm: local_peer_id=12D3KooW9tWsgHkS6CZDgm7rcc5sEg74Vcd1JZ4USdWmJ9dXpSpM
+2026-01-29T05:21:24.045426Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=192.168.0.119
+2026-01-29T05:21:24.045515Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.18.0.1
+2026-01-29T05:21:24.045579Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.25.0.1
+2026-01-29T05:21:24.045639Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.17.0.1
+2026-01-29T05:21:24.045708Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.21.0.1
+2026-01-29T05:21:24.045772Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.19.0.1
+2026-01-29T05:21:24.045839Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.22.0.1
+2026-01-29T05:21:24.045903Z  INFO libp2p_mdns::behaviour::iface: creating instance on iface address address=172.20.0.1
+2026-01-29T05:21:24.046197Z  INFO mdns::managed_discovery: 开始监听: /ip4/127.0.0.1/tcp/36893
+2026-01-29T05:21:24.046262Z  INFO mdns::managed_discovery: 开始监听: /ip4/192.168.0.119/tcp/36893
+2026-01-29T05:21:24.046321Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.18.0.1/tcp/36893
+2026-01-29T05:21:24.046383Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.25.0.1/tcp/36893
+2026-01-29T05:21:24.046439Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.17.0.1/tcp/36893
+2026-01-29T05:21:24.046495Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.21.0.1/tcp/36893
+2026-01-29T05:21:24.046552Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.19.0.1/tcp/36893
+2026-01-29T05:21:24.046615Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.22.0.1/tcp/36893
+2026-01-29T05:21:24.046674Z  INFO mdns::managed_discovery: 开始监听: /ip4/172.20.0.1/tcp/36893
+2026-01-29T05:21:24.049580Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c address=/ip4/172.18.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.049753Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c at /ip4/172.18.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.059070Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/172.19.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.059367Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa at /ip4/172.19.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.059680Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/172.25.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.059807Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa at /ip4/172.25.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.060523Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/172.21.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.060658Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa at /ip4/172.21.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.061080Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/172.20.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.061205Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa at /ip4/172.20.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.061539Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/172.17.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.061663Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa at /ip4/172.17.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.069932Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c address=/ip4/172.20.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.070075Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c at /ip4/172.20.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.070364Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c address=/ip4/172.21.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.070496Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c address=/ip4/172.22.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.070618Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c at /ip4/172.21.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.070904Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c address=/ip4/172.19.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.071027Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c at /ip4/172.19.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.071617Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c address=/ip4/172.25.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.071743Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c at /ip4/172.25.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.072691Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/172.22.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.072837Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa at /ip4/172.22.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.073140Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/192.168.0.119/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.073297Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa address=/ip4/172.18.0.1/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.073427Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa at /ip4/192.168.0.119/tcp/36469/p2p/12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.076137Z  INFO libp2p_mdns::behaviour: discovered peer on address peer=12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c address=/ip4/172.17.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.076284Z  INFO mdns::managed_discovery: 通过 mDNS 发现节点: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c at /ip4/172.17.0.1/tcp/33937/p2p/12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.091317Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.091424Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立首个连接，请求用户信息
+2026-01-29T05:21:24.093960Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.094060Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 2)
+2026-01-29T05:21:24.096588Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.096709Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 3)
+2026-01-29T05:21:24.103083Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.103187Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立首个连接，请求用户信息
+2026-01-29T05:21:24.104422Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.104506Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 4)
+2026-01-29T05:21:24.105183Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.105269Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 5)
+2026-01-29T05:21:24.105559Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.105639Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 2)
+2026-01-29T05:21:24.105873Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.105950Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 6)
+2026-01-29T05:21:24.106249Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.106326Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 7)
+2026-01-29T05:21:24.106650Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.106727Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 8)
+2026-01-29T05:21:24.107024Z  INFO mdns::node: 添加验证通过的节点: 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c
+2026-01-29T05:21:24.107111Z  INFO mdns::managed_discovery: 收到来自 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 的 identify 信息
+2026-01-29T05:21:24.107186Z  INFO mdns::managed_discovery: ✓ 节点 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 验证通过，已添加到管理器
+2026-01-29T05:21:24.113317Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.113417Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 3)
+2026-01-29T05:21:24.114410Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.114524Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 4)
+2026-01-29T05:21:24.115794Z  INFO mdns::managed_discovery: 📝 收到来自 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 的用户信息: Ubuntu
+2026-01-29T05:21:24.123644Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.123756Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 5)
+2026-01-29T05:21:24.125135Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.125232Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 6)
+2026-01-29T05:21:24.125865Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.125952Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 7)
+2026-01-29T05:21:24.126483Z  INFO mdns::node: 添加验证通过的节点: 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa
+2026-01-29T05:21:24.126656Z  INFO mdns::managed_discovery: 收到来自 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 的 identify 信息
+2026-01-29T05:21:24.126734Z  INFO mdns::managed_discovery: ✓ 节点 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 验证通过，已添加到管理器
+2026-01-29T05:21:24.128063Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.128163Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 9)
+2026-01-29T05:21:24.128380Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.128465Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 8)
+2026-01-29T05:21:24.129406Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.129491Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 9)
+2026-01-29T05:21:24.131231Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.131319Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 10)
+2026-01-29T05:21:24.131583Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.131668Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 10)
+2026-01-29T05:21:24.132150Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.132318Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 11)
+2026-01-29T05:21:24.132963Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.133136Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 11)
+2026-01-29T05:21:24.133572Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.133759Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 12)
+2026-01-29T05:21:24.135506Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立新连接
+2026-01-29T05:21:24.135611Z  INFO mdns::managed_discovery: 与 12D3KooWJSGMjpm1sW8CvomTFtZjwdhsLZsrzGcLrcoo1TD2U22c 建立额外连接 (当前连接数: 12)
+2026-01-29T05:21:24.143883Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.144007Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 13)
+2026-01-29T05:21:24.144691Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.144864Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 14)
+2026-01-29T05:21:24.146552Z  INFO mdns::managed_discovery: 📝 收到来自 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 的用户信息: 设备BBBBB
+2026-01-29T05:21:24.156425Z  INFO mdns::managed_discovery: ✓ 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立新连接
+2026-01-29T05:21:24.156520Z  INFO mdns::managed_discovery: 与 12D3KooWPHkoTQxTyrevceZcAEiepGtMioK4MuvPDyUooYMB9ufa 建立额外连接 (当前连接数: 15)

@@ -66,6 +66,12 @@ pub struct MdnsServiceDiscovery {
     /// 本机网络接口缓存（IP + 子网掩码列表）
     /// 用于判断远程 IP 是否在同一子网
     local_networks: Vec<(std::net::Ipv4Addr, std::net::Ipv4Addr)>,
+
+    /// VPN 接口列表（如果检测到）
+    vpn_interfaces: Vec<String>,
+
+    /// 物理接口名称
+    physical_interface: Option<String>,
 }
 
 /// mDNS 发现错误
@@ -95,9 +101,47 @@ impl MdnsServiceDiscovery {
         tracing::info!("🔍 初始化 mdns-sd 服务发现...");
         send_log("INFO", "mdns_discovery", "🔍 正在初始化 mdns-sd 服务发现...".to_string());
 
+        // 检测并获取物理网络接口（排除 VPN/tun/tap）
+        let (physical_interface, vpn_interfaces) = Self::get_physical_interface();
+
         // 创建 ServiceDaemon
         let daemon = ServiceDaemon::new()
             .map_err(|e| MdnsDiscoveryError::DaemonFailed(format!("创建 daemon 失败: {}", e)))?;
+
+        // ⭐ 禁用 VPN 接口，避免 mDNS 流量被路由到 VPN
+        if !vpn_interfaces.is_empty() {
+            for vpn_if in &vpn_interfaces {
+                match daemon.disable_interface(vpn_if.as_str()) {
+                    Ok(_) => {
+                        tracing::info!("✅ 已禁用 VPN 接口: {}", vpn_if);
+                        send_log("INFO", "mdns_discovery", format!("✅ 已禁用 VPN 接口: {}", vpn_if));
+                    }
+                    Err(e) => {
+                        tracing::warn!("⚠️ 禁用 VPN 接口 {} 失败: {}", vpn_if, e);
+                    }
+                }
+            }
+
+            tracing::warn!("⚠️ 检测到 VPN/代理接口: {:?}，已自动禁用", vpn_interfaces);
+            send_log("WARN", "mdns_discovery",
+                format!("⚠️ 检测到 VPN/代理接口: {:?}\n\
+                ✅ 已自动禁用 VPN 接口，mDNS 将使用物理接口广播",
+                vpn_interfaces)
+            );
+        }
+
+        // ⭐ 启用物理接口（如果有指定的物理接口）
+        if let Some(ref phy_name) = physical_interface {
+            match daemon.enable_interface(phy_name.as_str()) {
+                Ok(_) => {
+                    tracing::info!("✅ 已启用物理接口: {}", phy_name);
+                    send_log("INFO", "mdns_discovery", format!("✅ 已启用物理接口: {}", phy_name));
+                }
+                Err(e) => {
+                    tracing::warn!("⚠️ 启用物理接口 {} 失败: {}", phy_name, e);
+                }
+            }
+        }
 
         send_log("INFO", "mdns_discovery", "✅ mdns-sd ServiceDaemon 创建成功".to_string());
 
@@ -116,6 +160,8 @@ impl MdnsServiceDiscovery {
             discovered_peers: HashMap::new(),
             registered_service_fullname: None,
             local_networks,
+            vpn_interfaces,
+            physical_interface,
         })
     }
 
@@ -178,6 +224,20 @@ impl MdnsServiceDiscovery {
         tracing::info!("✅ mDNS 服务注册成功: {}", fullname);
         send_log("INFO", "mdns_discovery", "✅ mDNS 服务注册成功".to_string());
 
+        // ⭐ 如果检测到 VPN，发送事件通知 Flutter 启动辅助 mDNS
+        if !self.vpn_interfaces.is_empty() {
+            tracing::warn!("📡 检测到 VPN，通知 Flutter 启动辅助 mDNS");
+            send_log("WARN", "mdns_discovery", "📡 检测到 VPN，通知 Flutter 启动辅助 mDNS".to_string());
+
+            let _ = self.discovery_tx.send(DiscoveryEvent::VpnDetected {
+                vpn_interfaces: self.vpn_interfaces.clone(),
+                physical_interface: self.physical_interface.clone(),
+                local_peer_id: self.local_peer_id.clone(),
+                port,
+                service_type: SERVICE_TYPE.to_string(),
+            });
+        }
+
         Ok(())
     }
 
@@ -186,6 +246,11 @@ impl MdnsServiceDiscovery {
         tokio::spawn(async move {
             tracing::info!("🚀 mdns-sd 服务发现已启动");
             send_log("INFO", "mdns_discovery", "🚀 mdns-sd 服务发现已启动".to_string());
+
+            // ⭐ 方案2: 先等待一段时间，让服务广播稳定，再开始浏览
+            tracing::info!("⏱️  等待服务广播稳定后，再开始浏览...");
+            send_log("INFO", "mdns_discovery", "⏱️ 等待服务广播稳定后，再开始浏览...".to_string());
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
             // 开始浏览服务
             let service_type = SERVICE_TYPE;
@@ -205,6 +270,9 @@ impl MdnsServiceDiscovery {
             };
 
             self.browse_receiver = Some(browse_receiver);
+
+            tracing::info!("✅ mDNS 浏览已启动，开始监听设备发现事件");
+            send_log("INFO", "mdns_discovery", "✅ mDNS 浏览已启动".to_string());
 
             // 持续处理浏览事件
             loop {
@@ -367,7 +435,7 @@ impl MdnsServiceDiscovery {
         send_log("INFO", "mdns_discovery", "🔍 主动刷新：重新扫描网络".to_string());
 
         // 停止当前浏览
-        if let Some(ref receiver) = self.browse_receiver {
+        if let Some(ref _receiver) = self.browse_receiver {
             // 注意：mdns-sd 的 stop_browse 需要服务类型
             // 但我们没有保存服务类型，所以我们通过其他方式实现
             tracing::debug!("当前正在浏览，继续监听即可");
@@ -384,8 +452,6 @@ impl MdnsServiceDiscovery {
 
     /// 将 SocketAddr 转换为 Multiaddr
     fn socket_addr_to_multiaddr(&self, addr: &std::net::SocketAddr, port: u16) -> Result<libp2p::Multiaddr, String> {
-        use libp2p::Multiaddr;
-
         match addr.ip() {
             std::net::IpAddr::V4(ipv4) => {
                 let multiaddr_str = format!("/ip4/{}/tcp/{}", ipv4, port);
@@ -493,6 +559,72 @@ impl MdnsServiceDiscovery {
         let network2 = ip2_u32 & netmask_u32;
 
         network1 == network2
+    }
+
+    /// 获取物理网络接口名称（排除 VPN/tun/tap 接口）
+    ///
+    /// 优先级：
+    /// 1. wlan*/wlp* (无线)
+    /// 2. enp*/eth* (有线)
+    /// 3. 其他非VPN接口
+    ///
+    /// 返回 (物理接口, VPN接口列表)
+    fn get_physical_interface() -> (Option<String>, Vec<String>) {
+        let mut physical_interfaces = Vec::new();
+        let mut vpn_interfaces = Vec::new();
+
+        if let Ok(if_addrs) = if_addrs::get_if_addrs() {
+            for iface in if_addrs {
+                let name = &iface.name;
+
+                // 排除回环接口
+                if name == "lo" || name == "Loopback" {
+                    continue;
+                }
+
+                // 检测 VPN/虚拟接口
+                let is_vpn = name.contains("tun") ||
+                             name.contains("tap") ||
+                             name.contains("ppp") ||
+                             name.contains("vsock") ||
+                             name.contains("vpn");
+
+                // 只处理有IPv4地址的接口
+                match iface.addr {
+                    if_addrs::IfAddr::V4(ref v4) if !v4.ip.is_loopback() => {
+                        if is_vpn {
+                            vpn_interfaces.push(name.clone());
+                            tracing::warn!("⚠️ 检测到VPN/虚拟接口: {} (IP: {})", name, v4.ip);
+                        } else {
+                            physical_interfaces.push((name.clone(), v4.ip));
+                        }
+                    }
+                    _ => continue,
+                }
+            }
+        }
+
+        // 按优先级排序物理接口
+        physical_interfaces.sort_by_key(|(name, _)| {
+            // 无线接口优先
+            if name.starts_with("wlan") || name.starts_with("wlp") {
+                0
+            // 有线接口次之
+            } else if name.starts_with("enp") || name.starts_with("eth") {
+                1
+            // 其他接口
+            } else {
+                2
+            }
+        });
+
+        let chosen = physical_interfaces.first().map(|(name, ip)| {
+            tracing::info!("🌐 选择物理接口: {} (IP: {})", name, ip);
+            send_log("INFO", "mdns_discovery", format!("🌐 选择物理接口: {} (IP: {})", name, ip));
+            name.clone()
+        });
+
+        (chosen, vpn_interfaces)
     }
 }
 
