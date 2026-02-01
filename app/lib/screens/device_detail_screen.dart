@@ -446,7 +446,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                 MaterialPageRoute(
                   builder: (context) => ChatScreen(
                     peerId: widget.peerId,
-                    deviceName: _nodeInfo?.deviceName ?? 'Unknown',
+                    peerName: _nodeInfo?.deviceName ?? 'Unknown',
                   ),
                 ),
               );

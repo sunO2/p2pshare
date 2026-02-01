@@ -3,42 +3,54 @@ import '../screens/chat_screen.dart';
 
 class ChatBubbleReceived extends StatelessWidget {
   final ChatMessageData message;
+  final String? peerName;
 
-  const ChatBubbleReceived({super.key, required this.message});
-
-  String _formatTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
+  const ChatBubbleReceived({super.key, required this.message, this.peerName});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 260),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F6),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-          bottomLeft: Radius.circular(4),
-          bottomRight: Radius.circular(20),
+    // 使用对方名字的首字母作为头像文字
+    final avatarText = peerName?.isNotEmpty == true ? peerName![0].toUpperCase() : '?';
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 头像
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFF3D8A5A),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              avatarText,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
         ),
-        border: Border.all(color: const Color(0xFFCCCCCC)),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
+        const SizedBox(width: 8),
+        // 气泡
+        Container(
+          constraints: const BoxConstraints(maxWidth: 240),
+          decoration: const BoxDecoration(
+            color: Color.fromRGBO(255, 255, 255, 1),
+            borderRadius: BorderRadius.all(Radius.circular(8),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text(
             message.message,
-            style: const TextStyle(fontSize: 15, color: Color(0xFF000000)),
+            style: const TextStyle(fontSize: 16, color: Colors.black),
           ),
-          const SizedBox(height: 6),
-          Text(
-            _formatTime(message.timestamp),
-            style: const TextStyle(fontSize: 11, color: Color(0xFF999999)),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -10,6 +10,7 @@ import 'dart:ffi' as ffi;
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
+import 'types.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -50,16 +51,37 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  ConversationJson dco_decode_conversation_json(dynamic raw);
+
+  @protected
   ExternalDiscovery dco_decode_external_discovery(dynamic raw);
+
+  @protected
+  FileInfoJson dco_decode_file_info_json(dynamic raw);
 
   @protected
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<ConversationJson> dco_decode_list_conversation_json(dynamic raw);
+
+  @protected
   List<ExternalDiscovery> dco_decode_list_external_discovery(dynamic raw);
+
+  @protected
+  List<MessageJson> dco_decode_list_message_json(dynamic raw);
 
   @protected
   List<P2PBridgeEvent> dco_decode_list_p_2_p_bridge_event(dynamic raw);
@@ -71,7 +93,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  MessageJson dco_decode_message_json(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   P2PBridgeEvent dco_decode_p_2_p_bridge_event(dynamic raw);
@@ -115,18 +146,41 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  ConversationJson sse_decode_conversation_json(SseDeserializer deserializer);
+
+  @protected
   ExternalDiscovery sse_decode_external_discovery(SseDeserializer deserializer);
+
+  @protected
+  FileInfoJson sse_decode_file_info_json(SseDeserializer deserializer);
 
   @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<ConversationJson> sse_decode_list_conversation_json(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<ExternalDiscovery> sse_decode_list_external_discovery(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<MessageJson> sse_decode_list_message_json(SseDeserializer deserializer);
 
   @protected
   List<P2PBridgeEvent> sse_decode_list_p_2_p_bridge_event(
@@ -142,7 +196,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  MessageJson sse_decode_message_json(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   P2PBridgeEvent sse_decode_p_2_p_bridge_event(SseDeserializer deserializer);
@@ -194,20 +257,53 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_conversation_json(
+    ConversationJson self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_external_discovery(
     ExternalDiscovery self,
     SseSerializer serializer,
   );
 
   @protected
+  void sse_encode_file_info_json(FileInfoJson self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_conversation_json(
+    List<ConversationJson> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_external_discovery(
     List<ExternalDiscovery> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_message_json(
+    List<MessageJson> self,
     SseSerializer serializer,
   );
 
@@ -230,7 +326,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_message_json(MessageJson self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_p_2_p_bridge_event(

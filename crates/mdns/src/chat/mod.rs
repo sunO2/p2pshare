@@ -42,11 +42,15 @@ pub mod codec;
 // 公共 API 导出
 pub use message::{
     ChatMessage, TextMessage, TypingIndicator, MessageAck,
-    ChatError, CHAT_PROTOCOL,
+    ChatError, CHAT_PROTOCOL, CHAT_PROTOCOL_V1,
+    MessageType, MessageContent, FileInfo, RedPacketInfo, GeneralMessage,
 };
 pub use traits::{ChatExtension, ChatEvent};
 pub use manager::{ChatManager, ChatSession};
 pub use codec::{ChatCodec, ChatProtocol, ChatRequest, ChatResponse};
+
+// 数据库模块
+pub mod database;
 
 // 当实现完成后，导出这些类型
 // pub use behaviour::ChatSession;

@@ -15,11 +15,13 @@ use super::{
     connection_service::{ConnectionService, ConnectionServiceConfig},
     managed_discovery::{ManagedDiscovery, HealthCheckConfig},
     chat::traits::ChatExtension,
+    chat::manager::ChatDatabaseConfig,
     MdnsError,
     events::DiscoveryEvent,
 };
 use libp2p::{identity::Keypair, PeerId, Multiaddr};
 use std::sync::Arc;
+use std::path::PathBuf;
 use tokio::sync::mpsc;
 use crate::send_log;  // 使用全局日志回调
 
@@ -48,6 +50,10 @@ pub struct P2PManagerConfig {
 
     /// 监听地址列表
     pub listen_addresses: Vec<Multiaddr>,
+
+    /// 聊天数据库路径（可选）
+    /// 如果为 None，将使用系统默认数据目录
+    pub chat_db_path: Option<PathBuf>,
 }
 
 impl Default for P2PManagerConfig {
@@ -60,6 +66,7 @@ impl Default for P2PManagerConfig {
             local_user_info: UserInfo::new("未命名设备".to_string()),
             health_check_config: HealthCheckConfig::default(),
             listen_addresses: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
+            chat_db_path: None,
         }
     }
 }
@@ -104,6 +111,11 @@ impl P2PManagerConfig {
 
     pub fn with_listen_addresses(mut self, addrs: Vec<Multiaddr>) -> Self {
         self.listen_addresses = addrs;
+        self
+    }
+
+    pub fn with_chat_db_path(mut self, path: PathBuf) -> Self {
+        self.chat_db_path = Some(path);
         self
     }
 }
@@ -152,6 +164,9 @@ pub struct P2PManager {
 
     /// 连接服务是否正在运行
     connection_running: bool,
+
+    /// 聊天数据库路径（可选）
+    chat_db_path: Option<PathBuf>,
 }
 
 impl P2PManager {
@@ -206,6 +221,7 @@ impl P2PManager {
             connection_task: None,
             mdns_running: false,
             connection_running: false,
+            chat_db_path: config.chat_db_path,
         })
     }
 
@@ -323,13 +339,21 @@ impl P2PManager {
         tracing::debug!("📝 [连接服务] 创建 ConnectionService 实例...");
         send_log("INFO", "p2p_manager", "  └─ 创建 ConnectionService...".to_string());
 
+        // 创建 ConnectionService 配置（包含数据库路径）
+        let connection_config = crate::connection_service::ConnectionServiceConfig {
+            listen_addresses: self.listen_addresses.clone(),
+            identify_interval: std::time::Duration::from_secs(30),
+            idle_connection_timeout: std::time::Duration::from_secs(60),
+            chat_db_path: self.chat_db_path.clone(),
+        };
+
         // 创建 ConnectionService
         let connection_service = ConnectionService::new(
             self.identity.clone(),
             self.node_manager.clone(),  // 传递共享的 NodeManager
             self.local_user_info.clone(),
             discovery_rx,
-            ConnectionServiceConfig::default(),
+            connection_config,
         ).await.map_err(|e| {
             tracing::error!("❌ [连接服务] 创建 ConnectionService 失败: {:?}", e);
             send_log("ERROR", "p2p_manager", format!("❌ 创建连接服务失败: {:?}", e));
@@ -592,6 +616,61 @@ impl P2PManager {
             tracing::error!("❌ [P2PManager] 连接服务未运行");
             Err(MdnsError::SwarmBuild("连接服务未运行".to_string()))
         }
+    }
+
+    /// 获取所有会话列表
+    pub async fn get_conversations(&self) -> Result<Vec<crate::chat::database::models::Conversation>, MdnsError> {
+        if let Some(connection_service) = &self.connection_service {
+            let service = connection_service.lock().await;
+            if let Some(chat_manager) = service.chat_manager() {
+                return chat_manager.get_conversations().await
+                    .map_err(|e| MdnsError::SwarmBuild(format!("获取会话列表失败: {}", e)));
+            }
+        }
+        Err(MdnsError::SwarmBuild("聊天服务未运行".to_string()))
+    }
+
+    /// 获取指定会话的消息列表
+    pub async fn get_messages(
+        &self,
+        conversation_id: &str,
+        limit: i32,
+        before_timestamp: Option<i64>,
+    ) -> Result<Vec<crate::chat::database::models::Message>, MdnsError> {
+        if let Some(connection_service) = &self.connection_service {
+            let service = connection_service.lock().await;
+            if let Some(chat_manager) = service.chat_manager() {
+                return chat_manager.get_conversation_messages(conversation_id, limit, before_timestamp).await
+                    .map_err(|e| MdnsError::SwarmBuild(format!("获取消息列表失败: {}", e)));
+            }
+        }
+        Err(MdnsError::SwarmBuild("聊天服务未运行".to_string()))
+    }
+
+    /// 通过 peer_id 获取消息列表（支持分页）
+    ///
+    /// # Arguments
+    /// * `peer_id` - 对方的 Peer ID
+    /// * `limit` - 每次获取的消息数量（推荐 20-50）
+    /// * `before_timestamp` - 获取此时间戳之前的消息（None 表示获取最新消息）
+    ///
+    /// # 分页使用方式
+    /// - 首次加载：before_timestamp = None
+    /// - 加载更多：before_timestamp = 最旧消息的 timestamp
+    pub async fn get_messages_by_peer(
+        &self,
+        peer_id: &str,
+        limit: i32,
+        before_timestamp: Option<i64>,
+    ) -> Result<Vec<crate::chat::database::models::Message>, MdnsError> {
+        if let Some(connection_service) = &self.connection_service {
+            let service = connection_service.lock().await;
+            if let Some(chat_manager) = service.chat_manager() {
+                return chat_manager.get_messages_by_peer(peer_id, limit, before_timestamp).await
+                    .map_err(|e| MdnsError::SwarmBuild(format!("获取消息列表失败: {}", e)));
+            }
+        }
+        Err(MdnsError::SwarmBuild("聊天服务未运行".to_string()))
     }
 
     /// 刷新设备发现

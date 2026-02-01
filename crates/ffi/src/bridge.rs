@@ -12,6 +12,8 @@ pub use mdns::UserInfo;
 
 // 导入生成的 StreamSink 类型
 use crate::frb_generated::StreamSink;
+// 导入类型定义
+use crate::types;
 
 // ============================================================================
 // 数据结构定义
@@ -264,6 +266,137 @@ pub async fn p2p_broadcast_message(
     message: String,
 ) -> Result<(), String> {
     crate::internal_broadcast_message(target_peer_ids, message).await
+}
+
+// ============================================================================
+// 数据库操作（新增）
+// ============================================================================
+
+/// 获取所有会话列表（在后台线程执行，不阻塞 UI）
+pub async fn p2p_get_conversations() -> Result<Vec<types::ConversationJson>, String> {
+    let runtime = crate::get_runtime().ok_or("No runtime")?;
+    // 在后台线程中执行，避免阻塞 UI
+    let handle = runtime.spawn_blocking(move || {
+        runtime.block_on(crate::internal_get_conversations())
+    });
+    handle.await.map_err(|e| format!("Join error: {}", e))?
+}
+
+/// 通过 peer_id 获取消息列表（支持分页，在后台线程执行，不阻塞 UI）
+///
+/// # Arguments
+/// * `peer_id` - 对方的 Peer ID
+/// * `limit` - 每次获取的消息数量（推荐 20-50）
+/// * `before_timestamp` - 获取此时间戳之前的消息（None 表示获取最新消息）
+///
+/// # 分页使用方式
+/// ```dart
+/// // 首次加载：获取最新的 30 条消息
+/// final messages = await RustLib.instance.api.p2pGetMessagesByPeer(
+///   peerId: "12D3KooW...",
+///   limit: 30,
+///   beforeTimestamp: null,
+/// );
+///
+/// // 加载更多：使用最旧消息的时间戳
+/// final oldestTimestamp = messages.last.timestamp;
+/// final moreMessages = await RustLib.instance.api.p2pGetMessagesByPeer(
+///   peerId: "12D3KooW...",
+///   limit: 30,
+///   beforeTimestamp: oldestTimestamp,
+/// );
+/// ```
+pub async fn p2p_get_messages_by_peer(
+    peer_id: String,
+    limit: i32,
+    before_timestamp: Option<i64>,
+) -> Result<Vec<types::MessageJson>, String> {
+    let runtime = crate::get_runtime().ok_or("No runtime")?;
+    // 在后台线程中执行，避免阻塞 UI
+    let handle = runtime.spawn_blocking(move || {
+        runtime.block_on(crate::internal_get_messages_by_peer(peer_id, limit, before_timestamp))
+    });
+    handle.await.map_err(|e| format!("Join error: {}", e))?
+}
+
+/// 发送扩展消息（支持多种消息类型）
+///
+/// # Arguments
+/// * `target_peer_id` - 目标节点的 Peer ID
+/// * `message_type` - 消息类型 (1=文本, 2=图片, 3=视频, 4=文件, 5=音频, 6=红包, 7=系统)
+/// * `content` - 消息内容（JSON 字符串）
+/// * `extra` - 额外数据（可选，JSON 字符串）
+pub async fn p2p_send_message_ex(
+    target_peer_id: String,
+    message_type: i32,
+    content: String,
+    extra: Option<String>,
+) -> Result<String, String> {
+    crate::internal_send_message_ex(target_peer_id, message_type, content, extra).await
+}
+
+/// 标记消息为已读
+///
+/// # Arguments
+/// * `conversation_id` - 会话 ID
+/// * `message_ids` - 消息 ID 列表
+pub async fn p2p_mark_messages_read(
+    conversation_id: String,
+    message_ids: Vec<String>,
+) -> Result<(), String> {
+    crate::internal_mark_messages_read(conversation_id, message_ids).await
+}
+
+/// 删除消息
+///
+/// # Arguments
+/// * `message_id` - 消息 ID
+pub async fn p2p_delete_message(message_id: String) -> Result<(), String> {
+    crate::internal_delete_message(message_id).await
+}
+
+/// 撤回消息
+///
+/// # Arguments
+/// * `message_id` - 消息 ID
+pub async fn p2p_revoke_message(message_id: String) -> Result<(), String> {
+    crate::internal_revoke_message(message_id).await
+}
+
+/// 清空聊天记录
+///
+/// # Arguments
+/// * `conversation_id` - 会话 ID
+pub async fn p2p_clear_conversation(conversation_id: String) -> Result<(), String> {
+    crate::internal_clear_conversation(conversation_id).await
+}
+
+// ============================================================================
+// 文件操作（新增）
+// ============================================================================
+
+/// 注册文件（发送前调用）
+///
+/// # Arguments
+/// * `file_name` - 文件名
+/// * `file_size` - 文件大小（字节）
+/// * `mime_type` - MIME 类型
+/// * `local_path` - 本地存储路径
+pub async fn p2p_register_file(
+    file_name: String,
+    file_size: i64,
+    mime_type: String,
+    local_path: String,
+) -> Result<String, String> {
+    crate::internal_register_file(file_name, file_size, mime_type, local_path).await
+}
+
+/// 获取文件元数据
+///
+/// # Arguments
+/// * `file_id` - 文件 ID
+pub async fn p2p_get_file_info(file_id: String) -> Result<types::FileInfoJson, String> {
+    crate::internal_get_file_info(file_id).await
 }
 
 // ============================================================================

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../p2p_manager.dart';
@@ -6,16 +7,19 @@ import '../widgets/chat_bubble_sent.dart';
 import '../widgets/chat_bubble_received.dart';
 import '../widgets/unified_app_bar.dart';
 import '../services/p2p_event_bus.dart' as eb;
+import '../bridge/types.dart';
+import '../bridge/third_party/localp2p_ffi/bridge.dart';
+import '../bridge/frb_generated.dart';
 import 'device_detail_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String peerId;
-  final String deviceName;
+  final String peerName;
 
   const ChatScreen({
     super.key,
     required this.peerId,
-    this.deviceName = 'Unknown',
+    this.peerName = 'Unknown',
   });
 
   @override
@@ -36,12 +40,128 @@ class _ChatScreenState extends State<ChatScreen> {
   /// 状态文本
   String _statusText = '在线';
 
+  /// 是否正在加载历史消息
+  bool _isLoadingHistory = false;
+  /// 是否还有更多历史消息
+  bool _hasMore = true;
+  /// 每页消息数量
+  final int _pageSize = 20;
+
   @override
   void initState() {
     super.initState();
     _loadCurrentStatus();
+    _loadHistoricalMessages();
     _listenToEvents();
     _listenToEventBus();
+  }
+
+  /// 加载历史消息
+  Future<void> _loadHistoricalMessages({bool loadMore = false}) async {
+    if (_isLoadingHistory) return;
+    if (loadMore && !_hasMore) return;
+
+    debugPrint('[ChatScreen] _loadHistoricalMessages 开始加载历史消息 ${loadMore ? "(加载更多)" : ""}');
+    debugPrint('[ChatScreen] peerId: ${widget.peerId}');
+
+    setState(() {
+      _isLoadingHistory = true;
+    });
+
+    try {
+      // 获取最旧消息的时间戳（用于加载更多）
+      final beforeTimestamp = loadMore && _messages.isNotEmpty
+          ? _messages.first.timestamp.millisecondsSinceEpoch
+          : null;
+
+      debugPrint('[ChatScreen] 调用 localp2PFfiBridgeP2PGetMessagesByPeer...');
+      final result = await RustLib.instance.api.localp2PFfiBridgeP2PGetMessagesByPeer(
+        peerId: widget.peerId,
+        limit: _pageSize,
+        beforeTimestamp: beforeTimestamp,
+      );
+
+      debugPrint('[ChatScreen] 返回 ${result.length} 条消息');
+
+      if (mounted) {
+        setState(() {
+          // 消息是倒序返回的（最新的在前），需要反转
+          final newMessages = result.map((msg) => _parseMessageJson(msg)).toList();
+
+          if (loadMore) {
+            // 加载更多：插入到列表开头
+            _messages.insertAll(0, newMessages.reversed);
+          } else {
+            // 首次加载：直接添加
+            _messages.addAll(newMessages.reversed);
+          }
+
+          // 判断是否还有更多
+          _hasMore = result.length >= _pageSize;
+          _isLoadingHistory = false;
+        });
+
+        debugPrint('[ChatScreen] 已加载 ${_messages.length} 条消息');
+
+        // 只在首次加载时滚动到底部
+        if (!loadMore && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom();
+          });
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('[ChatScreen] 加载历史消息失败: $e');
+      debugPrint('[ChatScreen] Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _isLoadingHistory = false;
+        });
+      }
+    }
+  }
+
+  /// 解析消息 JSON
+  ChatMessageData _parseMessageJson(MessageJson msg) {
+    // 解析消息内容
+    String displayText = '';
+    try {
+      final contentJson = jsonDecode(msg.content);
+      if (msg.messageType == 1) {
+        // 文本消息
+        displayText = contentJson['text'] ?? '';
+      } else if (msg.messageType == 2) {
+        displayText = '[图片]';
+      } else if (msg.messageType == 3) {
+        displayText = '[视频]';
+      } else if (msg.messageType == 4) {
+        displayText = '[文件]';
+      } else if (msg.messageType == 5) {
+        displayText = '[音频]';
+      } else {
+        displayText = '[未知消息]';
+      }
+    } catch (e) {
+      displayText = msg.content;
+    }
+
+    // 判断是否是自己发送的消息
+    final isSelf = msg.senderPeerId == _getLocalPeerId();
+
+    return ChatMessageData(
+      message: displayText,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(msg.timestamp),
+      isSelf: isSelf,
+    );
+  }
+
+  /// 获取本地 Peer ID
+  String _getLocalPeerId() {
+    try {
+      return P2PManager.instance.getLocalPeerId();
+    } catch (e) {
+      return '';
+    }
   }
 
   /// 加载当前状态
@@ -184,7 +304,7 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               // Header - use UnifiedAppBar
               UnifiedAppBar(
-                title: widget.deviceName,
+                title: widget.peerName,
                 statusIndicator: _buildStatusIndicator(),
                 actions: [
                   // 设备详情按钮
@@ -229,20 +349,50 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMessagesArea() {
     return Container(
       color: const Color(0xFFF8F8F6),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: ListView.separated(
         controller: _scrollController,
-        itemCount: _messages.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        physics: const AlwaysScrollableScrollPhysics(),
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        itemCount: _messages.length + (_hasMore ? 1 : 0),
         itemBuilder: (context, index) {
-          final message = _messages[index];
-          if (message.isSelf) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [ChatBubbleSent(message: message)],
+          // 加载更多指示器
+          if (index == 0 && _hasMore && _messages.isNotEmpty) {
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              alignment: Alignment.center,
+              child: _isLoadingHistory
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
+                      ),
+                    )
+                  : GestureDetector(
+                      onTap: () => _loadHistoricalMessages(loadMore: true),
+                      child: const Text(
+                        '加载更多',
+                        style: TextStyle(color: Color(0xFF3D8A5A)),
+                      ),
+                    ),
             );
+          }
+
+          final messageIndex = _hasMore ? index - 1 : index;
+          if (messageIndex < 0 || messageIndex >= _messages.length) {
+            return const SizedBox.shrink();
+          }
+
+          final message = _messages[messageIndex];
+          if (message.isSelf) {
+            return ChatBubbleSent(message: message);
           } else {
-            return ChatBubbleReceived(message: message);
+            return ChatBubbleReceived(
+              message: message,
+              peerName: widget.peerName,
+            );
           }
         },
       ),
@@ -251,32 +401,41 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildInputArea() {
     return Container(
-      height: 80,
+      constraints: const BoxConstraints(minHeight: 96, maxHeight: 120),
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
         border: Border(top: BorderSide(color: Color(0xFFCCCCCC))),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8E8E6),
-                borderRadius: BorderRadius.circular(26),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: TextField(
-                controller: _messageController,
-                decoration: const InputDecoration(
-                  hintText: '输入消息...',
-                  hintStyle: TextStyle(fontSize: 15, color: Color(0xFF9C9B99)),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
+            child: TextField(
+              controller: _messageController,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              minLines: 1,
+              maxLines: null,
+              decoration: const InputDecoration(
+                hintText: '输入消息...',
+                hintStyle: TextStyle(fontSize: 15, color: Color(0xFF9C9B99)),
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFF3D8A5A)),
+                  borderRadius: BorderRadius.all(Radius.circular(8))
                 ),
-                onSubmitted: _sendMessage,
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFF3D8A5A)),
+                  borderRadius: BorderRadius.all(Radius.circular(8))
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFF3D8A5A)),
+                  borderRadius: BorderRadius.all(Radius.circular(8))
+                ),
               ),
+              onSubmitted: (_) => _sendMessage(_messageController.text),
             ),
           ),
           const SizedBox(width: 12),

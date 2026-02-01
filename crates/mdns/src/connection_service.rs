@@ -5,7 +5,7 @@
 use super::{
     node::NodeManager,
     user_info, MdnsError, events::DiscoveryEvent,
-    chat::{ChatManager, ChatMessage},
+    chat::{ChatManager, ChatMessage, manager::ChatDatabaseConfig},
 };
 use futures::StreamExt;
 use libp2p::{
@@ -15,6 +15,7 @@ use libp2p::{
 };
 use std::sync::Arc;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tokio::sync::mpsc;
 
 /// 全局聊天事件回调（可选）
@@ -43,6 +44,9 @@ pub struct ConnectionServiceConfig {
 
     /// 空闲连接超时
     pub idle_connection_timeout: std::time::Duration,
+
+    /// 聊天数据库路径（可选）
+    pub chat_db_path: Option<PathBuf>,
 }
 
 impl Default for ConnectionServiceConfig {
@@ -51,6 +55,7 @@ impl Default for ConnectionServiceConfig {
             listen_addresses: vec!["/ip4/0.0.0.0/tcp/0".parse().unwrap()],
             identify_interval: std::time::Duration::from_secs(30),
             idle_connection_timeout: std::time::Duration::from_secs(60),
+            chat_db_path: None,
         }
     }
 }
@@ -120,9 +125,33 @@ impl ConnectionService {
         let protocol_version = node_manager.config().expected_protocol_version.clone();
         let agent_version = node_manager.config().build_agent_version();
 
-        // 创建聊天管理器（使用共享的 NodeManager）
-        let (chat_manager, chat_event_rx) = ChatManager::new(node_manager.clone(), local_peer_id);
-        tracing::info!("✓ 聊天管理器已创建");
+        // 创建数据库配置
+        let db_config = if let Some(ref db_path) = config.chat_db_path {
+            ChatDatabaseConfig {
+                db_path: db_path.clone(),
+                enabled: true,
+            }
+        } else {
+            ChatDatabaseConfig::default()
+        };
+
+        // 创建聊天管理器（使用共享的 NodeManager 和数据库配置）
+        crate::send_log("INFO", "connection_service", "🗄️ 正在创建聊天管理器...".to_string());
+        crate::send_log("INFO", "connection_service", format!("🗄️ 数据库配置: enabled={}, db_path={:?}", db_config.enabled, db_config.db_path));
+        let (chat_manager, chat_event_rx) = ChatManager::with_db_config(
+            node_manager.clone(),
+            local_peer_id,
+            db_config,
+        );
+        crate::send_log("INFO", "connection_service", "✅ 聊天管理器已创建".to_string());
+
+        // 初始化聊天数据库
+        crate::send_log("INFO", "connection_service", "🗄️ 正在初始化聊天数据库...".to_string());
+        if let Err(e) = chat_manager.initialize_database().await {
+            crate::send_log("WARN", "connection_service", format!("⚠️ 聊天数据库初始化失败: {}", e));
+        } else {
+            crate::send_log("INFO", "connection_service", "✅ 聊天数据库初始化完成".to_string());
+        }
 
         // ⚠️ 关键：使用同一个 identity 创建 Swarm（不包含 mDNS）
         let mut swarm = SwarmBuilder::with_existing_identity(identity)
@@ -278,16 +307,35 @@ impl ConnectionService {
             if let Ok(event) = rx.try_recv() {
                 match event {
                     super::chat::ChatEvent::MessageReceived { from, message } => {
-                        if let super::chat::ChatMessage::Text(text) = message {
-                            let from_str = from.to_string();
-                            let content_str = text.content.clone();
-                            tracing::info!("💬 收到来自 {} 的消息: {}", from, content_str);
+                        let from_str = from.to_string();
+                        let content_str = match &message {
+                            super::chat::ChatMessage::Text(text) => {
+                                text.content.clone()
+                            }
+                            super::chat::ChatMessage::Message(msg) => {
+                                // 从 MessageContent 中提取文本内容
+                                msg.content.text.clone().unwrap_or_else(|| {
+                                    // 如果没有文本，根据类型生成描述
+                                    match msg.content.msg_type {
+                                        super::chat::MessageType::Image => "[图片]".to_string(),
+                                        super::chat::MessageType::Video => "[视频]".to_string(),
+                                        super::chat::MessageType::File => "[文件]".to_string(),
+                                        super::chat::MessageType::Audio => "[音频]".to_string(),
+                                        super::chat::MessageType::RedPacket => "[红包]".to_string(),
+                                        super::chat::MessageType::System => "[系统消息]".to_string(),
+                                        _ => "[未知消息]".to_string(),
+                                    }
+                                })
+                            }
+                            _ => "[未知消息类型]".to_string(),
+                        };
 
-                            // 调用全局回调函数（如果已设置）
-                            unsafe {
-                                if let Some(callback) = &CHAT_EVENT_CALLBACK {
-                                    callback(from_str, content_str);
-                                }
+                        tracing::info!("💬 收到来自 {} 的消息: {}", from, content_str);
+
+                        // 调用全局回调函数（如果已设置）
+                        unsafe {
+                            if let Some(callback) = CHAT_EVENT_CALLBACK.as_ref() {
+                                callback(from_str, content_str);
                             }
                         }
                     }

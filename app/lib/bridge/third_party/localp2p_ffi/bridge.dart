@@ -5,6 +5,7 @@
 
 import '../../bridge.dart';
 import '../../frb_generated.dart';
+import '../../types.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
@@ -113,6 +114,129 @@ Future<void> p2PBroadcastMessage({
   targetPeerIds: targetPeerIds,
   message: message,
 );
+
+/// 获取所有会话列表（在后台线程执行，不阻塞 UI）
+Future<List<ConversationJson>> p2PGetConversations() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PGetConversations();
+
+/// 通过 peer_id 获取消息列表（支持分页，在后台线程执行，不阻塞 UI）
+///
+/// # Arguments
+/// * `peer_id` - 对方的 Peer ID
+/// * `limit` - 每次获取的消息数量（推荐 20-50）
+/// * `before_timestamp` - 获取此时间戳之前的消息（None 表示获取最新消息）
+///
+/// # 分页使用方式
+/// ```dart
+/// // 首次加载：获取最新的 30 条消息
+/// final messages = await RustLib.instance.api.p2pGetMessagesByPeer(
+///   peerId: "12D3KooW...",
+///   limit: 30,
+///   beforeTimestamp: null,
+/// );
+///
+/// // 加载更多：使用最旧消息的时间戳
+/// final oldestTimestamp = messages.last.timestamp;
+/// final moreMessages = await RustLib.instance.api.p2pGetMessagesByPeer(
+///   peerId: "12D3KooW...",
+///   limit: 30,
+///   beforeTimestamp: oldestTimestamp,
+/// );
+/// ```
+Future<List<MessageJson>> p2PGetMessagesByPeer({
+  required String peerId,
+  required int limit,
+  PlatformInt64? beforeTimestamp,
+}) => RustLib.instance.api.localp2PFfiBridgeP2PGetMessagesByPeer(
+  peerId: peerId,
+  limit: limit,
+  beforeTimestamp: beforeTimestamp,
+);
+
+/// 发送扩展消息（支持多种消息类型）
+///
+/// # Arguments
+/// * `target_peer_id` - 目标节点的 Peer ID
+/// * `message_type` - 消息类型 (1=文本, 2=图片, 3=视频, 4=文件, 5=音频, 6=红包, 7=系统)
+/// * `content` - 消息内容（JSON 字符串）
+/// * `extra` - 额外数据（可选，JSON 字符串）
+Future<String> p2PSendMessageEx({
+  required String targetPeerId,
+  required int messageType,
+  required String content,
+  String? extra,
+}) => RustLib.instance.api.localp2PFfiBridgeP2PSendMessageEx(
+  targetPeerId: targetPeerId,
+  messageType: messageType,
+  content: content,
+  extra: extra,
+);
+
+/// 标记消息为已读
+///
+/// # Arguments
+/// * `conversation_id` - 会话 ID
+/// * `message_ids` - 消息 ID 列表
+Future<void> p2PMarkMessagesRead({
+  required String conversationId,
+  required List<String> messageIds,
+}) => RustLib.instance.api.localp2PFfiBridgeP2PMarkMessagesRead(
+  conversationId: conversationId,
+  messageIds: messageIds,
+);
+
+/// 删除消息
+///
+/// # Arguments
+/// * `message_id` - 消息 ID
+Future<void> p2PDeleteMessage({required String messageId}) => RustLib
+    .instance
+    .api
+    .localp2PFfiBridgeP2PDeleteMessage(messageId: messageId);
+
+/// 撤回消息
+///
+/// # Arguments
+/// * `message_id` - 消息 ID
+Future<void> p2PRevokeMessage({required String messageId}) => RustLib
+    .instance
+    .api
+    .localp2PFfiBridgeP2PRevokeMessage(messageId: messageId);
+
+/// 清空聊天记录
+///
+/// # Arguments
+/// * `conversation_id` - 会话 ID
+Future<void> p2PClearConversation({required String conversationId}) => RustLib
+    .instance
+    .api
+    .localp2PFfiBridgeP2PClearConversation(conversationId: conversationId);
+
+/// 注册文件（发送前调用）
+///
+/// # Arguments
+/// * `file_name` - 文件名
+/// * `file_size` - 文件大小（字节）
+/// * `mime_type` - MIME 类型
+/// * `local_path` - 本地存储路径
+Future<String> p2PRegisterFile({
+  required String fileName,
+  required PlatformInt64 fileSize,
+  required String mimeType,
+  required String localPath,
+}) => RustLib.instance.api.localp2PFfiBridgeP2PRegisterFile(
+  fileName: fileName,
+  fileSize: fileSize,
+  mimeType: mimeType,
+  localPath: localPath,
+);
+
+/// 获取文件元数据
+///
+/// # Arguments
+/// * `file_id` - 文件 ID
+Future<FileInfoJson> p2PGetFileInfo({required String fileId}) =>
+    RustLib.instance.api.localp2PFfiBridgeP2PGetFileInfo(fileId: fileId);
 
 /// 设置事件流接收器（用于 Stream 模式）
 ///

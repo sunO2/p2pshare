@@ -4,6 +4,7 @@ import '../p2p_manager.dart';
 import '../services/log_service.dart';
 import '../services/storage_service.dart';
 import 'device_list_screen.dart';
+import 'conversation_list_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -260,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             index: _currentIndex,
             children: [
               const DeviceListScreen(),
-              const ChatPlaceholderScreen(),
+              const ConversationListScreen(),
               const FilePlaceholderScreen(),
               const SettingsScreen(),
             ],
@@ -332,30 +333,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 }
 
-// Placeholder screens for non-implemented tabs
-class ChatPlaceholderScreen extends StatelessWidget {
-  const ChatPlaceholderScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            '选择一个设备开始聊天',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+// Placeholder screen for non-implemented tabs
 class FilePlaceholderScreen extends StatelessWidget {
   const FilePlaceholderScreen({super.key});
 

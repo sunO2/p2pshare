@@ -11,6 +11,7 @@ import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
+import 'types.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -65,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 2049776511;
+  int get rustContentHash => -1819135718;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -83,11 +84,29 @@ abstract class RustLibApi extends BaseApi {
 
   void localp2PFfiBridgeP2PCleanup();
 
+  Future<void> localp2PFfiBridgeP2PClearConversation({
+    required String conversationId,
+  });
+
+  Future<void> localp2PFfiBridgeP2PDeleteMessage({required String messageId});
+
+  Future<List<ConversationJson>> localp2PFfiBridgeP2PGetConversations();
+
   String localp2PFfiBridgeP2PGetDeviceName();
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetDevices();
 
+  Future<FileInfoJson> localp2PFfiBridgeP2PGetFileInfo({
+    required String fileId,
+  });
+
   String localp2PFfiBridgeP2PGetLocalPeerId();
+
+  Future<List<MessageJson>> localp2PFfiBridgeP2PGetMessagesByPeer({
+    required String peerId,
+    required int limit,
+    PlatformInt64? beforeTimestamp,
+  });
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes();
 
@@ -102,9 +121,21 @@ abstract class RustLibApi extends BaseApi {
 
   bool localp2PFfiBridgeP2PIsRunning();
 
+  Future<void> localp2PFfiBridgeP2PMarkMessagesRead({
+    required String conversationId,
+    required List<String> messageIds,
+  });
+
   List<P2PBridgeEvent> localp2PFfiBridgeP2PPollEvents();
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PRefreshDevices();
+
+  Future<String> localp2PFfiBridgeP2PRegisterFile({
+    required String fileName,
+    required PlatformInt64 fileSize,
+    required String mimeType,
+    required String localPath,
+  });
 
   void localp2PFfiBridgeP2PReportExternalDeviceLost({required String peerId});
 
@@ -119,9 +150,18 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> localp2PFfiBridgeP2PRestartDiscovery();
 
+  Future<void> localp2PFfiBridgeP2PRevokeMessage({required String messageId});
+
   Future<void> localp2PFfiBridgeP2PSendMessage({
     required String targetPeerId,
     required String message,
+  });
+
+  Future<String> localp2PFfiBridgeP2PSendMessageEx({
+    required String targetPeerId,
+    required int messageType,
+    required String content,
+    String? extra,
   });
 
   Stream<P2PBridgeEvent> localp2PFfiBridgeP2PSetEventStream();
@@ -218,12 +258,103 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "p2p_cleanup", argNames: []);
 
   @override
+  Future<void> localp2PFfiBridgeP2PClearConversation({
+    required String conversationId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(conversationId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PClearConversationConstMeta,
+        argValues: [conversationId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PClearConversationConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_clear_conversation",
+        argNames: ["conversationId"],
+      );
+
+  @override
+  Future<void> localp2PFfiBridgeP2PDeleteMessage({required String messageId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(messageId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PDeleteMessageConstMeta,
+        argValues: [messageId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PDeleteMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_delete_message",
+        argNames: ["messageId"],
+      );
+
+  @override
+  Future<List<ConversationJson>> localp2PFfiBridgeP2PGetConversations() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_conversation_json,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PGetConversationsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PGetConversationsConstMeta =>
+      const TaskConstMeta(debugName: "p2p_get_conversations", argNames: []);
+
+  @override
   String localp2PFfiBridgeP2PGetDeviceName() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -245,7 +376,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
@@ -262,12 +393,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "p2p_get_devices", argNames: []);
 
   @override
+  Future<FileInfoJson> localp2PFfiBridgeP2PGetFileInfo({
+    required String fileId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(fileId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_file_info_json,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PGetFileInfoConstMeta,
+        argValues: [fileId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PGetFileInfoConstMeta =>
+      const TaskConstMeta(debugName: "p2p_get_file_info", argNames: ["fileId"]);
+
+  @override
   String localp2PFfiBridgeP2PGetLocalPeerId() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -284,12 +445,49 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "p2p_get_local_peer_id", argNames: []);
 
   @override
+  Future<List<MessageJson>> localp2PFfiBridgeP2PGetMessagesByPeer({
+    required String peerId,
+    required int limit,
+    PlatformInt64? beforeTimestamp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(peerId, serializer);
+          sse_encode_i_32(limit, serializer);
+          sse_encode_opt_box_autoadd_i_64(beforeTimestamp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_message_json,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PGetMessagesByPeerConstMeta,
+        argValues: [peerId, limit, beforeTimestamp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PGetMessagesByPeerConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_get_messages_by_peer",
+        argNames: ["peerId", "limit", "beforeTimestamp"],
+      );
+
+  @override
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
@@ -316,7 +514,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(deviceName, serializer);
           sse_encode_String(identityPath, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -340,7 +538,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -365,7 +563,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -387,7 +585,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -404,12 +602,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "p2p_is_running", argNames: []);
 
   @override
+  Future<void> localp2PFfiBridgeP2PMarkMessagesRead({
+    required String conversationId,
+    required List<String> messageIds,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(conversationId, serializer);
+          sse_encode_list_String(messageIds, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PMarkMessagesReadConstMeta,
+        argValues: [conversationId, messageIds],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PMarkMessagesReadConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_mark_messages_read",
+        argNames: ["conversationId", "messageIds"],
+      );
+
+  @override
   List<P2PBridgeEvent> localp2PFfiBridgeP2PPollEvents() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_event,
@@ -431,7 +664,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
@@ -448,13 +681,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "p2p_refresh_devices", argNames: []);
 
   @override
+  Future<String> localp2PFfiBridgeP2PRegisterFile({
+    required String fileName,
+    required PlatformInt64 fileSize,
+    required String mimeType,
+    required String localPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(fileName, serializer);
+          sse_encode_i_64(fileSize, serializer);
+          sse_encode_String(mimeType, serializer);
+          sse_encode_String(localPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PRegisterFileConstMeta,
+        argValues: [fileName, fileSize, mimeType, localPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PRegisterFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_register_file",
+        argNames: ["fileName", "fileSize", "mimeType", "localPath"],
+      );
+
+  @override
   void localp2PFfiBridgeP2PReportExternalDeviceLost({required String peerId}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(peerId, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -482,7 +754,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_external_discovery(discoveries, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -512,7 +784,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(peerId, serializer);
           sse_encode_String(address, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -540,7 +812,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 23,
             port: port_,
           );
         },
@@ -559,6 +831,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "p2p_restart_discovery", argNames: []);
 
   @override
+  Future<void> localp2PFfiBridgeP2PRevokeMessage({required String messageId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(messageId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 24,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PRevokeMessageConstMeta,
+        argValues: [messageId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PRevokeMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_revoke_message",
+        argNames: ["messageId"],
+      );
+
+  @override
   Future<void> localp2PFfiBridgeP2PSendMessage({
     required String targetPeerId,
     required String message,
@@ -572,7 +875,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 25,
             port: port_,
           );
         },
@@ -594,6 +897,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String> localp2PFfiBridgeP2PSendMessageEx({
+    required String targetPeerId,
+    required int messageType,
+    required String content,
+    String? extra,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(targetPeerId, serializer);
+          sse_encode_i_32(messageType, serializer);
+          sse_encode_String(content, serializer);
+          sse_encode_opt_String(extra, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 26,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PSendMessageExConstMeta,
+        argValues: [targetPeerId, messageType, content, extra],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PSendMessageExConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_send_message_ex",
+        argNames: ["targetPeerId", "messageType", "content", "extra"],
+      );
+
+  @override
   Stream<P2PBridgeEvent> localp2PFfiBridgeP2PSetEventStream() {
     final streamSink = RustStreamSink<P2PBridgeEvent>();
     handler.executeSync(
@@ -601,7 +943,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_StreamSink_p_2_p_bridge_event_Sse(streamSink, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -627,7 +969,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -649,7 +991,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -671,7 +1013,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -703,7 +1045,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 31,
             port: port_,
           );
         },
@@ -741,7 +1083,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 32,
             port: port_,
           );
         },
@@ -815,6 +1157,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
+  }
+
+  @protected
+  ConversationJson dco_decode_conversation_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return ConversationJson(
+      id: dco_decode_String(arr[0]),
+      peerId: dco_decode_String(arr[1]),
+      peerName: dco_decode_opt_String(arr[2]),
+      peerAvatar: dco_decode_opt_String(arr[3]),
+      lastMessage: dco_decode_opt_String(arr[4]),
+      lastMessageType: dco_decode_i_32(arr[5]),
+      lastMessageTime: dco_decode_opt_box_autoadd_i_64(arr[6]),
+      unreadCount: dco_decode_i_32(arr[7]),
+      isPinned: dco_decode_bool(arr[8]),
+      isMuted: dco_decode_bool(arr[9]),
+    );
+  }
+
+  @protected
   ExternalDiscovery dco_decode_external_discovery(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -827,9 +1201,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FileInfoJson dco_decode_file_info_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    return FileInfoJson(
+      id: dco_decode_String(arr[0]),
+      messageId: dco_decode_String(arr[1]),
+      fileName: dco_decode_String(arr[2]),
+      fileSize: dco_decode_i_64(arr[3]),
+      mimeType: dco_decode_String(arr[4]),
+      localPath: dco_decode_opt_String(arr[5]),
+      thumbnailPath: dco_decode_opt_String(arr[6]),
+      duration: dco_decode_opt_box_autoadd_i_32(arr[7]),
+      width: dco_decode_opt_box_autoadd_i_32(arr[8]),
+      height: dco_decode_opt_box_autoadd_i_32(arr[9]),
+      transferStatus: dco_decode_i_32(arr[10]),
+      transferProgress: dco_decode_i_32(arr[11]),
+    );
+  }
+
+  @protected
   int dco_decode_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
   }
 
   @protected
@@ -839,9 +1241,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ConversationJson> dco_decode_list_conversation_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_conversation_json).toList();
+  }
+
+  @protected
   List<ExternalDiscovery> dco_decode_list_external_discovery(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_external_discovery).toList();
+  }
+
+  @protected
+  List<MessageJson> dco_decode_list_message_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_message_json).toList();
   }
 
   @protected
@@ -865,9 +1279,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  MessageJson dco_decode_message_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return MessageJson(
+      id: dco_decode_String(arr[0]),
+      conversationId: dco_decode_String(arr[1]),
+      senderPeerId: dco_decode_String(arr[2]),
+      messageType: dco_decode_i_32(arr[3]),
+      content: dco_decode_String(arr[4]),
+      timestamp: dco_decode_i_64(arr[5]),
+      replyToId: dco_decode_opt_String(arr[6]),
+      status: dco_decode_i_32(arr[7]),
+      isDeleted: dco_decode_bool(arr[8]),
+      isRevoked: dco_decode_bool(arr[9]),
+    );
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
   }
 
   @protected
@@ -971,6 +1417,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_32(deserializer));
+  }
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
+  ConversationJson sse_decode_conversation_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_peerId = sse_decode_String(deserializer);
+    var var_peerName = sse_decode_opt_String(deserializer);
+    var var_peerAvatar = sse_decode_opt_String(deserializer);
+    var var_lastMessage = sse_decode_opt_String(deserializer);
+    var var_lastMessageType = sse_decode_i_32(deserializer);
+    var var_lastMessageTime = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_unreadCount = sse_decode_i_32(deserializer);
+    var var_isPinned = sse_decode_bool(deserializer);
+    var var_isMuted = sse_decode_bool(deserializer);
+    return ConversationJson(
+      id: var_id,
+      peerId: var_peerId,
+      peerName: var_peerName,
+      peerAvatar: var_peerAvatar,
+      lastMessage: var_lastMessage,
+      lastMessageType: var_lastMessageType,
+      lastMessageTime: var_lastMessageTime,
+      unreadCount: var_unreadCount,
+      isPinned: var_isPinned,
+      isMuted: var_isMuted,
+    );
+  }
+
+  @protected
   ExternalDiscovery sse_decode_external_discovery(
     SseDeserializer deserializer,
   ) {
@@ -981,9 +1466,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FileInfoJson sse_decode_file_info_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_messageId = sse_decode_String(deserializer);
+    var var_fileName = sse_decode_String(deserializer);
+    var var_fileSize = sse_decode_i_64(deserializer);
+    var var_mimeType = sse_decode_String(deserializer);
+    var var_localPath = sse_decode_opt_String(deserializer);
+    var var_thumbnailPath = sse_decode_opt_String(deserializer);
+    var var_duration = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_width = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_height = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_transferStatus = sse_decode_i_32(deserializer);
+    var var_transferProgress = sse_decode_i_32(deserializer);
+    return FileInfoJson(
+      id: var_id,
+      messageId: var_messageId,
+      fileName: var_fileName,
+      fileSize: var_fileSize,
+      mimeType: var_mimeType,
+      localPath: var_localPath,
+      thumbnailPath: var_thumbnailPath,
+      duration: var_duration,
+      width: var_width,
+      height: var_height,
+      transferStatus: var_transferStatus,
+      transferProgress: var_transferProgress,
+    );
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
   }
 
   @protected
@@ -999,6 +1521,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ConversationJson> sse_decode_list_conversation_json(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ConversationJson>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_conversation_json(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<ExternalDiscovery> sse_decode_list_external_discovery(
     SseDeserializer deserializer,
   ) {
@@ -1008,6 +1544,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <ExternalDiscovery>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_external_discovery(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<MessageJson> sse_decode_list_message_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MessageJson>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_message_json(deserializer));
     }
     return ans_;
   }
@@ -1048,11 +1596,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  MessageJson sse_decode_message_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_conversationId = sse_decode_String(deserializer);
+    var var_senderPeerId = sse_decode_String(deserializer);
+    var var_messageType = sse_decode_i_32(deserializer);
+    var var_content = sse_decode_String(deserializer);
+    var var_timestamp = sse_decode_i_64(deserializer);
+    var var_replyToId = sse_decode_opt_String(deserializer);
+    var var_status = sse_decode_i_32(deserializer);
+    var var_isDeleted = sse_decode_bool(deserializer);
+    var var_isRevoked = sse_decode_bool(deserializer);
+    return MessageJson(
+      id: var_id,
+      conversationId: var_conversationId,
+      senderPeerId: var_senderPeerId,
+      messageType: var_messageType,
+      content: var_content,
+      timestamp: var_timestamp,
+      replyToId: var_replyToId,
+      status: var_status,
+      isDeleted: var_isDeleted,
+      isRevoked: var_isRevoked,
+    );
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
     } else {
       return null;
     }
@@ -1173,6 +1770,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_conversation_json(
+    ConversationJson self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.peerId, serializer);
+    sse_encode_opt_String(self.peerName, serializer);
+    sse_encode_opt_String(self.peerAvatar, serializer);
+    sse_encode_opt_String(self.lastMessage, serializer);
+    sse_encode_i_32(self.lastMessageType, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.lastMessageTime, serializer);
+    sse_encode_i_32(self.unreadCount, serializer);
+    sse_encode_bool(self.isPinned, serializer);
+    sse_encode_bool(self.isMuted, serializer);
+  }
+
+  @protected
   void sse_encode_external_discovery(
     ExternalDiscovery self,
     SseSerializer serializer,
@@ -1183,9 +1813,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_file_info_json(FileInfoJson self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.messageId, serializer);
+    sse_encode_String(self.fileName, serializer);
+    sse_encode_i_64(self.fileSize, serializer);
+    sse_encode_String(self.mimeType, serializer);
+    sse_encode_opt_String(self.localPath, serializer);
+    sse_encode_opt_String(self.thumbnailPath, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.duration, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.width, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.height, serializer);
+    sse_encode_i_32(self.transferStatus, serializer);
+    sse_encode_i_32(self.transferProgress, serializer);
+  }
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
   }
 
   @protected
@@ -1198,6 +1851,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_conversation_json(
+    List<ConversationJson> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_conversation_json(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_external_discovery(
     List<ExternalDiscovery> self,
     SseSerializer serializer,
@@ -1206,6 +1871,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_external_discovery(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_message_json(
+    List<MessageJson> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_message_json(item, serializer);
     }
   }
 
@@ -1244,12 +1921,50 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_message_json(MessageJson self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.conversationId, serializer);
+    sse_encode_String(self.senderPeerId, serializer);
+    sse_encode_i_32(self.messageType, serializer);
+    sse_encode_String(self.content, serializer);
+    sse_encode_i_64(self.timestamp, serializer);
+    sse_encode_opt_String(self.replyToId, serializer);
+    sse_encode_i_32(self.status, serializer);
+    sse_encode_bool(self.isDeleted, serializer);
+    sse_encode_bool(self.isRevoked, serializer);
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
     }
   }
 

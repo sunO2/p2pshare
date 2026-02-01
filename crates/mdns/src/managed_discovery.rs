@@ -6,12 +6,13 @@
 //! mDNS 功能已迁移到 `mdns_discovery` 模块（基于 libmdns）。
 
 use super::{node::{NodeManager, VerifiedNode}, user_info, MdnsError};
-use super::chat::{ChatExtension, ChatManager, ChatMessage, ChatError};
+use super::chat::{ChatExtension, ChatManager, ChatMessage, ChatError, manager::ChatDatabaseConfig};
 use futures::StreamExt;
 use libp2p::{
     identify, ping, request_response, Swarm, SwarmBuilder, identity::Keypair, Multiaddr, PeerId,
 };
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
@@ -133,6 +134,8 @@ pub struct ManagedDiscovery {
     chat_manager: Option<Arc<ChatManager>>,
     /// 聊天事件接收器（用于处理聊天消息）
     chat_event_rx: Option<mpsc::UnboundedReceiver<super::chat::ChatEvent>>,
+    /// 聊天数据库路径（可选）
+    chat_db_path: Option<PathBuf>,
 }
 
 /// 组合的 Behaviour，包含 identify、ping 和 request_response
@@ -235,7 +238,15 @@ impl ManagedDiscovery {
             peer_user_info: HashMap::new(),
             chat_manager: None,
             chat_event_rx: None,
+            chat_db_path: None,
         })
+    }
+
+    /// 设置聊天数据库路径
+    ///
+    /// 必须在 enable_chat 之前调用，否则数据库将使用默认路径
+    pub fn set_chat_db_path(&mut self, path: PathBuf) {
+        self.chat_db_path = Some(path);
     }
 
     /// 运行发现服务
@@ -584,10 +595,21 @@ impl ChatExtension for ManagedDiscovery {
             return Err(ChatError::SendFailed("聊天功能已经启用".to_string()));
         }
 
-        // 创建 ChatManager
-        let (chat_manager, event_rx) = ChatManager::new(
+        // 创建数据库配置
+        let db_config = if let Some(ref db_path) = self.chat_db_path {
+            ChatDatabaseConfig {
+                db_path: db_path.clone(),
+                enabled: true,
+            }
+        } else {
+            ChatDatabaseConfig::default()
+        };
+
+        // 创建 ChatManager（使用数据库配置）
+        let (chat_manager, event_rx) = ChatManager::with_db_config(
             self.node_manager.clone(),
             self.local_peer_id(),
+            db_config,
         );
 
         // 保存管理器和事件接收器

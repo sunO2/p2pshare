@@ -6,38 +6,40 @@ class ChatBubbleSent extends StatelessWidget {
 
   const ChatBubbleSent({super.key, required this.message});
 
-  String _formatTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 260),
-      decoration: BoxDecoration(
-        color: const Color(0xFF3D8A5A),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(4),
-        ),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 气泡
+        Container(
+          constraints: const BoxConstraints(maxWidth: 240),
+          decoration: const BoxDecoration(
+            color: Color(0xFF95EC69), // 微信绿色
+            borderRadius: BorderRadius.all(Radius.circular(8),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          margin: const EdgeInsets.only(right: 8),
+          child: Text(
             message.message,
-            style: const TextStyle(fontSize: 15, color: Colors.white),
+            style: const TextStyle(fontSize: 16, color: Colors.black),
           ),
-          const SizedBox(height: 6),
-          Text(
-            _formatTime(message.timestamp),
-            style: const TextStyle(fontSize: 11, color: Color(0xFF999999)),
+        ),
+        // 头像
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8E8E6),
+            borderRadius: BorderRadius.circular(12),
           ),
-        ],
-      ),
+          child: const Center(
+            child: Icon(Icons.person, size: 20, color: Color(0xFF9C9B99)),
+          ),
+        ),
+      ],
     );
   }
 }

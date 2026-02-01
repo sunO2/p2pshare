@@ -379,7 +379,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       context,
       MaterialPageRoute(
         builder: (context) =>
-            ChatScreen(peerId: node.peerId, deviceName: node.deviceName),
+            ChatScreen(peerId: node.peerId, peerName: node.deviceName),
       ),
     );
   }

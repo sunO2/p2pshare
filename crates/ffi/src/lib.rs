@@ -25,6 +25,9 @@ mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be
 
 use types::*;
 
+// 导入 UUID 生成器（用于文件 ID 生成）
+use uuid::Uuid;
+
 // ============================================================================
 // 全局运行时和状态管理
 // ============================================================================
@@ -241,13 +244,38 @@ pub fn internal_init(device_name: String, identity_path: String) -> Result<(), S
 
         // 🔄 新架构：创建 P2PManager
         tracing::info!("创建 P2PManager（新架构）...");
-        let p2p_manager_config = P2PManagerConfig::new()
+
+        // 从证书路径提取目录，作为数据库路径
+        let chat_db_path = if !identity_path.is_empty() {
+            mdns_send_log("INFO", "ffi", format!("🔍 identity_path 不为空，尝试提取数据库路径: {}", identity_path));
+            // 获取证书文件的目录
+            if let Some(parent_dir) = std::path::Path::new(&identity_path).parent() {
+                let mut db_path = parent_dir.to_path_buf();
+                db_path.push("chat.db");
+                mdns_send_log("INFO", "ffi", format!("🔍 计算的数据库路径: {:?}", db_path));
+                Some(db_path)
+            } else {
+                mdns_send_log("WARN", "ffi", format!("⚠️ 无法从 identity_path 提取父目录: {}", identity_path));
+                None
+            }
+        } else {
+            mdns_send_log("WARN", "ffi", "⚠️ identity_path 为空，数据库将使用默认路径".to_string());
+            None
+        };
+
+        let mut p2p_manager_config = P2PManagerConfig::new()
             .with_identity(identity.clone().unwrap_or_else(|| libp2p::identity::Keypair::generate_ed25519()))
             .with_node_manager_config(node_manager_config)
             .with_node_manager(node_manager.clone())  // ⚠️ 关键修复：传递共享的 NodeManager
             .with_local_user_info(user_info.clone())
             .with_health_check_config(health_config.clone())
             .with_listen_addresses(listen_addresses.clone());
+
+        // 设置数据库路径（如果有）
+        if let Some(db_path) = chat_db_path {
+            mdns_send_log("INFO", "ffi", format!("  聊天数据库路径: {:?}", db_path));
+            p2p_manager_config = p2p_manager_config.with_chat_db_path(db_path);
+        }
 
         let p2p_manager = match P2PManager::new(p2p_manager_config).await {
             Ok(pm) => {
@@ -1437,4 +1465,240 @@ pub fn internal_report_external_device_lost(
             Ok(())
         })
     }
+}
+
+// ============================================================================
+// 数据库操作函数（新增）
+// ============================================================================
+
+/// 获取所有会话列表
+pub async fn internal_get_conversations() -> Result<Vec<types::ConversationJson>, String> {
+    tracing::info!("📋 [FFI] internal_get_conversations 被调用");
+
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            tracing::error!("❌ [FFI] P2P not initialized");
+            return Err("P2P not initialized".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        let p2p_manager_option = resources.p2p_manager.as_ref()
+            .ok_or("P2PManager not available. Call p2p_start() first.")?;
+
+        let p2p_manager = p2p_manager_option.lock().await;
+
+        // 获取会话列表
+        tracing::info!("📋 [FFI] 调用 get_conversations...");
+        let conversations = p2p_manager.get_conversations().await
+            .map_err(|e| {
+                tracing::error!("❌ [FFI] get_conversations 失败: {}", e);
+                format!("Failed to get conversations: {}", e)
+            })?;
+
+        tracing::info!("📋 [FFI] 获取到 {} 个会话", conversations.len());
+
+        // 转换为 JSON 格式
+        let result: Vec<types::ConversationJson> = conversations.into_iter().map(|c| {
+            tracing::info!("📋 [FFI] 会话: peer_id={}, peer_name={:?}, last_message={:?}",
+                c.peer_id, c.peer_name, c.last_message);
+            types::ConversationJson {
+                id: c.id,
+                peer_id: c.peer_id,
+                peer_name: c.peer_name,
+                peer_avatar: c.peer_avatar,
+                last_message: c.last_message,
+                last_message_type: c.last_message_type,
+                last_message_time: c.last_message_time,
+                unread_count: c.unread_count,
+                is_pinned: c.is_pinned,
+                is_muted: c.is_muted,
+            }
+        }).collect();
+
+        Ok(result)
+    }
+}
+
+/// 获取指定会话的消息列表（已弃用，请使用 internal_get_messages_by_peer）
+#[deprecated(note = "请使用 internal_get_messages_by_peer 代替")]
+pub async fn internal_get_messages(
+    conversation_id: String,
+    limit: i32,
+    before_timestamp: Option<i64>,
+) -> Result<Vec<types::MessageJson>, String> {
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            return Err("P2P not initialized".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        let p2p_manager_option = resources.p2p_manager.as_ref()
+            .ok_or("P2PManager not available. Call p2p_start() first.")?;
+
+        let p2p_manager = p2p_manager_option.lock().await;
+
+        // 获取消息列表
+        let messages = p2p_manager.get_messages(&conversation_id, limit, before_timestamp).await
+            .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+        // 转换为 JSON 格式
+        let result: Vec<types::MessageJson> = messages.into_iter().map(|m| {
+            types::MessageJson {
+                id: m.id,
+                conversation_id: m.conversation_id,
+                sender_peer_id: m.sender_peer_id,
+                message_type: m.message_type,
+                content: m.content,
+                timestamp: m.timestamp,
+                reply_to_id: m.reply_to_id,
+                status: m.status,
+                is_deleted: m.is_deleted,
+                is_revoked: m.is_revoked,
+            }
+        }).collect();
+
+        Ok(result)
+    }
+}
+
+/// 通过 peer_id 获取消息列表（支持分页）
+pub async fn internal_get_messages_by_peer(
+    peer_id: String,
+    limit: i32,
+    before_timestamp: Option<i64>,
+) -> Result<Vec<types::MessageJson>, String> {
+    tracing::info!("💬 [FFI] internal_get_messages_by_peer 被调用: peer_id={}, limit={:?}, before={:?}",
+        peer_id, limit, before_timestamp);
+
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            tracing::error!("❌ [FFI] P2P not initialized");
+            return Err("P2P not initialized".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        let p2p_manager_option = resources.p2p_manager.as_ref()
+            .ok_or("P2PManager not available. Call p2p_start() first.")?;
+
+        let p2p_manager = p2p_manager_option.lock().await;
+
+        // 获取消息列表
+        tracing::info!("💬 [FFI] 调用 get_messages_by_peer...");
+        let messages = p2p_manager.get_messages_by_peer(&peer_id, limit, before_timestamp).await
+            .map_err(|e| {
+                tracing::error!("❌ [FFI] get_messages_by_peer 失败: {}", e);
+                format!("Failed to get messages: {}", e)
+            })?;
+
+        tracing::info!("💬 [FFI] 获取到 {} 条消息", messages.len());
+
+        // 转换为 JSON 格式
+        let result: Vec<types::MessageJson> = messages.into_iter().map(|m| {
+            tracing::info!("💬 [FFI] 消息: id={}, sender={}, type={}, content={}",
+                m.id, m.sender_peer_id, m.message_type,
+                m.content.chars().take(50).collect::<String>());
+            types::MessageJson {
+                id: m.id,
+                conversation_id: m.conversation_id,
+                sender_peer_id: m.sender_peer_id,
+                message_type: m.message_type,
+                content: m.content,
+                timestamp: m.timestamp,
+                reply_to_id: m.reply_to_id,
+                status: m.status,
+                is_deleted: m.is_deleted,
+                is_revoked: m.is_revoked,
+            }
+        }).collect();
+
+        Ok(result)
+    }
+}
+
+/// 发送扩展消息（支持多种消息类型）
+pub async fn internal_send_message_ex(
+    target_peer_id: String,
+    message_type: i32,
+    content: String,
+    extra: Option<String>,
+) -> Result<String, String> {
+    unsafe {
+        if P2P_INSTANCE.is_none() {
+            return Err("Not initialized".to_string());
+        }
+
+        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
+
+        let command = P2PCommand::SendMessage {
+            target_peer_id,
+            message: content.clone(),  // 暂时使用简单消息
+            response_tx,
+        };
+
+        let instance = P2P_INSTANCE.as_ref().unwrap().lock().unwrap();
+        if let Err(_) = instance.command_tx.send(command) {
+            return Err("Failed to send command".to_string());
+        }
+        drop(instance);
+
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+        let result = runtime.block_on(async {
+            response_rx.await
+                .map_err(|e| format!("Response error: {:?}", e))
+                .and_then(|r| r)
+        });
+
+        result
+    }
+}
+
+/// 标记消息为已读
+pub async fn internal_mark_messages_read(
+    conversation_id: String,
+    message_ids: Vec<String>,
+) -> Result<(), String> {
+    tracing::info!("标记 {} 条消息为已读 (会话: {})", message_ids.len(), conversation_id);
+    // TODO: 实现标记已读功能
+    Ok(())
+}
+
+/// 删除消息
+pub async fn internal_delete_message(message_id: String) -> Result<(), String> {
+    tracing::info!("删除消息: {}", message_id);
+    // TODO: 实现删除消息功能
+    Ok(())
+}
+
+/// 撤回消息
+pub async fn internal_revoke_message(message_id: String) -> Result<(), String> {
+    tracing::info!("撤回消息: {}", message_id);
+    // TODO: 实现撤回消息功能
+    Ok(())
+}
+
+/// 清空聊天记录
+pub async fn internal_clear_conversation(conversation_id: String) -> Result<(), String> {
+    tracing::info!("清空聊天记录: {}", conversation_id);
+    // TODO: 实现清空聊天记录功能
+    Ok(())
+}
+
+/// 注册文件（发送前调用）
+pub async fn internal_register_file(
+    file_name: String,
+    file_size: i64,
+    mime_type: String,
+    local_path: String,
+) -> Result<String, String> {
+    let file_id = uuid::Uuid::new_v4().to_string();
+    tracing::info!("注册文件: {} ({}, {} bytes)", file_name, mime_type, file_size);
+    // TODO: 实现文件注册到数据库
+    Ok(file_id)
+}
+
+/// 获取文件元数据
+pub async fn internal_get_file_info(file_id: String) -> Result<types::FileInfoJson, String> {
+    tracing::info!("获取文件信息: {}", file_id);
+    // TODO: 实现从数据库获取文件信息
+    Err(format!("文件不存在: {}", file_id))
 }
