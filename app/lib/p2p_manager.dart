@@ -133,6 +133,9 @@ class P2PManager {
   StreamSubscription<P2PBridgeEvent>? _eventStreamSubscription;
   late P2PLogHelper _log;
 
+  // 保存配置用于重启
+  P2PInitConfig? _savedConfig;
+
   // 私有构造函数
   P2PManager._() {
     _log = P2PLogHelper();
@@ -146,6 +149,9 @@ class P2PManager {
 
   /// 初始化 P2P 模块
   Future<void> init(P2PInitConfig config) async {
+    // 保存配置用于后续重启
+    _savedConfig = config;
+
     _log.rustCall('init', params: {'deviceName': config.deviceName});
     final stopwatch = Stopwatch()..start();
 
@@ -217,26 +223,50 @@ class P2PManager {
   ///
   /// 当应用从后台返回前台时，Stream 订阅可能处于中断状态
   /// 此方法会：
-  /// 1. 重新订阅事件流（确保能接收日志）
-  /// 2. 触发刷新（重新广播 + 重新发现 + 重新连接）
-  ///
-  /// ⭐ 使用和刷新按钮相同的逻辑（TriggerRefresh）
-  /// - 重新广播 mDNS 服务
-  /// - 重新扫描网络中的设备
-  /// - 尝试重新连接到所有已知节点
+  /// 1. 检查 Rust 服务是否还在运行
+  /// 2. 如果服务停止，自动重启
+  /// 3. 重新订阅事件流（确保能接收日志）
+  /// 4. 触发刷新（重新广播 + 重新发现 + 重新连接）
   Future<void> resumeEventStream() async {
+    _log.i('resumeEventStream: 应用恢复，检查 P2P 服务状态...');
+
+    // 1. 先检查 Rust 服务是否还在运行
+    if (!_isRustRunning()) {
+      _log.w('Rust 服务已停止，尝试自动重启...');
+      debugPrint('⚠️ Rust 服务已停止，尝试自动重启...');
+
+      if (_savedConfig == null) {
+        _log.e('无法重启：未保存初始化配置');
+        debugPrint('✗ 无法重启：未保存初始化配置');
+        _initialized = false;
+        return;
+      }
+
+      try {
+        // 重新初始化和启动
+        await _restartService();
+        _log.i('Rust 服务重启成功');
+        debugPrint('✓ Rust 服务重启成功');
+      } catch (e, stackTrace) {
+        _log.e('Rust 服务重启失败: $e', e, stackTrace);
+        debugPrint('✗ Rust 服务重启失败: $e');
+        _initialized = false;
+        return;
+      }
+    } else {
+      _log.i('Rust 服务正在运行，继续恢复流程');
+    }
+
     if (!_initialized) {
       _log.w('resumeEventStream 但未初始化');
       return;
     }
 
-    _log.i('resumeEventStream: 应用恢复，触发刷新（和刷新按钮逻辑一致）');
-
-    // 1. 先重新订阅 Stream（确保能接收日志）
+    // 2. 重新订阅 Stream（确保能接收日志）
     _log.i('重启事件 Stream 订阅');
     _restartEventStream();
 
-    // 2. 触发刷新（和刷新按钮一样的逻辑）
+    // 3. 触发刷新（和刷新按钮一样的逻辑）
     _log.i('从后台恢复，触发 P2P 刷新');
     debugPrint('从后台恢复，触发 P2P 刷新...');
 
@@ -248,6 +278,22 @@ class P2PManager {
       _log.e('触发 P2P 刷新失败: $e', e, stackTrace);
       debugPrint('✗ 触发 P2P 刷新失败: $e');
     }
+  }
+
+  /// 重启 P2P 服务（内部方法）
+  Future<void> _restartService() async {
+    _log.i('重启 P2P 服务...');
+
+    // 取消旧的事件流
+    _eventStreamSubscription?.cancel();
+    _eventStreamSubscription = null;
+    _initialized = false;
+
+    // 重新初始化
+    await init(_savedConfig!);
+
+    // 重新启动
+    await start();
   }
 
   /// 重启事件流订阅（内部方法）

@@ -345,6 +345,11 @@ impl P2PManager {
             identify_interval: std::time::Duration::from_secs(30),
             idle_connection_timeout: std::time::Duration::from_secs(60),
             chat_db_path: self.chat_db_path.clone(),
+            // 🔥 自动重连配置
+            auto_reconnect: true,
+            health_check_interval: std::time::Duration::from_secs(15),
+            max_reconnect_attempts: 0, // 无限重试
+            reconnect_delay: std::time::Duration::from_secs(5),
         };
 
         // 创建 ConnectionService

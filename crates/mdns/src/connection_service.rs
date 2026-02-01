@@ -16,6 +16,7 @@ use libp2p::{
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 /// 全局聊天事件回调（可选）
@@ -47,6 +48,16 @@ pub struct ConnectionServiceConfig {
 
     /// 聊天数据库路径（可选）
     pub chat_db_path: Option<PathBuf>,
+
+    /// 🔥 自动重连配置
+    /// 是否启用自动重连
+    pub auto_reconnect: bool,
+    /// 健康检查间隔
+    pub health_check_interval: std::time::Duration,
+    /// 重连最大尝试次数（0 = 无限重试）
+    pub max_reconnect_attempts: u32,
+    /// 重连之间的延迟
+    pub reconnect_delay: std::time::Duration,
 }
 
 impl Default for ConnectionServiceConfig {
@@ -56,6 +67,10 @@ impl Default for ConnectionServiceConfig {
             identify_interval: std::time::Duration::from_secs(30),
             idle_connection_timeout: std::time::Duration::from_secs(60),
             chat_db_path: None,
+            auto_reconnect: true,
+            health_check_interval: std::time::Duration::from_secs(15),
+            max_reconnect_attempts: 0, // 无限重试
+            reconnect_delay: std::time::Duration::from_secs(5),
         }
     }
 }
@@ -104,6 +119,15 @@ pub struct ConnectionService {
 
     /// 本地 Peer ID
     local_peer_id: PeerId,
+
+    /// 🔥 健康检查和重连配置
+    config: ConnectionServiceConfig,
+
+    /// 🔥 上次健康检查时间
+    last_health_check: Instant,
+
+    /// 🔥 跟踪每个节点的重连尝试次数
+    reconnect_attempts: HashMap<PeerId, u32>,
 }
 
 impl ConnectionService {
@@ -199,8 +223,8 @@ impl ConnectionService {
             .build();
 
         // 开始监听
-        for addr in config.listen_addresses {
-            swarm.listen_on(addr)
+        for addr in &config.listen_addresses {
+            swarm.listen_on(addr.clone())
                 .map_err(|e| MdnsError::SwarmBuild(e.to_string()))?;
         }
 
@@ -219,6 +243,9 @@ impl ConnectionService {
             chat_manager: Some(chat_manager),
             chat_event_rx: Some(chat_event_rx),
             local_peer_id,
+            config,
+            last_health_check: Instant::now(),
+            reconnect_attempts: HashMap::new(),
         })
     }
 
@@ -292,6 +319,88 @@ impl ConnectionService {
             Ok(())
         } else {
             Err(MdnsError::SwarmBuild("聊天管理器未初始化".to_string()))
+        }
+    }
+
+    /// 🔥 执行健康检查和自动重连
+    ///
+    /// 定期检查所有已知的离线节点，尝试重新连接
+    fn check_and_reconnect(&mut self) {
+        // 如果未启用自动重连，跳过
+        if !self.config.auto_reconnect {
+            return;
+        }
+
+        let now = Instant::now();
+        let should_check = now.duration_since(self.last_health_check) >= self.config.health_check_interval;
+
+        if !should_check {
+            return;
+        }
+
+        self.last_health_check = now;
+        tracing::debug!("🔍 开始健康检查...");
+
+        // 获取所有已知节点
+        let known_nodes = match self.node_manager.try_get_all_nodes() {
+            Some(nodes) => nodes,
+            None => {
+                tracing::warn!("无法获取节点列表（需要异步上下文）");
+                return;
+            }
+        };
+
+        let mut reconnect_count = 0;
+
+        for node in known_nodes {
+            let peer_id = node.peer_id;
+
+            // 跳过自己
+            if peer_id == self.local_peer_id {
+                continue;
+            }
+
+            // 检查是否已连接
+            let is_connected = self.swarm.is_connected(&peer_id);
+
+            if is_connected {
+                // 已连接，重置重连计数
+                self.reconnect_attempts.remove(&peer_id);
+                continue;
+            }
+
+            // 未连接，检查是否需要重连
+            let attempts = self.reconnect_attempts.entry(peer_id).or_insert(0);
+
+            // 检查是否超过最大重试次数
+            if self.config.max_reconnect_attempts > 0 && *attempts >= self.config.max_reconnect_attempts {
+                tracing::debug!("节点 {} 已达到最大重试次数 ({}), 跳过重连", peer_id, self.config.max_reconnect_attempts);
+                continue;
+            }
+
+            // 尝试重连
+            for addr in &node.addresses {
+                let attempt_num = *attempts + 1;
+                tracing::info!("🔄 自动重连到 {} at {} (尝试 {})", peer_id, addr, attempt_num);
+
+                match self.swarm.dial(addr.clone()) {
+                    Ok(_) => {
+                        tracing::info!("✅ 已发送重连请求到 {}", peer_id);
+                        reconnect_count += 1;
+                        crate::send_log("INFO", "connection_service",
+                            format!("🔄 自动重连: {} (尝试 {})", peer_id, attempt_num));
+                    }
+                    Err(e) => {
+                        tracing::warn!("重连失败 {}: {:?}", peer_id, e);
+                    }
+                }
+            }
+
+            *attempts += 1;
+        }
+
+        if reconnect_count > 0 {
+            tracing::info!("🔍 健康检查完成，触发 {} 次重连", reconnect_count);
         }
     }
 
@@ -408,9 +517,11 @@ impl ConnectionService {
                 }
             }
 
-            // 定时检查并发送待发送的聊天消息
+            // 定时检查并发送待发送的聊天消息 + 健康检查和自动重连
             _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
                 self.process_pending_chat_messages().await?;
+                // 🔥 执行健康检查和自动重连（内部会判断是否到了检查时间）
+                self.check_and_reconnect();
             }
 
             // 处理 Swarm 事件
@@ -492,6 +603,9 @@ impl ConnectionService {
                 let conn_count = self.active_connections.entry(peer_id).or_insert(0);
                 let is_first_connection = *conn_count == 0;
                 *conn_count += 1;
+
+                // 🔥 连接成功后，重置重连计数
+                self.reconnect_attempts.remove(&peer_id);
 
                 if is_first_connection {
                     // ⚠️ 关键修复：在连接建立时立即添加节点到 NodeManager

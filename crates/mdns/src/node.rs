@@ -418,6 +418,18 @@ impl NodeManager {
         nodes.values().cloned().collect()
     }
 
+    /// 🔥 尝试同步获取所有节点（非阻塞）
+    ///
+    /// 用于在非异步上下文中获取节点列表。
+    /// 如果锁已被占用，返回 None。
+    pub fn try_get_all_nodes(&self) -> Option<Vec<VerifiedNode>> {
+        if let Ok(nodes) = self.nodes.try_read() {
+            Some(nodes.values().cloned().collect())
+        } else {
+            None
+        }
+    }
+
     /// 只列出在线节点
     pub async fn list_online_nodes(&self) -> Vec<VerifiedNode> {
         let nodes = self.nodes.read().await;

@@ -47,6 +47,9 @@ class _ChatScreenState extends State<ChatScreen> {
   /// 每页消息数量
   final int _pageSize = 20;
 
+  /// 🔥 自动加载更多：是否已经触发过一次加载
+  bool _autoLoadTriggered = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +57,39 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadHistoricalMessages();
     _listenToEvents();
     _listenToEventBus();
+    _setupScrollListener();
+  }
+
+  /// 🔥 设置滚动监听，实现自动加载更多
+  void _setupScrollListener() {
+    _scrollController.addListener(() {
+      // 使用 reverse 模式时：
+      // - position.pixels 接近 0 = 底部（最新消息）
+      // - position.pixels 接近 maxScrollExtent = 顶部（最旧消息）
+      if (!_scrollController.hasClients) return;
+
+      final position = _scrollController.position;
+      final maxScroll = position.maxScrollExtent;
+      final current = position.pixels;
+
+      // 当滚动到接近顶部（剩余少于 300px）时触发加载
+      // reverse 模式下，顶部是 maxScrollExtent
+      final distanceFromTop = maxScroll - current;
+
+      if (_hasMore &&
+          !_isLoadingHistory &&
+          !_autoLoadTriggered &&
+          distanceFromTop < 300) {
+        debugPrint('[ChatScreen] 触发自动加载更多');
+        _autoLoadTriggered = true;
+        _loadHistoricalMessages(loadMore: true);
+      }
+
+      // 当用户离开顶部时重置触发标志
+      if (distanceFromTop > 500) {
+        _autoLoadTriggered = false;
+      }
+    });
   }
 
   /// 加载历史消息
@@ -69,9 +105,9 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     try {
-      // 获取最旧消息的时间戳（用于加载更多）
+      // 🔥 使用 reverse 后，beforeTimestamp 应该取最旧消息（列表最后一条）
       final beforeTimestamp = loadMore && _messages.isNotEmpty
-          ? _messages.first.timestamp.millisecondsSinceEpoch
+          ? _messages.last.timestamp.millisecondsSinceEpoch
           : null;
 
       debugPrint('[ChatScreen] 调用 localp2PFfiBridgeP2PGetMessagesByPeer...');
@@ -85,15 +121,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (mounted) {
         setState(() {
-          // 消息是倒序返回的（最新的在前），需要反转
+          // 🔥 后端返回倒序（最新的在前），reverse ListView 需要最新在 index 0
+          // 所以直接使用，不需要反转
           final newMessages = result.map((msg) => _parseMessageJson(msg)).toList();
 
           if (loadMore) {
-            // 加载更多：插入到列表开头
-            _messages.insertAll(0, newMessages.reversed);
+            // 加载更多：更旧的消息添加到列表末尾
+            _messages.addAll(newMessages);
           } else {
-            // 首次加载：直接添加
-            _messages.addAll(newMessages.reversed);
+            // 首次加载：直接添加（已经是新->旧顺序）
+            _messages.addAll(newMessages);
           }
 
           // 判断是否还有更多
@@ -103,10 +140,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
         debugPrint('[ChatScreen] 已加载 ${_messages.length} 条消息');
 
-        // 只在首次加载时滚动到底部
-        if (!loadMore && mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom();
+        // 🔥 加载完成后重置自动加载触发标志
+        if (loadMore && mounted) {
+          // 延迟重置，避免立即再次触发
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _autoLoadTriggered = false;
+            }
           });
         }
       }
@@ -116,6 +156,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           _isLoadingHistory = false;
+          // 加载失败也要重置触发标志
+          _autoLoadTriggered = false;
         });
       }
     }
@@ -202,7 +244,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (event is MessageReceivedEvent && event.from == widget.peerId) {
         setState(() {
-          _messages.add(
+          _messages.insert(
+            0,
             ChatMessageData(
               message: event.message,
               timestamp: DateTime.fromMillisecondsSinceEpoch(event.timestamp),
@@ -210,10 +253,10 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           );
         });
-        _scrollToBottom();
       } else if (event is MessageSentEvent && event.to == widget.peerId) {
         setState(() {
-          _messages.add(
+          _messages.insert(
+            0,
             ChatMessageData(
               message: '(sent)',
               timestamp: DateTime.now(),
@@ -221,7 +264,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           );
         });
-        _scrollToBottom();
       }
     });
   }
@@ -274,17 +316,26 @@ class _ChatScreenState extends State<ChatScreen> {
     ).listen((event) {
       if (!mounted) return;
       debugPrint('[EventBus] Message from ${widget.peerId}: ${event.data}');
-    });
-  }
 
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      // 🔥 将收到的消息添加到列表前面（index 0 = 底部）
+      final messageData = event.data;
+      if (messageData is Map<String, dynamic>) {
+        final message = messageData['message'] as String?;
+        final timestamp = messageData['timestamp'] as int?;
+        if (message != null) {
+          setState(() {
+            _messages.insert(
+              0,
+              ChatMessageData(
+                message: message,
+                timestamp: timestamp != null
+                    ? DateTime.fromMillisecondsSinceEpoch(timestamp)
+                    : DateTime.now(),
+                isSelf: false,
+              ),
+            );
+          });
+        }
       }
     });
   }
@@ -299,7 +350,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       child: Scaffold(
         body: SafeArea(
-          bottom: false,
+          bottom: true,
           child: Column(
             children: [
               // Header - use UnifiedAppBar
@@ -351,13 +402,16 @@ class _ChatScreenState extends State<ChatScreen> {
       color: const Color(0xFFF8F8F6),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: ListView.separated(
+        padding: const EdgeInsets.only(top: 16, bottom: 16),
+        reverse: true,  // 🔥 反转列表，最新消息在底部
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemCount: _messages.length + (_hasMore ? 1 : 0),
         itemBuilder: (context, index) {
-          // 加载更多指示器
-          if (index == 0 && _hasMore && _messages.isNotEmpty) {
+          // 加载更多指示器 - reverse 时在列表末尾（最大 index）
+          final isLoadMoreIndicator = _hasMore && index == _messages.length;
+          if (isLoadMoreIndicator) {
             return Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
               alignment: Alignment.center,
@@ -370,22 +424,20 @@ class _ChatScreenState extends State<ChatScreen> {
                         valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
                       ),
                     )
-                  : GestureDetector(
-                      onTap: () => _loadHistoricalMessages(loadMore: true),
-                      child: const Text(
-                        '加载更多',
-                        style: TextStyle(color: Color(0xFF3D8A5A)),
+                  : const SizedBox(
+                      // 🔥 自动加载时显示提示，但不显示可点击按钮
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1,
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFCCCCCC)),
                       ),
                     ),
             );
           }
 
-          final messageIndex = _hasMore ? index - 1 : index;
-          if (messageIndex < 0 || messageIndex >= _messages.length) {
-            return const SizedBox.shrink();
-          }
-
-          final message = _messages[messageIndex];
+          // reverse 时，index 直接对应消息索引（0 是最新消息）
+          final message = _messages[index];
           if (message.isSelf) {
             return ChatBubbleSent(message: message);
           } else {
@@ -401,8 +453,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildInputArea() {
     return Container(
-      constraints: const BoxConstraints(minHeight: 96, maxHeight: 120),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      constraints: const BoxConstraints(minHeight: 0, maxHeight: 120),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
       decoration: const BoxDecoration(
         color: Color(0xFFF8F8F6),
         border: Border(top: BorderSide(color: Color(0xFFCCCCCC))),
@@ -477,11 +529,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Add to local messages immediately for better UX
     setState(() {
-      _messages.add(
+      // 🔥 reverse ListView: index 0 在底部，新消息插入到开头
+      _messages.insert(
+        0,
         ChatMessageData(message: text, timestamp: DateTime.now(), isSelf: true),
       );
     });
-    _scrollToBottom();
+    // 🔥 使用 reverse 后，新消息自动显示在底部，不需要手动滚动
   }
 
   /// 构建动态状态指示器
