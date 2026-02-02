@@ -15,7 +15,6 @@ use super::{
     connection_service::{ConnectionService, ConnectionServiceConfig},
     managed_discovery::{ManagedDiscovery, HealthCheckConfig},
     chat::traits::ChatExtension,
-    chat::manager::ChatDatabaseConfig,
     MdnsError,
     events::DiscoveryEvent,
 };
@@ -697,6 +696,39 @@ impl P2PManager {
         send_log("INFO", "p2p_manager", "✅ 刷新完成".to_string());
 
         Ok(())
+    }
+
+    /// 🔥 获取系统状态
+    ///
+    /// 返回当前所有服务的运行状态和健康状态
+    pub async fn get_system_status(&self) -> Result<super::events::SystemStatus, MdnsError> {
+        use super::events::{ServiceHealth, ServiceStatus};
+
+        // 获取在线和离线节点数量
+        let online_nodes = self.node_manager.list_online_nodes().await;
+        let all_nodes = self.node_manager.list_all_nodes().await;
+
+        // 构建 mDNS 服务状态
+        let mdns_status = if self.mdns_running {
+            ServiceStatus::new("mDNS Service", ServiceHealth::Healthy, true)
+                .with_message("服务运行中")
+        } else {
+            ServiceStatus::new("mDNS Service", ServiceHealth::Unhealthy, false)
+                .with_message("服务未运行")
+        };
+
+        // 构建连接服务状态
+        let connection_status = if self.connection_running {
+            ServiceStatus::new("Connection Service", ServiceHealth::Healthy, true)
+                .with_message("服务运行中")
+        } else {
+            ServiceStatus::new("Connection Service", ServiceHealth::Unhealthy, false)
+                .with_message("服务未运行")
+        };
+
+        Ok(super::events::SystemStatus::new(mdns_status, connection_status)
+            .with_connected_peers(online_nodes.len())
+            .with_discovered_peers(all_nodes.len()))
     }
 
     /// 停止所有服务

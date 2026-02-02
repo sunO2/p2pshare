@@ -2,11 +2,10 @@
 //!
 //! 统一管理所有聊天会话和消息收发。
 
-use super::message::{ChatMessage, ChatError, MessageType, MessageContent, GeneralMessage};
+use super::message::{ChatMessage, ChatError, MessageType, MessageContent};
 use super::traits::ChatEvent;
 use super::database::manager::{ChatDatabase, SqliteChatDatabase};
-use super::database::models::{DbMessage, DbConversation};
-use super::database::schema::MessageStatus;
+use super::database::models::DbMessage;
 use crate::node::NodeManager;
 use libp2p::PeerId;
 use std::collections::{HashMap, VecDeque};

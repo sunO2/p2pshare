@@ -2,7 +2,7 @@
 //!
 //! 定义聊天数据库的 trait 和 SQLite 实现。
 
-use super::models::{DbConversation, DbMessage, DbFile, Conversation, Message, FileMetadata};
+use super::models::{DbMessage, DbFile, Conversation, Message, FileMetadata, DbDevice, Device};
 use super::schema::{MessageStatus, TransferStatus};
 use crate::chat::message::MessageType;
 use crate::chat::ChatError;
@@ -55,6 +55,18 @@ pub trait ChatDatabase: Send + Sync {
         status: TransferStatus,
         progress: i32,
     ) -> Result<(), ChatError>;
+
+    /// 🔥 设备管理
+    async fn upsert_device(&self, device: DbDevice) -> Result<(), ChatError>;
+    async fn get_device(&self, peer_id: &str) -> Result<Option<Device>, ChatError>;
+    async fn get_all_devices(&self) -> Result<Vec<Device>, ChatError>;
+    async fn update_device_status(
+        &self,
+        peer_id: &str,
+        status: String,
+        addresses: Option<Vec<String>>,
+    ) -> Result<(), ChatError>;
+    async fn delete_device(&self, peer_id: &str) -> Result<(), ChatError>;
 }
 
 /// SQLite 聊天数据库实现
@@ -549,6 +561,143 @@ impl ChatDatabase for SqliteChatDatabase {
             .execute(&self.pool)
             .await
             .map_err(|e| ChatError::Serialization(format!("Failed to update file transfer: {}", e)))?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // 🔥 设备管理实现
+    // ========================================================================
+
+    async fn upsert_device(&self, device: DbDevice) -> Result<(), ChatError> {
+        sqlx::query(
+            "INSERT INTO devices (peer_id, display_name, device_name, nickname, status, avatar_url,
+                                  protocol_version, addresses, last_seen, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+             ON CONFLICT(peer_id) DO UPDATE SET
+                display_name = excluded.display_name,
+                device_name = excluded.device_name,
+                nickname = excluded.nickname,
+                status = excluded.status,
+                avatar_url = excluded.avatar_url,
+                protocol_version = excluded.protocol_version,
+                addresses = excluded.addresses,
+                last_seen = excluded.last_seen,
+                updated_at = excluded.updated_at"
+        )
+        .bind(&device.peer_id)
+        .bind(&device.display_name)
+        .bind(&device.device_name)
+        .bind(&device.nickname)
+        .bind(&device.status)
+        .bind(&device.avatar_url)
+        .bind(&device.protocol_version)
+        .bind(&device.addresses)
+        .bind(device.last_seen)
+        .bind(device.created_at.timestamp_millis())
+        .bind(device.updated_at.timestamp_millis())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ChatError::Serialization(format!("Failed to upsert device: {}", e)))?;
+        Ok(())
+    }
+
+    async fn get_device(&self, peer_id: &str) -> Result<Option<Device>, ChatError> {
+        let row = sqlx::query(
+            "SELECT peer_id, display_name, device_name, nickname, status, avatar_url,
+                    protocol_version, addresses, last_seen
+             FROM devices
+             WHERE peer_id = ?1"
+        )
+        .bind(peer_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ChatError::Serialization(format!("Failed to get device: {}", e)))?;
+
+        if let Some(row) = row {
+            Ok(Some(Device {
+                peer_id: row.get("peer_id"),
+                display_name: row.get("display_name"),
+                device_name: row.get("device_name"),
+                nickname: row.try_get("nickname").ok(),
+                status: row.try_get("status").ok(),
+                avatar_url: row.try_get("avatar_url").ok(),
+                protocol_version: row.get("protocol_version"),
+                addresses: row.try_get::<String, _>("addresses")
+                    .ok()
+                    .and_then(|s| serde_json::from_str(&s).ok()),
+                last_seen: row.try_get("last_seen").ok(),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn get_all_devices(&self) -> Result<Vec<Device>, ChatError> {
+        let rows = sqlx::query(
+            "SELECT peer_id, display_name, device_name, nickname, status, avatar_url,
+                    protocol_version, addresses, last_seen
+             FROM devices
+             ORDER BY last_seen DESC"
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ChatError::Serialization(format!("Failed to get all devices: {}", e)))?;
+
+        Ok(rows.into_iter().map(|row| Device {
+            peer_id: row.get("peer_id"),
+            display_name: row.get("display_name"),
+            device_name: row.get("device_name"),
+            nickname: row.try_get("nickname").ok(),
+            status: row.try_get("status").ok(),
+            avatar_url: row.try_get("avatar_url").ok(),
+            protocol_version: row.get("protocol_version"),
+            addresses: row.try_get::<String, _>("addresses")
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok()),
+            last_seen: row.try_get("last_seen").ok(),
+        }).collect())
+    }
+
+    async fn update_device_status(
+        &self,
+        peer_id: &str,
+        status: String,
+        addresses: Option<Vec<String>>,
+    ) -> Result<(), ChatError> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let addresses_json = addresses.and_then(|a| serde_json::to_string(&a).ok());
+
+        sqlx::query(
+            "UPDATE devices SET status = ?1, last_seen = ?2, updated_at = ?3
+             WHERE peer_id = ?4"
+        )
+        .bind(&status)
+        .bind(now)
+        .bind(now)
+        .bind(peer_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ChatError::Serialization(format!("Failed to update device status: {}", e)))?;
+
+        // 如果有地址，也更新地址
+        if let Some(addrs) = addresses_json {
+            sqlx::query("UPDATE devices SET addresses = ?1 WHERE peer_id = ?2")
+                .bind(&addrs)
+                .bind(peer_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ChatError::Serialization(format!("Failed to update device addresses: {}", e)))?;
+        }
+
+        Ok(())
+    }
+
+    async fn delete_device(&self, peer_id: &str) -> Result<(), ChatError> {
+        sqlx::query("DELETE FROM devices WHERE peer_id = ?1")
+            .bind(peer_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ChatError::Serialization(format!("Failed to delete device: {}", e)))?;
         Ok(())
     }
 }

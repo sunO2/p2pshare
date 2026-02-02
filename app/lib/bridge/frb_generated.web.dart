@@ -113,6 +113,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   P2PBridgeNodeInfo dco_decode_p_2_p_bridge_node_info(dynamic raw);
 
   @protected
+  ServiceHealthJson dco_decode_service_health_json(dynamic raw);
+
+  @protected
+  ServiceStatusJson dco_decode_service_status_json(dynamic raw);
+
+  @protected
+  SystemStatusJson dco_decode_system_status_json(dynamic raw);
+
+  @protected
   int dco_decode_u_8(dynamic raw);
 
   @protected
@@ -216,6 +225,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   P2PBridgeNodeInfo sse_decode_p_2_p_bridge_node_info(
     SseDeserializer deserializer,
   );
+
+  @protected
+  ServiceHealthJson sse_decode_service_health_json(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ServiceStatusJson sse_decode_service_status_json(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SystemStatusJson sse_decode_system_status_json(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -351,6 +373,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_p_2_p_bridge_node_info(
     P2PBridgeNodeInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_service_health_json(
+    ServiceHealthJson self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_service_status_json(
+    ServiceStatusJson self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_system_status_json(
+    SystemStatusJson self,
     SseSerializer serializer,
   );
 

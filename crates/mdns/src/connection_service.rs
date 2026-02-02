@@ -16,7 +16,7 @@ use libp2p::{
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::mpsc;
 
 /// 全局聊天事件回调（可选）
@@ -93,8 +93,11 @@ pub struct ConnectionService {
     /// 节点管理器（共享）
     node_manager: Arc<NodeManager>,
 
-    /// 发现事件接收器
-    discovery_rx: mpsc::UnboundedReceiver<DiscoveryEvent>,
+    /// 发现事件接收器（使用 Option 包装，允许为 None）
+    discovery_rx: Option<mpsc::UnboundedReceiver<DiscoveryEvent>>,
+
+    /// 🔥 mDNS 服务是否仍在运行
+    mdns_service_running: bool,
 
     /// 本地用户信息
     local_user_info: user_info::UserInfo,
@@ -234,7 +237,8 @@ impl ConnectionService {
         Ok(Self {
             swarm,
             node_manager,
-            discovery_rx,
+            discovery_rx: Some(discovery_rx),  // 🔥 包装在 Option 中
+            mdns_service_running: true,  // 🔥 初始状态：mDNS 服务运行中
             local_user_info,
             protocol_version,
             agent_version,
@@ -466,53 +470,87 @@ impl ConnectionService {
         }
 
         tokio::select! {
-            // 处理 mDNS 发现事件
-            event = self.discovery_rx.recv() => {
-                match event {
-                    Some(DiscoveryEvent::Discovered { peer_id, addr }) => {
-                        crate::send_log("INFO", "connection_service", format!("📨 收到发现事件: {} at {}", peer_id, addr));
-                        self.connect(peer_id, addr).await;
-                    }
-                    Some(DiscoveryEvent::Expired { peer_id }) => {
-                        tracing::debug!("设备 {} mDNS 记录过期", peer_id);
-                    }
-                    Some(DiscoveryEvent::Refresh) => {
-                        tracing::info!("🔄 [连接服务] 收到刷新事件");
-                        crate::send_log("INFO", "connection_service", "🔄 收到刷新请求".to_string());
+            // 🔥 处理 mDNS 发现事件（仅在 discovery_rx 存在时）
+            event = async {
+                if let Some(ref mut rx) = &mut self.discovery_rx {
+                    rx.recv().await
+                } else {
+                    std::future::pending().await
+                }
+            } => {
+                if let Some(event) = event {
+                    match event {
+                        DiscoveryEvent::Discovered { peer_id, addr } => {
+                            crate::send_log("INFO", "connection_service", format!("📨 收到发现事件: {} at {}", peer_id, addr));
+                            self.connect(peer_id, addr).await;
+                        }
+                        DiscoveryEvent::Expired { peer_id } => {
+                            tracing::debug!("设备 {} mDNS 记录过期", peer_id);
+                        }
+                        DiscoveryEvent::Refresh => {
+                            tracing::info!("🔄 [连接服务] 收到刷新事件");
+                            crate::send_log("INFO", "connection_service", "🔄 收到刷新请求".to_string());
 
-                        // 触发重新连接到所有已知节点
-                        let known_nodes = self.node_manager.list_all_nodes().await;
-                        tracing::info!("🔄 [连接服务] 尝试重新连接到 {} 个已知节点", known_nodes.len());
+                            // 触发重新连接到所有已知节点
+                            let known_nodes = self.node_manager.list_all_nodes().await;
+                            tracing::info!("🔄 [连接服务] 尝试重新连接到 {} 个已知节点", known_nodes.len());
 
-                        for node in known_nodes {
-                            for addr in &node.addresses {
-                                tracing::debug!("🔄 [连接服务] 尝试重新连接到 {} at {}", node.peer_id, addr);
-                                self.connect(node.peer_id, addr.clone()).await;
+                            for node in known_nodes {
+                                for addr in &node.addresses {
+                                    tracing::debug!("🔄 [连接服务] 尝试重新连接到 {} at {}", node.peer_id, addr);
+                                    self.connect(node.peer_id, addr.clone()).await;
+                                }
+                            }
+
+                            tracing::info!("✓ [连接服务] 刷新完成");
+                            crate::send_log("INFO", "connection_service", "✅ 刷新完成".to_string());
+                        }
+                        DiscoveryEvent::MdnsStarted { local_peer_id, port, service_type } => {
+                            tracing::info!("🧪 [连接服务] mDNS 已启动: {}@{}", local_peer_id, port);
+                            crate::send_log("INFO", "connection_service",
+                                format!("🧪 mDNS 已启动\n📋 Peer ID: {}\n📋 端口: {}\n📋 服务类型: {}",
+                                    local_peer_id, port, service_type));
+
+                            // 标记 mDNS 服务正在运行
+                            self.mdns_service_running = true;
+
+                            // ⭐ 将 mDNS 启动事件转发到 Flutter（通过 FFI）
+                            // Flutter 端会收到这个事件，然后启动自己的 mDNS 广播（测试）
+                            if let Err(e) = crate::p2p_manager::send_mdns_started_event_to_flutter(
+                                local_peer_id,
+                                port,
+                                service_type,
+                            ) {
+                                tracing::error!("发送 mDNS 启动事件到 Flutter 失败: {}", e);
                             }
                         }
+                        DiscoveryEvent::ServiceStateChanged { service, status } => {
+                            tracing::info!("🔔 [连接服务] 服务状态变化: {} - {:?}", service, status);
+                            crate::send_log("INFO", "connection_service",
+                                format!("🔔 服务状态: {} - 运行={} 健康={:?}",
+                                    service, status.is_running, status.health));
 
-                        tracing::info!("✓ [连接服务] 刷新完成");
-                        crate::send_log("INFO", "connection_service", "✅ 刷新完成".to_string());
-                    }
-                    Some(DiscoveryEvent::MdnsStarted { local_peer_id, port, service_type }) => {
-                        tracing::info!("🧪 [连接服务] mDNS 已启动: {}@{}", local_peer_id, port);
-                        crate::send_log("INFO", "connection_service",
-                            format!("🧪 mDNS 已启动\n📋 Peer ID: {}\n📋 端口: {}\n📋 服务类型: {}",
-                                local_peer_id, port, service_type));
+                            // 更新 mDNS 服务运行状态
+                            if service == "mDNS" {
+                                self.mdns_service_running = status.is_running;
+                            }
 
-                        // ⭐ 将 mDNS 启动事件转发到 Flutter（通过 FFI）
-                        // Flutter 端会收到这个事件，然后启动自己的 mDNS 广播（测试）
-                        if let Err(e) = crate::p2p_manager::send_mdns_started_event_to_flutter(
-                            local_peer_id,
-                            port,
-                            service_type,
-                        ) {
-                            tracing::error!("发送 mDNS 启动事件到 Flutter 失败: {}", e);
+                            // 🔥 发送服务状态变化事件到 Flutter
+                            let status_json = serde_json::json!({
+                                "service": service,
+                                "name": status.name,
+                                "health": match status.health {
+                                    crate::events::ServiceHealth::Healthy => "healthy",
+                                    crate::events::ServiceHealth::Degraded => "degraded",
+                                    crate::events::ServiceHealth::Unhealthy => "unhealthy",
+                                },
+                                "is_running": status.is_running,
+                                "message": status.message,
+                            });
+
+                            // 通过 send_log 发送服务状态事件（使用特殊前缀）
+                            crate::send_log("SERVICE_STATUS", "connection_service", status_json.to_string());
                         }
-                    }
-                    None => {
-                        tracing::warn!("发现事件通道已关闭");
-                        return Ok(false); // 通道关闭，退出
                     }
                 }
             }

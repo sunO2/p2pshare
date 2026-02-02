@@ -1004,6 +1004,67 @@ pub fn internal_get_nodes_sync() -> Result<Vec<InternalNodeInfo>, String> {
     }
 }
 
+/// 🔥 获取系统状态（同步版本）
+pub fn internal_get_system_status_sync() -> Result<bridge::SystemStatusJson, String> {
+    use mdns::events::{ServiceHealth, ServiceStatus};
+
+    let start = std::time::Instant::now();
+    tracing::info!("📊 [FFI] 获取系统状态");
+
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            return Err("P2P not initialized".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        if resources.p2p_manager.is_none() {
+            return Err("P2PManager not available".to_string());
+        }
+
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+        let result = runtime.block_on(async {
+            let p2p_manager = resources.p2p_manager.as_ref().unwrap();
+            p2p_manager.lock().await.get_system_status().await
+        });
+
+        let system_status = result.map_err(|e| e.to_string())?;
+
+        // 转换为 JSON 格式
+        let mdns_service = bridge::ServiceStatusJson {
+            name: system_status.mdns_service.name,
+            health: match system_status.mdns_service.health {
+                ServiceHealth::Healthy => bridge::ServiceHealthJson::Healthy,
+                ServiceHealth::Degraded => bridge::ServiceHealthJson::Degraded,
+                ServiceHealth::Unhealthy => bridge::ServiceHealthJson::Unhealthy,
+            },
+            is_running: system_status.mdns_service.is_running,
+            message: system_status.mdns_service.message,
+        };
+
+        let connection_service = bridge::ServiceStatusJson {
+            name: system_status.connection_service.name,
+            health: match system_status.connection_service.health {
+                ServiceHealth::Healthy => bridge::ServiceHealthJson::Healthy,
+                ServiceHealth::Degraded => bridge::ServiceHealthJson::Degraded,
+                ServiceHealth::Unhealthy => bridge::ServiceHealthJson::Unhealthy,
+            },
+            is_running: system_status.connection_service.is_running,
+            message: system_status.connection_service.message,
+        };
+
+        tracing::info!("✓ [FFI] 系统状态获取成功: mDNS={:?}, Connection={:?}",
+            mdns_service.health, connection_service.health);
+        tracing::info!("⏱️  [FFI] 获取系统状态耗时: {:?}", start.elapsed());
+
+        Ok(bridge::SystemStatusJson {
+            mdns_service,
+            connection_service,
+            connected_peers: system_status.connected_peers,
+            discovered_peers: system_status.discovered_peers,
+        })
+    }
+}
+
 /// 获取已验证的节点列表（async 包装器）
 pub async fn internal_get_nodes() -> Result<Vec<InternalNodeInfo>, String> {
     // 使用 spawn_blocking 在后台线程执行同步操作

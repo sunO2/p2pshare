@@ -237,53 +237,126 @@ impl MdnsServiceDiscovery {
     }
 
     /// 启动服务（返回任务句柄）
+    ///
+    /// 🔥 改进：添加重试机制，防止服务异常退出
     pub fn spawn(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
+            use crate::events::{ServiceHealth, ServiceStatus};
+
             tracing::info!("🚀 mdns-sd 服务发现已启动");
             send_log("INFO", "mdns_discovery", "🚀 mdns-sd 服务发现已启动".to_string());
+
+            // 发送初始健康状态
+            let _ = self.discovery_tx.send(DiscoveryEvent::ServiceStateChanged {
+                service: "mDNS".to_string(),
+                status: ServiceStatus::new("mDNS Service", ServiceHealth::Healthy, true)
+                    .with_message("服务启动中"),
+            });
+
+            let mut retry_count = 0;
+            const MAX_RETRIES: u32 = 10;  // 最大重试次数
+            const RETRY_DELAY_SEC: u64 = 2;  // 重试延迟（秒）
 
             // ⭐ 方案2: 先等待一段时间，让服务广播稳定，再开始浏览
             tracing::info!("⏱️  等待服务广播稳定后，再开始浏览...");
             send_log("INFO", "mdns_discovery", "⏱️ 等待服务广播稳定后，再开始浏览...".to_string());
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-            // 开始浏览服务
-            let service_type = SERVICE_TYPE;
-            tracing::info!("🔍 开始浏览服务: {}", service_type);
-            send_log("INFO", "mdns_discovery", format!("🔍 开始浏览服务: {}", service_type));
+            // 外层循环：处理 browse 失败后的重试
+            'outer: loop {
+                // 开始浏览服务
+                let service_type = SERVICE_TYPE;
+                tracing::info!("🔍 开始浏览服务: {} (尝试 {}/{})", service_type, retry_count + 1, MAX_RETRIES);
+                send_log("INFO", "mdns_discovery", format!("🔍 开始浏览服务: {}", service_type));
 
-            let browse_receiver = match self.daemon.browse(service_type) {
-                Ok(receiver) => {
-                    send_log("INFO", "mdns_discovery", "✅ ServiceBrowser 创建成功".to_string());
-                    receiver
-                }
-                Err(e) => {
-                    tracing::error!("创建 browser 失败: {}", e);
-                    send_log("ERROR", "mdns_discovery", format!("❌ 创建 browser 失败: {}", e));
-                    return;
-                }
-            };
+                let browse_receiver = match self.daemon.browse(service_type) {
+                    Ok(receiver) => {
+                        send_log("INFO", "mdns_discovery", "✅ ServiceBrowser 创建成功".to_string());
+                        // 重置重试计数
+                        retry_count = 0;
 
-            self.browse_receiver = Some(browse_receiver);
+                        // 发送健康状态
+                        let _ = self.discovery_tx.send(DiscoveryEvent::ServiceStateChanged {
+                            service: "mDNS".to_string(),
+                            status: ServiceStatus::new("mDNS Service", ServiceHealth::Healthy, true)
+                                .with_message("服务运行中"),
+                        });
+                        receiver
+                    }
+                    Err(e) => {
+                        retry_count += 1;
+                        tracing::error!("创建 browser 失败 (尝试 {}/{}): {}", retry_count, MAX_RETRIES, e);
+                        send_log("ERROR", "mdns_discovery", format!("❌ 创建 browser 失败 ({}/{}): {}", retry_count, MAX_RETRIES, e));
 
-            tracing::info!("✅ mDNS 浏览已启动，开始监听设备发现事件");
-            send_log("INFO", "mdns_discovery", "✅ mDNS 浏览已启动".to_string());
+                        if retry_count >= MAX_RETRIES {
+                            tracing::error!("达到最大重试次数，mDNS 服务退出");
+                            send_log("ERROR", "mdns_discovery", "❌ 达到最大重试次数，mDNS 服务退出".to_string());
 
-            // 持续处理浏览事件
-            loop {
-                if let Some(ref receiver) = self.browse_receiver {
-                    match receiver.recv() {
-                        Ok(event) => {
-                            self.process_service_event(&event);
+                            // 发送不健康状态
+                            let _ = self.discovery_tx.send(DiscoveryEvent::ServiceStateChanged {
+                                service: "mDNS".to_string(),
+                                status: ServiceStatus::new("mDNS Service", ServiceHealth::Unhealthy, false)
+                                    .with_message("服务退出"),
+                            });
+                            return;
                         }
-                        Err(e) => {
-                            tracing::warn!("接收 mDNS 事件失败: {}", e);
+
+                        // 发送 degraded 状态
+                        let _ = self.discovery_tx.send(DiscoveryEvent::ServiceStateChanged {
+                            service: "mDNS".to_string(),
+                            status: ServiceStatus::new("mDNS Service", ServiceHealth::Degraded, true)
+                                .with_message(format!("重试中 ({}/{})", retry_count, MAX_RETRIES)),
+                        });
+
+                        // 等待后重试
+                        send_log("WARN", "mdns_discovery", format!("⏳ {} 秒后重试...", RETRY_DELAY_SEC));
+                        tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SEC)).await;
+                        continue 'outer;
+                    }
+                };
+
+                self.browse_receiver = Some(browse_receiver);
+
+                tracing::info!("✅ mDNS 浏览已启动，开始监听设备发现事件");
+                send_log("INFO", "mdns_discovery", "✅ mDNS 浏览已启动".to_string());
+
+                // 内层循环：处理浏览事件
+                let mut consecutive_errors = 0;
+                const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+
+                loop {
+                    if let Some(ref receiver) = self.browse_receiver {
+                        match receiver.recv() {
+                            Ok(event) => {
+                                consecutive_errors = 0;  // 重置错误计数
+                                self.process_service_event(&event);
+                            }
+                            Err(e) => {
+                                consecutive_errors += 1;
+                                tracing::warn!("接收 mDNS 事件失败 ({}/{}): {}",
+                                    consecutive_errors, MAX_CONSECUTIVE_ERRORS, e);
+
+                                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                                    tracing::error!("连续接收失败 {} 次，重新浏览...", MAX_CONSECUTIVE_ERRORS);
+                                    send_log("WARN", "mdns_discovery", format!("⚠️ 连续接收失败 {} 次，重新浏览...", MAX_CONSECUTIVE_ERRORS));
+
+                                    // 发送 degraded 状态
+                                    let _ = self.discovery_tx.send(DiscoveryEvent::ServiceStateChanged {
+                                        service: "mDNS".to_string(),
+                                        status: ServiceStatus::new("mDNS Service", ServiceHealth::Degraded, true)
+                                            .with_message("重新浏览中"),
+                                    });
+
+                                    // 跳出内层循环，重新 browse
+                                    break;
+                                }
+                            }
                         }
                     }
-                }
 
-                // 短暂等待
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    // 短暂等待
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
             }
         })
     }

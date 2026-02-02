@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:nsd/nsd.dart';
-import 'bridge/bridge.dart';
+import 'bridge/bridge.dart' as bridge;
 import 'bridge/frb_generated.dart';
 import 'bridge/third_party/localp2p_ffi/bridge.dart' as frb_bridge;
 import 'services/log_service.dart';
@@ -120,6 +120,41 @@ class UserInfoReceivedEvent extends P2PEvent {
     this.nickname,
     this.status,
     this.avatarUrl,
+  });
+}
+
+/// 🔥 服务状态数据
+class ServiceStatusData {
+  final String name;
+  final String health;  // "healthy", "degraded", "unhealthy"
+  final bool isRunning;
+  final String? message;
+
+  ServiceStatusData({
+    required this.name,
+    required this.health,
+    required this.isRunning,
+    this.message,
+  });
+
+  factory ServiceStatusData.fromJson(Map<String, dynamic> json) {
+    return ServiceStatusData(
+      name: json['name'] as String,
+      health: json['health'] as String,
+      isRunning: json['is_running'] as bool,
+      message: json['message'] as String?,
+    );
+  }
+}
+
+/// 🔥 服务状态变化事件
+class ServiceStatusChangedEvent extends P2PEvent {
+  final String service;  // "mDNS" or "Connection"
+  final ServiceStatusData status;
+
+  ServiceStatusChangedEvent({
+    required this.service,
+    required this.status,
   });
 }
 
@@ -667,12 +702,46 @@ class P2PManager {
         _handleMdnsStarted(message);
         logService.i('[$target] $message');
         break;
+      case 'SERVICE_STATUS':
+        // 🔥 特殊处理：服务状态变化事件
+        _handleServiceStatusChanged(message);
+        logService.i('[$target] $message');
+        break;
       default:
         logService.i('[$target] $message');
     }
 
     // 同时输出到控制台（方便调试）
     debugPrint('🔶 [$level] $target: $message');
+  }
+
+  /// 🔥 处理服务状态变化事件
+  void _handleServiceStatusChanged(String message) {
+    _log.i('📊 收到服务状态变化事件');
+
+    try {
+      final data = _parseJsonOrNull(message);
+      if (data == null) {
+        _log.e('无法解析服务状态数据: $message');
+        return;
+      }
+
+      final service = data['service'] as String?;
+      if (service == null) {
+        _log.e('服务状态数据缺少 service 字段: $message');
+        return;
+      }
+
+      // 发送服务状态变化事件到事件流
+      _eventController.add(ServiceStatusChangedEvent(
+        service: service,
+        status: ServiceStatusData.fromJson(data),
+      ));
+
+      _log.d('服务状态变化: $service -> ${data['health']}');
+    } catch (e, stackTrace) {
+      _log.e('处理服务状态事件失败: $e', e, stackTrace);
+    }
   }
 
   /// 处理 mDNS 启动事件（测试用）
@@ -1014,7 +1083,7 @@ class P2PManager {
   }
 
   /// 获取已验证的节点列表
-  List<P2PBridgeNodeInfo> getVerifiedNodes() {
+  List<bridge.P2PBridgeNodeInfo> getVerifiedNodes() {
     if (!_initialized) {
       _log.e('getVerifiedNodes 但未初始化');
       throw Exception('Not initialized');
@@ -1085,7 +1154,7 @@ class P2PManager {
   }
 
   /// 获取指定节点的用户信息
-  P2PBridgeNodeInfo? getUserInfo(String peerId) {
+  bridge.P2PBridgeNodeInfo? getUserInfo(String peerId) {
     if (!_initialized) {
       _log.e('getUserInfo 但未初始化');
       throw Exception('Not initialized');
@@ -1128,5 +1197,66 @@ class P2PManager {
       _log.rustError('localp2PFfiBridgeP2PTriggerRefresh', e, stackTrace);
       rethrow;
     }
+  }
+
+  /// 🔥 获取系统状态
+  ///
+  /// 返回当前所有服务的运行状态和健康状态
+  SystemStatusJson getSystemStatus() {
+    if (!_initialized) {
+      _log.e('getSystemStatus 但未初始化');
+      throw Exception('Not initialized');
+    }
+
+    _log.t('获取系统状态');
+
+    try {
+      final result = RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
+      _log.d('系统状态: mDNS=${result.mdnsService.health}, Connection=${result.connectionService.health}');
+      // 转换 bridge 类型为本地类型（BigInt -> int）
+      return SystemStatusJson.fromBridge(result);
+    } catch (e, stackTrace) {
+      _log.rustError('localp2PFfiBridgeP2PGetSystemStatus', e, stackTrace);
+      rethrow;
+    }
+  }
+}
+
+// Type aliases for bridge types (for backward compatibility)
+typedef ServiceHealthJson = bridge.ServiceHealthJson;
+typedef ServiceStatusJson = bridge.ServiceStatusJson;
+typedef P2PBridgeEvent = bridge.P2PBridgeEvent;
+// Note: P2PBridgeNodeInfo is not aliased to avoid conflicts with direct imports
+
+/// 🔥 系统状态（包装器，将 BigInt 转换为 int）
+class SystemStatusJson {
+  final ServiceStatusJson mdnsService;
+  final ServiceStatusJson connectionService;
+  final int connectedPeers;
+  final int discoveredPeers;
+
+  SystemStatusJson({
+    required this.mdnsService,
+    required this.connectionService,
+    required this.connectedPeers,
+    required this.discoveredPeers,
+  });
+
+  /// 从 bridge 的 SystemStatusJson 转换
+  factory SystemStatusJson.fromBridge(bridge.SystemStatusJson bridge) {
+    return SystemStatusJson(
+      mdnsService: bridge.mdnsService,
+      connectionService: bridge.connectionService,
+      connectedPeers: bridge.connectedPeers.toInt(),
+      discoveredPeers: bridge.discoveredPeers.toInt(),
+    );
+  }
+
+  /// 判断系统是否健康
+  bool get isHealthy {
+    return mdnsService.isRunning &&
+        connectionService.isRunning &&
+        mdnsService.health == ServiceHealthJson.healthy &&
+        connectionService.health == ServiceHealthJson.healthy;
   }
 }

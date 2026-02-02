@@ -249,6 +249,114 @@ impl DbFile {
     }
 }
 
+/// 🔥 设备数据模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbDevice {
+    /// Peer ID（主键）
+    pub peer_id: String,
+    /// 显示名称（用户自定义的昵称）
+    pub display_name: String,
+    /// 设备名称（例如 "iPhone 14"）
+    pub device_name: String,
+    /// 昵称（可选）
+    pub nickname: Option<String>,
+    /// 状态（例如 "online", "offline"）
+    pub status: Option<String>,
+    /// 头像 URL
+    pub avatar_url: Option<String>,
+    /// 协议版本（例如 "/localp2p/1.0.0"）
+    pub protocol_version: String,
+    /// 地址列表（JSON 数组）
+    pub addresses: Option<String>,
+    /// 最后可见时间
+    pub last_seen: Option<i64>,
+    /// 创建时间
+    pub created_at: DateTime<Utc>,
+    /// 更新时间
+    pub updated_at: DateTime<Utc>,
+}
+
+impl DbDevice {
+    /// 创建新设备记录
+    pub fn new(
+        peer_id: String,
+        display_name: String,
+        device_name: String,
+        protocol_version: String,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            peer_id,
+            display_name,
+            device_name,
+            nickname: None,
+            status: None,
+            avatar_url: None,
+            protocol_version,
+            addresses: None,
+            last_seen: Some(now.timestamp_millis()),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    /// 更新设备信息
+    pub fn update_info(&mut self, display_name: String, device_name: String) {
+        self.display_name = display_name;
+        self.device_name = device_name;
+        self.updated_at = Utc::now();
+    }
+
+    /// 更新在线状态
+    pub fn update_status(&mut self, status: String, addresses: Option<Vec<String>>) {
+        self.status = Some(status);
+        self.last_seen = Some(Utc::now().timestamp_millis());
+        if let Some(addrs) = addresses {
+            self.addresses = Some(serde_json::to_string(&addrs).unwrap_or_default());
+        }
+        self.updated_at = Utc::now();
+    }
+}
+
+/// 🔥 设备的轻量级表示（用于 JSON 序列化）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Device {
+    /// Peer ID
+    pub peer_id: String,
+    /// 显示名称
+    pub display_name: String,
+    /// 设备名称
+    pub device_name: String,
+    /// 昵称
+    pub nickname: Option<String>,
+    /// 状态
+    pub status: Option<String>,
+    /// 头像 URL
+    pub avatar_url: Option<String>,
+    /// 协议版本
+    pub protocol_version: String,
+    /// 地址列表
+    pub addresses: Option<Vec<String>>,
+    /// 最后可见时间（毫秒）
+    pub last_seen: Option<i64>,
+}
+
+impl From<DbDevice> for Device {
+    fn from(db: DbDevice) -> Self {
+        Self {
+            peer_id: db.peer_id,
+            display_name: db.display_name,
+            device_name: db.device_name,
+            nickname: db.nickname,
+            status: db.status,
+            avatar_url: db.avatar_url,
+            protocol_version: db.protocol_version,
+            addresses: db.addresses.and_then(|s| serde_json::from_str(&s).ok()),
+            last_seen: db.last_seen,
+        }
+    }
+}
+
 /// 用于 JSON 序列化的文件信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileMetadata {

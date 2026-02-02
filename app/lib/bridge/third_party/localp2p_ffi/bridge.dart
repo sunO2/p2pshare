@@ -8,7 +8,7 @@ import '../../frb_generated.dart';
 import '../../types.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// 检查 P2P 是否已初始化
 bool p2PIsInitialized() =>
@@ -84,6 +84,12 @@ String p2PGetDeviceName() =>
 /// 获取已验证的节点列表
 List<P2PBridgeNodeInfo> p2PGetVerifiedNodes() =>
     RustLib.instance.api.localp2PFfiBridgeP2PGetVerifiedNodes();
+
+/// 🔥 获取系统状态
+///
+/// 返回当前所有服务的运行状态和健康状态
+SystemStatusJson p2PGetSystemStatus() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
 
 /// 发送消息给指定节点
 ///

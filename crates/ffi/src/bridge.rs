@@ -32,6 +32,7 @@ pub struct P2PBridgeEvent {
     /// 7 = MessageSent
     /// 8 = PeerTyping
     /// 9 = Log (Rust 日志)
+    /// 10 = ServiceStatusChanged (服务状态变化)
     pub event_type: i32,
     /// 事件数据 (JSON 字符串)
     pub data: String,
@@ -39,6 +40,32 @@ pub struct P2PBridgeEvent {
 
 /// 类型别名，用于兼容 lib.rs 中的引用
 pub type P2PEvent = P2PBridgeEvent;
+
+/// 🔥 服务健康状态（用于 FRB）
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum ServiceHealthJson {
+    Healthy,
+    Degraded,
+    Unhealthy,
+}
+
+/// 🔥 服务状态（用于 FRB）
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ServiceStatusJson {
+    pub name: String,
+    pub health: ServiceHealthJson,
+    pub is_running: bool,
+    pub message: Option<String>,
+}
+
+/// 🔥 系统状态（用于 FRB）
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SystemStatusJson {
+    pub mdns_service: ServiceStatusJson,
+    pub connection_service: ServiceStatusJson,
+    pub connected_peers: usize,
+    pub discovered_peers: usize,
+}
 
 /// 节点信息（用于 FRB）
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -229,6 +256,14 @@ pub fn p2p_get_verified_nodes() -> Result<Vec<P2PBridgeNodeInfo>, String> {
         addresses: n.addresses,
         protocol_version: n.protocol_version,
     }).collect())
+}
+
+/// 🔥 获取系统状态
+///
+/// 返回当前所有服务的运行状态和健康状态
+#[frb(sync)]
+pub fn p2p_get_system_status() -> Result<SystemStatusJson, String> {
+    crate::internal_get_system_status_sync()
 }
 
 // /// 获取所有节点的用户信息（包括昵称、状态等）

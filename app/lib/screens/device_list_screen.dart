@@ -21,12 +21,20 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   eb.P2PEventSubscription<eb.P2PEvent>? _eventBusSubscription;
   StreamSubscription? _p2pManagerSubscription;
 
+  // 🔥 服务状态相关（事件推送模式）
+  final Map<String, ServiceStatusData> _serviceStatus = {};
+  int _connectedPeers = 0;
+  int _discoveredPeers = 0;
+
   @override
   void initState() {
     super.initState();
     _loadNodes();
     _listenToEvents();
     _listenToEventBus();
+
+    // 🔥 初始加载服务状态
+    _loadInitialServiceStatus();
   }
 
   @override
@@ -34,6 +42,34 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
     _eventBusSubscription?.cancel();
     _p2pManagerSubscription?.cancel();
     super.dispose();
+  }
+
+  /// 🔥 初始加载服务状态（仅一次，之后通过事件更新）
+  void _loadInitialServiceStatus() {
+    try {
+      final systemStatus = P2PManager.instance.getSystemStatus();
+      if (mounted) {
+        setState(() {
+          // 转换 ServiceStatusJson -> ServiceStatusData
+          _serviceStatus['mDNS'] = ServiceStatusData(
+            name: systemStatus.mdnsService.name,
+            health: systemStatus.mdnsService.health.name,
+            isRunning: systemStatus.mdnsService.isRunning,
+            message: systemStatus.mdnsService.message,
+          );
+          _serviceStatus['Connection'] = ServiceStatusData(
+            name: systemStatus.connectionService.name,
+            health: systemStatus.connectionService.health.name,
+            isRunning: systemStatus.connectionService.isRunning,
+            message: systemStatus.connectionService.message,
+          );
+          _connectedPeers = systemStatus.connectedPeers;
+          _discoveredPeers = systemStatus.discoveredPeers;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load initial service status: $e');
+    }
   }
 
   void _loadNodes() {
@@ -93,6 +129,21 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           event is NodeOfflineEvent ||
           event is UserInfoReceivedEvent) {
         _loadNodes();
+      }
+
+      // 🔥 监听服务状态变化事件
+      if (event is ServiceStatusChangedEvent) {
+        final statusEvent = event as ServiceStatusChangedEvent;
+        setState(() {
+          _serviceStatus[statusEvent.service] = statusEvent.status;
+          // 更新设备数量统计
+          _connectedPeers = _nodes.where((n) {
+            final status = n.status?.toLowerCase();
+            return status != '离线' && status != 'offline';
+          }).length;
+          _discoveredPeers = _nodes.length;
+        });
+        debugPrint('[ServiceStatus] ${statusEvent.service}: ${statusEvent.status.health}');
       }
     });
   }
@@ -234,6 +285,10 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             ),
           ),
           const SizedBox(height: 20),
+
+          // 🔥 服务状态显示
+          _buildServiceStatusSection(),
+          const SizedBox(height: 16),
 
           // Section Header
           Row(
@@ -380,6 +435,172 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       MaterialPageRoute(
         builder: (context) =>
             ChatScreen(peerId: node.peerId, peerName: node.deviceName),
+      ),
+    );
+  }
+
+  /// 🔥 构建服务状态显示组件
+  Widget _buildServiceStatusSection() {
+    if (_serviceStatus.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final mdnsStatus = _serviceStatus['mDNS'];
+    final connectionStatus = _serviceStatus['Connection'];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F8F6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0E0E0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.settings_ethernet,
+                size: 16,
+                color: Colors.grey[600],
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '服务状态',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$_connectedPeers/$_discoveredPeers 设备在线',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (mdnsStatus != null)
+                Expanded(
+                  child: _buildServiceStatusCard(
+                    title: 'mDNS',
+                    status: mdnsStatus!,
+                  ),
+                ),
+              if (mdnsStatus != null && connectionStatus != null)
+                const SizedBox(width: 12),
+              if (connectionStatus != null)
+                Expanded(
+                  child: _buildServiceStatusCard(
+                    title: '连接',
+                    status: connectionStatus!,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🔥 构建单个服务状态卡片
+  Widget _buildServiceStatusCard({
+    required String title,
+    required ServiceStatusData status,
+  }) {
+    // 根据健康状态选择颜色
+    final Color statusColor;
+    final String statusText;
+    final IconData statusIcon;
+
+    if (!status.isRunning) {
+      statusColor = const Color(0xFFD32F2F); // Red
+      statusText = '未运行';
+      statusIcon = Icons.error_outline;
+    } else {
+      switch (status.health) {
+        case 'healthy':
+          statusColor = const Color(0xFF3D8A5A); // Green
+          statusText = '正常';
+          statusIcon = Icons.check_circle_outline;
+          break;
+        case 'degraded':
+          statusColor = const Color(0xFFF57C00); // Orange
+          statusText = '降级';
+          statusIcon = Icons.warning_outlined;
+          break;
+        case 'unhealthy':
+          statusColor = const Color(0xFFD32F2F); // Red
+          statusText = '异常';
+          statusIcon = Icons.error_outline;
+          break;
+        default:
+          statusColor = const Color(0xFF9E9E9E); // Grey
+          statusText = '未知';
+          statusIcon = Icons.help_outline;
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: statusColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                statusIcon,
+                size: 16,
+                color: statusColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            statusText,
+            style: TextStyle(
+              fontSize: 12,
+              color: statusColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (status.message != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              status.message!,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[500],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
       ),
     );
   }
