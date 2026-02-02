@@ -250,6 +250,10 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           ),
           const SizedBox(height: 20),
 
+          // 🔥 服务状态显示
+          _buildServiceStatusSection(),
+          const SizedBox(height: 16),
+
           // Search Bar
           Container(
             height: 48,
@@ -285,10 +289,6 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // 🔥 服务状态显示
-          _buildServiceStatusSection(),
-          const SizedBox(height: 16),
 
           // Section Header
           Row(
