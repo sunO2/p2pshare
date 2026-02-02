@@ -1,11 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
+/// 日志类型枚举
+enum LogType {
+  flutter,
+  rust,
+}
 
 /// 日志服务 - 将日志写入文件
 class LogService {
@@ -20,30 +27,52 @@ class LogService {
   late _FileLogOutput _logOutput; // 保存 output 引用，用于更新 sink
   final _logsController = StreamController<String>.broadcast();
   bool _initialized = false;
+  String? _workDir; // 保存工作目录引用
+
+  // 🔥 实时日志流（tail -f 功能）
+  final _realtimeLogController = StreamController<LogLine>.broadcast();
+  Timer? _realtimeWatchTimer;
+  int _lastReadPosition = 0; // 上次读取的位置（字节偏移）
+  bool _isRealtimeWatching = false; // 是否正在实时监听
 
   /// 日志流
   Stream<String> get logStream => _logsController.stream;
+
+  /// 🔥 实时日志流（类似 tail -f）
+  Stream<LogLine> get realtimeLogStream => _realtimeLogController.stream;
 
   /// 获取日志文件
   File get logFile => _logFile;
 
   /// 初始化日志服务
-  Future<void> init() async {
+  ///
+  /// [workDir] 可选的工作目录路径，如果提供则使用 workDir/logs 目录
+  Future<void> init([String? workDir]) async {
     if (_initialized) return;
 
     try {
-      // 获取应用文档目录
-      final appDocDir = await getApplicationDocumentsDirectory();
-      final logsDir = Directory(p.join(appDocDir.path, 'logs'));
+      // 保存工作目录引用
+      _workDir = workDir;
+
+      Directory logsDir;
+
+      if (workDir != null && workDir.isNotEmpty) {
+        // 使用工作目录下的 logs 目录
+        logsDir = Directory(p.join(workDir, 'logs'));
+      } else {
+        // 回退到应用文档目录
+        final appDocDir = await getApplicationDocumentsDirectory();
+        logsDir = Directory(p.join(appDocDir.path, 'logs'));
+      }
 
       // 创建日志目录
       if (!await logsDir.exists()) {
         await logsDir.create(recursive: true);
       }
 
-      // 创建日志文件（按日期命名）
+      // 创建日志文件（按日期命名，加上 flutter 字段）
       final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      _logFile = File(p.join(logsDir.path, 'localp2p_$dateStr.log'));
+      _logFile = File(p.join(logsDir.path, 'localp2p_flutter_$dateStr.log'));
 
       // 打开文件用于追加
       _logSink = _logFile.openWrite(mode: FileMode.append);
@@ -202,8 +231,14 @@ class LogService {
   /// 获取所有日志文件
   Future<List<File>> getAllLogFiles() async {
     try {
-      final appDocDir = await getApplicationDocumentsDirectory();
-      final logsDir = Directory(p.join(appDocDir.path, 'logs'));
+      Directory logsDir;
+
+      if (_workDir != null && _workDir!.isNotEmpty) {
+        logsDir = Directory(p.join(_workDir!, 'logs'));
+      } else {
+        final appDocDir = await getApplicationDocumentsDirectory();
+        logsDir = Directory(p.join(appDocDir.path, 'logs'));
+      }
 
       if (!await logsDir.exists()) {
         return [];
@@ -221,15 +256,205 @@ class LogService {
     }
   }
 
+  /// 获取可用的日志日期列表
+  Future<List<String>> getAvailableDates() async {
+    try {
+      Directory logsDir;
+
+      if (_workDir != null && _workDir!.isNotEmpty) {
+        logsDir = Directory(p.join(_workDir!, 'logs'));
+      } else {
+        final appDocDir = await getApplicationDocumentsDirectory();
+        logsDir = Directory(p.join(appDocDir.path, 'logs'));
+      }
+
+      if (!await logsDir.exists()) {
+        return [];
+      }
+
+      final entities = await logsDir.list().toList();
+      final files = entities.where((entity) => entity is File).cast<File>();
+      final dates = <String>{};
+
+      for (final file in files) {
+        final name = p.basename(file.path);
+        // 从文件名提取日期: localp2p_flutter_2026-02-02.log 或 localp2p_rust_2026-02-02.log
+        final flutterMatch = RegExp(r'localp2p_flutter_(\d{4}-\d{2}-\d{2})\.log').firstMatch(name);
+        final rustMatch = RegExp(r'localp2p_rust_(\d{4}-\d{2}-\d{2})\.log').firstMatch(name);
+
+        if (flutterMatch != null) {
+          dates.add(flutterMatch.group(1)!);
+        } else if (rustMatch != null) {
+          dates.add(rustMatch.group(1)!);
+        }
+      }
+
+      final dateList = dates.toList();
+      dateList.sort((a, b) => b.compareTo(a)); // 按日期倒序
+      return dateList;
+    } catch (e) {
+      debugPrint('获取可用日期失败: $e');
+      return [];
+    }
+  }
+
+  /// 按日期和类型获取日志内容
+  Future<List<String>> getLogsByDate(String date, LogType type) async {
+    try {
+      Directory logsDir;
+
+      if (_workDir != null && _workDir!.isNotEmpty) {
+        logsDir = Directory(p.join(_workDir!, 'logs'));
+      } else {
+        final appDocDir = await getApplicationDocumentsDirectory();
+        logsDir = Directory(p.join(appDocDir.path, 'logs'));
+      }
+
+      if (!await logsDir.exists()) {
+        return [];
+      }
+
+      // 根据类型构建文件名
+      final prefix = type == LogType.flutter ? 'localp2p_flutter' : 'localp2p_rust';
+      final fileName = '${prefix}_$date.log';
+      final logFile = File(p.join(logsDir.path, fileName));
+
+      if (!await logFile.exists()) {
+        return [];
+      }
+
+      // 读取日志内容
+      final contents = await logFile.readAsString();
+      final lines = contents.split('\n');
+
+      // 过滤空行
+      return lines.where((line) => line.trim().isNotEmpty).toList();
+    } catch (e) {
+      debugPrint('读取日志失败 ($type, $date): $e');
+      return [];
+    }
+  }
+
   /// 关闭日志服务
   Future<void> close() async {
+    // 停止实时监听
+    stopRealtimeWatch();
+
     if (_initialized) {
       _logger.i('应用退出 - ${DateTime.now()}');
       _logger.i('════════════════════════════════════════════════════════════');
       await _logSink.flush();
       await _logSink.close();
       await _logsController.close();
+      await _realtimeLogController.close();
       _initialized = false;
+    }
+  }
+
+  // ================================================================
+  // 🔥 实时日志流功能（类似 tail -f）
+  // ================================================================
+
+  /// 🔥 开始实时监听日志（类似 tail -f）
+  ///
+  /// [date] 日期
+  /// [types] 要监听的日志类型，默认同时监听 Flutter 和 Rust
+  void startRealtimeWatch(String date, {List<LogType>? types}) {
+    if (_isRealtimeWatching) return;
+
+    final watchTypes = types ?? [LogType.flutter, LogType.rust];
+    _isRealtimeWatching = true;
+    _lastReadPosition = 0;
+
+    // 使用定时器检查文件变化（每 100ms 检查一次）
+    _realtimeWatchTimer = Timer.periodic(const Duration(milliseconds: 100), (_) async {
+      if (!_isRealtimeWatching) return;
+
+      for (final type in watchTypes) {
+        await _checkAndStreamNewLogs(type, date);
+      }
+    });
+  }
+
+  /// 🔥 停止实时监听
+  void stopRealtimeWatch() {
+    _isRealtimeWatching = false;
+    _realtimeWatchTimer?.cancel();
+    _realtimeWatchTimer = null;
+    _lastReadPosition = 0;
+  }
+
+  /// 检查并流式输出新增的日志行
+  Future<void> _checkAndStreamNewLogs(LogType type, String date) async {
+    try {
+      Directory logsDir;
+
+      if (_workDir != null && _workDir!.isNotEmpty) {
+        logsDir = Directory(p.join(_workDir!, 'logs'));
+      } else {
+        final appDocDir = await getApplicationDocumentsDirectory();
+        logsDir = Directory(p.join(appDocDir.path, 'logs'));
+      }
+
+      if (!await logsDir.exists()) {
+        return;
+      }
+
+      // 构建文件名
+      final prefix = type == LogType.flutter ? 'localp2p_flutter' : 'localp2p_rust';
+      final fileName = '${prefix}_$date.log';
+      final logFile = File(p.join(logsDir.path, fileName));
+
+      if (!await logFile.exists()) {
+        return;
+      }
+
+      // 获取当前文件大小
+      final fileSize = await logFile.length();
+
+      // 如果文件变小了（日志被轮转），从头开始读取
+      if (fileSize < _lastReadPosition) {
+        _lastReadPosition = 0;
+      }
+
+      // 如果有新增内容
+      if (fileSize > _lastReadPosition) {
+        // 打开文件并定位到上次读取位置
+        final raf = logFile.openSync(mode: FileMode.read);
+        try {
+          raf.setPositionSync(_lastReadPosition);
+
+          // 读取新增内容
+          final bufferSize = fileSize - _lastReadPosition;
+          final buffer = Uint8List(bufferSize);
+          final bytesRead = raf.readIntoSync(buffer, 0, bufferSize);
+
+          if (bytesRead > 0) {
+            // 解码为文本并按行分割
+            final content = utf8.decode(buffer.sublist(0, bytesRead));
+            final lines = content.split('\n');
+
+            for (final line in lines) {
+              final trimmed = line.trim();
+              if (trimmed.isNotEmpty) {
+                // 发送到实时日志流
+                _realtimeLogController.add(LogLine(
+                  content: trimmed,
+                  type: type,
+                  timestamp: DateTime.now(),
+                ));
+              }
+            }
+
+            // 更新读取位置
+            _lastReadPosition = raf.positionSync();
+          }
+        } finally {
+          raf.closeSync();
+        }
+      }
+    } catch (e) {
+      debugPrint('实时日志读取失败 ($type): $e');
     }
   }
 
@@ -380,4 +605,25 @@ class P2PLogHelper {
   void performance(String operation, Duration duration) {
     _log.d('⚡ Performance: $operation took ${duration.inMilliseconds}ms');
   }
+}
+
+/// 🔥 实时日志行（带类型和时间戳）
+class LogLine {
+  /// 日志内容
+  final String content;
+
+  /// 日志类型
+  final LogType type;
+
+  /// 接收时间戳
+  final DateTime timestamp;
+
+  LogLine({
+    required this.content,
+    required this.type,
+    required this.timestamp,
+  });
+
+  @override
+  String toString() => '[$type] $content';
 }

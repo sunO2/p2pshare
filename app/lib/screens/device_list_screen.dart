@@ -14,7 +14,8 @@ class DeviceListScreen extends StatefulWidget {
   State<DeviceListScreen> createState() => _DeviceListScreenState();
 }
 
-class _DeviceListScreenState extends State<DeviceListScreen> {
+class _DeviceListScreenState extends State<DeviceListScreen>
+    with TickerProviderStateMixin {
   final List<P2PBridgeNodeInfo> _nodes = [];
   String _searchQuery = '';
   bool _isRefreshing = false;
@@ -26,6 +27,22 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   int _connectedPeers = 0;
   int _discoveredPeers = 0;
 
+  // 🔥 广播信息悬浮浮层显示状态
+  bool _showBroadcastInfoPopup = false;
+
+  // 🔥 Info 按钮 GlobalKey，用于获取按钮位置
+  final GlobalKey _infoButtonKey = GlobalKey();
+
+  // 🔥 Stack GlobalKey，用于浮层定位
+  final GlobalKey _stackKey = GlobalKey();
+
+  // 🔥 广播信息
+  BroadcastInfoJson? _broadcastInfo;
+
+  // 🔥 缩放动画控制器
+  late AnimationController _popupAnimationController;
+  late Animation<double> _scaleAnimation;
+
   @override
   void initState() {
     super.initState();
@@ -35,12 +52,22 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
 
     // 🔥 初始加载服务状态
     _loadInitialServiceStatus();
+
+    // 🔥 初始化动画控制器
+    _popupAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _popupAnimationController, curve: Curves.easeOutBack),
+    );
   }
 
   @override
   void dispose() {
     _eventBusSubscription?.cancel();
     _p2pManagerSubscription?.cancel();
+    _popupAnimationController.dispose();
     super.dispose();
   }
 
@@ -190,17 +217,25 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
+      key: _stackKey,
       children: [
-        // Header Section
-        _buildHeaderSection(),
+        // 主内容
+        Column(
+          children: [
+            // Header Section
+            _buildHeaderSection(),
 
-        // Content
-        Expanded(
-          child: _filteredNodes.isEmpty
-              ? _buildEmptyState()
-              : _buildDeviceList(),
+            // Content
+            Expanded(
+              child: _filteredNodes.isEmpty
+                  ? _buildEmptyState()
+                  : _buildDeviceList(),
+            ),
+          ],
         ),
+        // 🔥 广播信息悬浮浮层
+        if (_showBroadcastInfoPopup) _buildBroadcastInfoPopup(context),
       ],
     );
   }
@@ -473,13 +508,53 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                 ),
               ),
               const Spacer(),
-              Text(
-                '$_connectedPeers/$_discoveredPeers 设备在线',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              // 🔥 Info 按钮，显示广播信息悬浮浮层
+              InkWell(
+                key: _infoButtonKey,
+                onTap: () async {
+                  // 获取广播信息（异步调用，避免阻塞 UI）
+                  try {
+                    final info = await P2PManager.instance.getBroadcastInfo();
+
+                    // 如果浮层已显示，播放关闭动画
+                    if (_showBroadcastInfoPopup) {
+                      await _popupAnimationController.reverse();
+                      if (mounted) {
+                        setState(() {
+                          _showBroadcastInfoPopup = false;
+                        });
+                      }
+                      return;
+                    }
+
+                    // 显示浮层并播放打开动画
+                    setState(() {
+                      _broadcastInfo = info;
+                      _showBroadcastInfoPopup = true;
+                    });
+                    _popupAnimationController.forward();
+                  } catch (e) {
+                    debugPrint('Failed to get broadcast info: $e');
+                  }
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
+          // 服务状态卡片
           Row(
             children: [
               if (mdnsStatus != null)
@@ -587,6 +662,249 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  /// 🔥 构建广播信息悬浮浮层（无蒙层，从按钮缩放展开）
+  Widget _buildBroadcastInfoPopup(BuildContext context) {
+    // 如果没有广播信息，显示加载中
+    if (_broadcastInfo == null) {
+      return const Positioned(child: SizedBox.shrink());
+    }
+
+    // 获取 Stack 和按钮的 RenderBox
+    final RenderBox? stackBox =
+        _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? buttonBox =
+        _infoButtonKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (stackBox == null || buttonBox == null) {
+      return const Positioned(child: SizedBox.shrink());
+    }
+
+    // 获取按钮相对于 Stack 的位置（使用 globalToLocal 转换）
+    final buttonGlobalPosition = buttonBox.localToGlobal(Offset.zero);
+    final buttonLocalPosition = stackBox.globalToLocal(buttonGlobalPosition);
+    final buttonSize = buttonBox.size;
+
+    final info = _broadcastInfo!;
+    const popupWidth = 320.0;
+
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Positioned(
+          left: buttonLocalPosition.dx + buttonSize.width - popupWidth,
+          top: buttonLocalPosition.dy,
+          child: Transform.scale(
+            scale: _scaleAnimation.value,
+            alignment: Alignment.topRight,
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                  width: popupWidth,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 标题栏
+                      Row(
+                        children: [
+                          Icon(Icons.wifi_tethering,
+                              color: const Color(0xFF3D8A5A), size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '广播信息',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF333333),
+                            ),
+                          ),
+                          const Spacer(),
+                          // 关闭按钮
+                          GestureDetector(
+                            onTap: () async {
+                              // 🔥 播放关闭动画，动画完成后隐藏浮层
+                              await _popupAnimationController.reverse();
+                              if (mounted) {
+                                setState(() {
+                                  _showBroadcastInfoPopup = false;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.grey,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Peer ID
+                      _buildInfoRow(
+                        icon: Icons.fingerprint,
+                        label: 'Peer ID',
+                        value: info.peerId,
+                        isLast: false,
+                      ),
+                      const SizedBox(height: 12),
+                      // 设备名称
+                      _buildInfoRow(
+                        icon: Icons.router,
+                        label: '设备名称',
+                        value: info.deviceName,
+                        isLast: false,
+                      ),
+                      const SizedBox(height: 12),
+                      // 端口
+                      _buildInfoRow(
+                        icon: Icons.settings_ethernet,
+                        label: '监听端口',
+                        value: '${info.port}',
+                        isLast: false,
+                      ),
+                      const SizedBox(height: 12),
+                      // IP 地址列表
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.router,
+                                  size: 16, color: Colors.grey[600]),
+                              const SizedBox(width: 8),
+                              Text(
+                                'IP 地址',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          if (info.addresses.isEmpty)
+                            Text(
+                              '无可用地址',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            )
+                          else
+                            ...info.addresses.map((addr) {
+                              return Padding(
+                                padding: const EdgeInsets.only(left: 24, bottom: 2),
+                                child: Text(
+                                  addr,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: const Color(0xFF333333),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // 提示信息
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3D8A5A).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                size: 14, color: const Color(0xFF3D8A5A)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'mDNS 广播用于发现同一网络中的其他设备',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: const Color(0xFF3D8A5A),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 🔥 构建信息行
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required bool isLast,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: const Color(0xFF3D8A5A).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 16, color: const Color(0xFF3D8A5A)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF333333),
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: null,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

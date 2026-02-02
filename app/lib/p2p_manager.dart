@@ -16,9 +16,20 @@ class P2PInitConfig {
   /// 设备名称（必需）
   final String deviceName;
 
-  /// 密钥对保存路径（可选，用于持久化 Peer ID）
-  /// 如果为空，则每次启动生成新的随机 Peer ID
-  /// 如果指定路径，则首次生成密钥对并保存，后续启动加载保存的密钥对
+  /// 🔥 工作目录（可选）
+  ///
+  /// 所有数据（数据库、日志、证书）将存储在此目录下的子目录中：
+  /// - `{workDir}/data/` - 数据库文件（chat.db, devices.db）
+  /// - `{workDir}/logs/` - 日志文件
+  /// - `{workDir}/certs/` - 证书文件（identity.key）
+  ///
+  /// 如果为空，将使用应用默认目录
+  /// 建议使用外部存储目录，方便调试和备份
+  final String? workDir;
+
+  /// 🔥 已弃用：请使用 workDir 代替
+  /// 保留此字段是为了向后兼容，内部会自动转换为 workDir
+  @Deprecated('Use workDir instead')
   final String? identityPath;
 
   /// 监听地址（可选，默认 "/ip4/0.0.0.0/tcp/0"）
@@ -35,12 +46,31 @@ class P2PInitConfig {
 
   P2PInitConfig({
     required this.deviceName,
+    this.workDir,
     this.identityPath,
     this.listenAddresses,
     this.protocolVersion,
     this.heartbeatIntervalSecs,
     this.maxFailures,
   });
+
+  /// 🔥 获取实际的工作目录路径
+  ///
+  /// 优先使用 workDir，如果没有则从 identityPath 提取父目录
+  String? get effectiveWorkDir {
+    if (workDir != null && workDir!.isNotEmpty) {
+      return workDir;
+    }
+    if (identityPath != null && identityPath!.isNotEmpty) {
+      // 从 identityPath 提取父目录（向后兼容）
+      final path = Uri.file(identityPath!).path;
+      final lastSlash = path.lastIndexOf('/');
+      if (lastSlash > 0) {
+        return path.substring(0, lastSlash);
+      }
+    }
+    return null;
+  }
 }
 
 // P2P 事件类型（兼容旧的事件系统）
@@ -208,9 +238,13 @@ class P2PManager {
 
     // 调用 Rust 初始化函数
     try {
+      // 🔥 使用 effectiveWorkDir 作为工作目录
+      final workDir = config.effectiveWorkDir ?? '';
+      _log.i('使用工作目录: $workDir');
+      
       RustLib.instance.api.localp2PFfiBridgeP2PInit(
         deviceName: config.deviceName,
-        identityPath: config.identityPath ?? '',
+        workDir: workDir,
       );
       _initialized = true;
       _log.rustReturn('init', result: 'initialized=$_initialized');
@@ -592,16 +626,18 @@ class P2PManager {
         }
         break;
 
-      case 9: // Rust 日志
-        final level = _extractLogLevel(event.data);
-        final target = _extractLogTarget(event.data);
-        final message = _extractLogMessage(event.data);
-        if (level != null && target != null && message != null) {
-          _handleRustLog(level, target, message);
-        } else {
-          _log.w('Rust 日志事件但无法解析: ${event.data}');
-        }
+      case 10: // MDNS_STARTED
+        _log.i('🎯 MDNS 启动事件: ${event.data}');
+        _handleMdnsStarted(event.data);
         break;
+
+      case 11: // SERVICE_STATUS
+        _log.i('📊 服务状态变化: ${event.data}');
+        _handleServiceStatusChanged(event.data);
+        break;
+
+      // ⚠️ case 9 (Rust 日志) 已移除 - Rust 日志现在直接写入文件
+      // 不再通过 FRB 桥接传递
 
       default:
         _log.w('未知事件类型: ${event.eventType}, data: ${event.data}');
@@ -744,31 +780,39 @@ class P2PManager {
 
   /// 处理 mDNS 启动事件（测试用）
   void _handleMdnsStarted(String message) {
-    _log.i('🧪 收到 mDNS 启动事件，准备启动 Flutter mDNS 广播');
+    _log.i('🧪 [DEBUG] 收到 mDNS 启动事件');
+    _log.i('🧪 [DEBUG] 原始消息: $message');
 
     try {
       // 解析 JSON 数据
       // 格式：{"local_peer_id":"...","port":12345,"service_type":"..."}
       final data = _parseJsonOrNull(message);
       if (data == null) {
-        _log.e('无法解析 mDNS 启动数据: $message');
+        _log.e('❌ [DEBUG] 无法解析 mDNS 启动数据: $message');
         return;
       }
+
+      _log.i('✅ [DEBUG] JSON 解析成功: $data');
 
       final localPeerId = data['local_peer_id'] as String? ?? '';
       final port = data['port'] as int? ?? 0;
       final serviceType = data['service_type'] as String? ?? '';
 
-      _log.i('mDNS 启动: Peer ID=$localPeerId, Port=$port, Service=$serviceType');
+      _log.i('📋 [DEBUG] mDNS 参数解析:');
+      _log.i('  - Peer ID: $localPeerId');
+      _log.i('  - Port: $port');
+      _log.i('  - Service Type: $serviceType');
 
       // ⭐ 启动 Flutter mDNS 广播（只注册，不浏览）
+      _log.i('🚀 [DEBUG] 调用 _startFlutterMdnsBroadcastOnly...');
       _startFlutterMdnsBroadcastOnly(
         name: localPeerId,
         port: port,
         serviceType: serviceType,
       );
+      _log.i('✅ [DEBUG] _startFlutterMdnsBroadcastOnly 调用完成');
     } catch (e, stackTrace) {
-      _log.e('处理 mDNS 启动事件失败: $e', e, stackTrace);
+      _log.e('❌ [DEBUG] 处理 mDNS 启动事件失败: $e', e, stackTrace);
     }
   }
 
@@ -824,12 +868,11 @@ class P2PManager {
     required int port,
     required String serviceType,
   }) async {
-    _log.i('[Flutter mDNS 测试] 启动广播模式（仅注册，不浏览）');
-    _log.i(
-      '[Flutter mDNS 测试] Peer ID: $name, Port: $port, Service: $serviceType',
-    );
+    _log.i('🧪 [DEBUG] Flutter mDNS 测试: 开始');
+    _log.i('🧪 [DEBUG] Flutter mDNS 测试: Peer ID: $name, Port: $port, Service: $serviceType');
 
     try {
+      _log.i('🔍 [DEBUG] Flutter mDNS 测试: 获取 FlutterMdnsService 实例...');
       final mdnsService = FlutterMdnsService.instance;
 
       // 如果已经在运行，先停止
@@ -838,12 +881,16 @@ class P2PManager {
         await mdnsService.stop();
       }
 
+      _log.i('🔍 [DEBUG] Flutter mDNS 测试: 准备调用 registerService...');
+
       // ⭐ 只注册服务（发送广播），不浏览（不接收）
       final success = await mdnsService.registerService(
         name: name,
         port: port,
         serviceType: serviceType,
       );
+
+      _log.i('🔍 [DEBUG] Flutter mDNS 测试: registerService 返回: $success');
 
       if (success) {
         _log.i('[Flutter mDNS 测试] ✓ 广播注册成功');
@@ -984,23 +1031,9 @@ class P2PManager {
     }
   }
 
-  String? _extractLogLevel(String data) {
-    final match = RegExp(r'"level":"([^"]*)"').firstMatch(data);
-    return match?.group(1);
-  }
-
-  String? _extractLogTarget(String data) {
-    final match = RegExp(r'"target":"([^"]*)"').firstMatch(data);
-    return match?.group(1);
-  }
-
-  String? _extractLogMessage(String data) {
-    // 匹配 message 字段，处理转义字符
-    final match = RegExp(r'"message":"((?:[^"\\]|\\.)*)"').firstMatch(data);
-    if (match == null) return null;
-    // 将转义字符转换回原始字符
-    return match.group(1)?.replaceAll(r'\"', '"').replaceAll(r'\\', r'\');
-  }
+  /// ⚠️ 已移除 _extractLogLevel - Rust 日志不再通过 FRB 桥接传递
+  /// ⚠️ 已移除 _extractLogTarget - Rust 日志不再通过 FRB 桥接传递
+  /// ⚠️ 已移除 _extractLogMessage - Rust 日志不再通过 FRB 桥接传递
 
   /// 停止 P2P 服务
   Future<void> stop() async {
@@ -1241,6 +1274,31 @@ class P2PManager {
       rethrow;
     }
   }
+
+  /// 🔥 获取广播信息
+  ///
+  /// 返回当前设备的广播信息（Peer ID、设备名称、监听端口、IP 地址列表）
+  ///
+  /// 🔄 改为异步：避免锁竞争导致 UI 卡顿
+  Future<bridge.BroadcastInfoJson> getBroadcastInfo() async {
+    if (!_initialized) {
+      _log.e('getBroadcastInfo 但未初始化');
+      throw Exception('Not initialized');
+    }
+
+    _log.t('获取广播信息');
+
+    try {
+      final result = await RustLib.instance.api.localp2PFfiBridgeP2PGetBroadcastInfo();
+      _log.d(
+        '广播信息: peerId=${result.peerId}, deviceName=${result.deviceName}, port=${result.port}',
+      );
+      return result;
+    } catch (e, stackTrace) {
+      _log.rustError('localp2PFfiBridgeP2PGetBroadcastInfo', e, stackTrace);
+      rethrow;
+    }
+  }
 }
 
 // Type aliases for bridge types (for backward compatibility)
@@ -1248,6 +1306,7 @@ typedef ServiceHealthJson = bridge.ServiceHealthJson;
 typedef ServiceStatusJson = bridge.ServiceStatusJson;
 typedef P2PBridgeEvent = bridge.P2PBridgeEvent;
 // Note: P2PBridgeNodeInfo is not aliased to avoid conflicts with direct imports
+// BroadcastInfoJson is used directly from bridge.dart
 
 /// 🔥 系统状态（包装器，将 BigInt 转换为 int）
 class SystemStatusJson {

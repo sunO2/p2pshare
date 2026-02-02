@@ -12,17 +12,17 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// 检查 P2P 是否已初始化
 bool p2PIsInitialized() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PIsInitialized();
+    RustLib.instance.api.localp2PFfiBridgeP2PIsInitialized();
 
 /// 检查 P2P 服务是否正在运行
-bool p2PIsRunning() => P2PBridge.instance.api.localp2PFfiBridgeP2PIsRunning();
+bool p2PIsRunning() => RustLib.instance.api.localp2PFfiBridgeP2PIsRunning();
 
 /// 检查 discovery 线程是否真的活着
 ///
 /// 通过发送 Ping 命令来检查线程是否响应
 /// 比 p2p_is_running() 更可靠，因为它实际检查线程状态
 bool p2PIsDiscoveryThreadAlive() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
+    RustLib.instance.api.localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
 
 /// 重启 discovery 服务
 ///
@@ -31,65 +31,68 @@ bool p2PIsDiscoveryThreadAlive() =>
 ///
 /// 🔄 改为异步：避免使用 block_on 导致 UI 卡顿
 Future<void> p2PRestartDiscovery() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
+    RustLib.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
 
 /// 初始化 P2P 模块
 ///
 /// # Arguments
 /// * `device_name` - 本设备的显示名称
-/// * `identity_path` - 密钥对保存路径（空字符串表示不持久化）
-void p2PInit({required String deviceName, required String identityPath}) =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PInit(
-      deviceName: deviceName,
-      identityPath: identityPath,
-    );
+/// * `work_dir` - 工作目录路径（所有数据将存储在此目录下的子目录中）
+///
+/// # 目录结构
+/// - `{work_dir}/data/` - 数据库文件
+/// - `{work_dir}/logs/` - 日志文件
+/// - `{work_dir}/certs/` - 证书文件（identity.key）
+void p2PInit({required String deviceName, required String workDir}) => RustLib
+    .instance
+    .api
+    .localp2PFfiBridgeP2PInit(deviceName: deviceName, workDir: workDir);
 
-/// 启动 P2P 服务
-void p2PStart() => P2PBridge.instance.api.localp2PFfiBridgeP2PStart();
+Future<void> p2PStart() => RustLib.instance.api.localp2PFfiBridgeP2PStart();
 
 /// 停止 P2P 服务
-void p2PStop() => P2PBridge.instance.api.localp2PFfiBridgeP2PStop();
+void p2PStop() => RustLib.instance.api.localp2PFfiBridgeP2PStop();
 
 /// 清理资源
-void p2PCleanup() => P2PBridge.instance.api.localp2PFfiBridgeP2PCleanup();
+void p2PCleanup() => RustLib.instance.api.localp2PFfiBridgeP2PCleanup();
 
 /// 获取本地 Peer ID
 String p2PGetLocalPeerId() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetLocalPeerId();
+    RustLib.instance.api.localp2PFfiBridgeP2PGetLocalPeerId();
 
 /// 获取已发现的节点列表
 ///
 /// 返回当前所有已发现的设备，包括在线和离线的设备
 /// 可以用作刷新设备列表
 List<P2PBridgeNodeInfo> p2PGetDevices() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetDevices();
+    RustLib.instance.api.localp2PFfiBridgeP2PGetDevices();
 
 /// 刷新设备列表（别名，语义更清晰）
 ///
 /// 功能同 p2p_get_devices，但语义上表示"刷新"操作
 /// mDNS 会自动发现设备，此函数用于获取最新的设备列表状态
 List<P2PBridgeNodeInfo> p2PRefreshDevices() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PRefreshDevices();
+    RustLib.instance.api.localp2PFfiBridgeP2PRefreshDevices();
 
 /// 主动触发设备发现刷新
 ///
 /// 触发 mDNS 重新广播和重新发现，并尝试重新连接到所有已知节点
 void p2PTriggerRefresh() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PTriggerRefresh();
+    RustLib.instance.api.localp2PFfiBridgeP2PTriggerRefresh();
 
 /// 获取设备名称
 String p2PGetDeviceName() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetDeviceName();
+    RustLib.instance.api.localp2PFfiBridgeP2PGetDeviceName();
 
 /// 获取已验证的节点列表
 List<P2PBridgeNodeInfo> p2PGetVerifiedNodes() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetVerifiedNodes();
+    RustLib.instance.api.localp2PFfiBridgeP2PGetVerifiedNodes();
 
 /// 🔥 获取系统状态
 ///
 /// 返回当前所有服务的运行状态和健康状态
 SystemStatusJson p2PGetSystemStatus() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
+    RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
 
 /// 发送消息给指定节点
 ///
@@ -101,7 +104,7 @@ SystemStatusJson p2PGetSystemStatus() =>
 Future<void> p2PSendMessage({
   required String targetPeerId,
   required String message,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PSendMessage(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PSendMessage(
   targetPeerId: targetPeerId,
   message: message,
 );
@@ -116,14 +119,14 @@ Future<void> p2PSendMessage({
 Future<void> p2PBroadcastMessage({
   required List<String> targetPeerIds,
   required String message,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PBroadcastMessage(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PBroadcastMessage(
   targetPeerIds: targetPeerIds,
   message: message,
 );
 
 /// 获取所有会话列表（在后台线程执行，不阻塞 UI）
 Future<List<ConversationJson>> p2PGetConversations() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetConversations();
+    RustLib.instance.api.localp2PFfiBridgeP2PGetConversations();
 
 /// 通过 peer_id 获取消息列表（支持分页，在后台线程执行，不阻塞 UI）
 ///
@@ -153,7 +156,7 @@ Future<List<MessageJson>> p2PGetMessagesByPeer({
   required String peerId,
   required int limit,
   PlatformInt64? beforeTimestamp,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PGetMessagesByPeer(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PGetMessagesByPeer(
   peerId: peerId,
   limit: limit,
   beforeTimestamp: beforeTimestamp,
@@ -171,7 +174,7 @@ Future<String> p2PSendMessageEx({
   required int messageType,
   required String content,
   String? extra,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PSendMessageEx(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PSendMessageEx(
   targetPeerId: targetPeerId,
   messageType: messageType,
   content: content,
@@ -186,7 +189,7 @@ Future<String> p2PSendMessageEx({
 Future<void> p2PMarkMessagesRead({
   required String conversationId,
   required List<String> messageIds,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PMarkMessagesRead(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PMarkMessagesRead(
   conversationId: conversationId,
   messageIds: messageIds,
 );
@@ -195,7 +198,7 @@ Future<void> p2PMarkMessagesRead({
 ///
 /// # Arguments
 /// * `message_id` - 消息 ID
-Future<void> p2PDeleteMessage({required String messageId}) => P2PBridge
+Future<void> p2PDeleteMessage({required String messageId}) => RustLib
     .instance
     .api
     .localp2PFfiBridgeP2PDeleteMessage(messageId: messageId);
@@ -204,7 +207,7 @@ Future<void> p2PDeleteMessage({required String messageId}) => P2PBridge
 ///
 /// # Arguments
 /// * `message_id` - 消息 ID
-Future<void> p2PRevokeMessage({required String messageId}) => P2PBridge
+Future<void> p2PRevokeMessage({required String messageId}) => RustLib
     .instance
     .api
     .localp2PFfiBridgeP2PRevokeMessage(messageId: messageId);
@@ -213,7 +216,7 @@ Future<void> p2PRevokeMessage({required String messageId}) => P2PBridge
 ///
 /// # Arguments
 /// * `conversation_id` - 会话 ID
-Future<void> p2PClearConversation({required String conversationId}) => P2PBridge
+Future<void> p2PClearConversation({required String conversationId}) => RustLib
     .instance
     .api
     .localp2PFfiBridgeP2PClearConversation(conversationId: conversationId);
@@ -230,7 +233,7 @@ Future<String> p2PRegisterFile({
   required PlatformInt64 fileSize,
   required String mimeType,
   required String localPath,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PRegisterFile(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PRegisterFile(
   fileName: fileName,
   fileSize: fileSize,
   mimeType: mimeType,
@@ -242,14 +245,14 @@ Future<String> p2PRegisterFile({
 /// # Arguments
 /// * `file_id` - 文件 ID
 Future<FileInfoJson> p2PGetFileInfo({required String fileId}) =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PGetFileInfo(fileId: fileId);
+    RustLib.instance.api.localp2PFfiBridgeP2PGetFileInfo(fileId: fileId);
 
 /// 设置事件流接收器（用于 Stream 模式）
 ///
 /// 调用此函数后，Rust 会将事件推送到 Stream，Flutter 端可以订阅这个 Stream
 /// 这是推荐的方式，比轮询更高效
 Stream<P2PBridgeEvent> p2PSetEventStream() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PSetEventStream();
+    RustLib.instance.api.localp2PFfiBridgeP2PSetEventStream();
 
 /// 轮询事件（返回所有待处理的事件）
 ///
@@ -257,7 +260,7 @@ Stream<P2PBridgeEvent> p2PSetEventStream() =>
 /// Flutter 应该定期调用此函数来获取事件
 /// 返回的事件按时间顺序排列
 List<P2PBridgeEvent> p2PPollEvents() =>
-    P2PBridge.instance.api.localp2PFfiBridgeP2PPollEvents();
+    RustLib.instance.api.localp2PFfiBridgeP2PPollEvents();
 
 /// 报告外部发现的设备（由 Flutter mDNS 发现）
 ///
@@ -278,7 +281,7 @@ List<P2PBridgeEvent> p2PPollEvents() =>
 void p2PReportExternalDiscovery({
   required String peerId,
   required String address,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PReportExternalDiscovery(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PReportExternalDiscovery(
   peerId: peerId,
   address: address,
 );
@@ -288,14 +291,14 @@ void p2PReportExternalDiscovery({
 /// 批量报告设备，减少 FFI 调用次数
 void p2PReportExternalDiscoveries({
   required List<ExternalDiscovery> discoveries,
-}) => P2PBridge.instance.api.localp2PFfiBridgeP2PReportExternalDiscoveries(
+}) => RustLib.instance.api.localp2PFfiBridgeP2PReportExternalDiscoveries(
   discoveries: discoveries,
 );
 
 /// 报告外部发现的设备离线
 ///
 /// 当 Flutter 的 mDNS 辅助服务检测到设备离线时，调用此方法通知 Rust 层
-void p2PReportExternalDeviceLost({required String peerId}) => P2PBridge
+void p2PReportExternalDeviceLost({required String peerId}) => RustLib
     .instance
     .api
     .localp2PFfiBridgeP2PReportExternalDeviceLost(peerId: peerId);

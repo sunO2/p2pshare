@@ -8,7 +8,7 @@ import '../../frb_generated.dart';
 import '../../types.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// 检查 P2P 是否已初始化
 bool p2PIsInitialized() =>
@@ -37,15 +37,18 @@ Future<void> p2PRestartDiscovery() =>
 ///
 /// # Arguments
 /// * `device_name` - 本设备的显示名称
-/// * `identity_path` - 密钥对保存路径（空字符串表示不持久化）
-void p2PInit({required String deviceName, required String identityPath}) =>
-    RustLib.instance.api.localp2PFfiBridgeP2PInit(
-      deviceName: deviceName,
-      identityPath: identityPath,
-    );
+/// * `work_dir` - 工作目录路径（所有数据将存储在此目录下的子目录中）
+///
+/// # 目录结构
+/// - `{work_dir}/data/` - 数据库文件
+/// - `{work_dir}/logs/` - 日志文件
+/// - `{work_dir}/certs/` - 证书文件（identity.key）
+void p2PInit({required String deviceName, required String workDir}) => RustLib
+    .instance
+    .api
+    .localp2PFfiBridgeP2PInit(deviceName: deviceName, workDir: workDir);
 
-/// 启动 P2P 服务
-void p2PStart() => RustLib.instance.api.localp2PFfiBridgeP2PStart();
+Future<void> p2PStart() => RustLib.instance.api.localp2PFfiBridgeP2PStart();
 
 /// 停止 P2P 服务
 void p2PStop() => RustLib.instance.api.localp2PFfiBridgeP2PStop();
@@ -90,6 +93,14 @@ List<P2PBridgeNodeInfo> p2PGetVerifiedNodes() =>
 /// 返回当前所有服务的运行状态和健康状态
 SystemStatusJson p2PGetSystemStatus() =>
     RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
+
+/// 🔥 获取广播信息
+///
+/// 返回当前设备的广播信息（Peer ID、设备名称、监听端口、IP 地址列表）
+///
+/// 🔄 改为异步：避免锁竞争导致 UI 卡顿
+Future<BroadcastInfoJson> p2PGetBroadcastInfo() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PGetBroadcastInfo();
 
 /// 发送消息给指定节点
 ///

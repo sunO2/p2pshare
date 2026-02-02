@@ -32,17 +32,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// 初始化所有服务和 P2P
   Future<void> _initialize() async {
-    // 先初始化存储服务（必须在 P2P 之前完成）
-    await _initServices();
-    // 再初始化 P2P
-    await _initP2P();
+    // 🔥 先获取工作目录（用于日志服务和 P2P）
+    final workDir = await _getWorkDirectory();
+    debugPrint('工作目录: $workDir');
+
+    // 先初始化服务（使用工作目录）
+    await _initServices(workDir);
+    // 再初始化 P2P（也使用工作目录）
+    await _initP2P(workDir);
   }
 
   /// 初始化所有服务
-  Future<void> _initServices() async {
+  Future<void> _initServices([String? workDir]) async {
     try {
-      await LogService.instance.init();
-      debugPrint('日志服务已初始化');
+      await LogService.instance.init(workDir);
+      debugPrint('日志服务已初始化${workDir != null ? " (使用工作目录)" : ""}');
     } catch (e) {
       debugPrint('日志服务初始化失败: $e');
     }
@@ -149,7 +153,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _initP2P() async {
+
+  Future<void> _initP2P(String workDir) async {
     try {
       debugPrint('开始初始化 P2P...');
 
@@ -157,15 +162,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final deviceName = await StorageService.instance.getDeviceName();
       debugPrint('使用设备名称: $deviceName');
 
-      // 获取应用文档目录，用于保存密钥对
-      final appDocDir = await getApplicationDocumentsDirectory();
-      final identityPath = '${appDocDir.path}/identity.key';
-      debugPrint('密钥文件路径: $identityPath');
-
       // 创建 P2P 配置
       final config = P2PInitConfig(
         deviceName: deviceName,
-        identityPath: identityPath,
+        workDir: workDir,  // 🔥 使用 workDir 代替 identityPath
         // 可选：自定义配置
         // listenAddresses: ['/ip4/0.0.0.0/tcp/0'],
         // protocolVersion: '/localp2p/1.0.0',
@@ -203,7 +203,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  @override
+  /// 🔥 获取工作目录
+  ///
+  /// 优先使用外部存储目录，方便调试和数据访问
+  /// 如果外部存储不可用，则使用应用文档目录
+  Future<String> _getWorkDirectory() async {
+    // 尝试获取外部存储目录
+    try {
+      final externalDir = await getExternalStorageDirectory();
+      if (externalDir != null) {
+        final workDir = '${externalDir.path}/localp2p';
+        debugPrint('使用外部存储目录: $workDir');
+        return workDir;
+      }
+    } catch (e) {
+      debugPrint('无法获取外部存储目录: $e，使用应用文档目录');
+    }
+
+    // 回退到应用文档目录
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final workDir = '${appDocDir.path}/localp2p';
+    debugPrint('使用应用文档目录: $workDir');
+    return workDir;
+  }
+
   Widget build(BuildContext context) {
     if (!_isInitialized) {
       return Scaffold(
@@ -264,11 +287,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
-                    onPressed: () {
+                    onPressed: () async {
                       setState(() {
                         _initError = null;
                       });
-                      _initP2P();
+                      // 获取工作目录并重试初始化
+                      final workDir = await _getWorkDirectory();
+                      await _initP2P(workDir);
                     },
                     icon: const Icon(Icons.refresh),
                     label: const Text('重试'),

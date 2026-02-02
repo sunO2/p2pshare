@@ -89,7 +89,7 @@ class P2PBridgeNodeInfo {
     required String peerId,
     required String displayName,
     required String deviceName,
-  }) => P2PBridge.instance.api.crateBridgeP2PBridgeNodeInfoFromBasicInfo(
+  }) => RustLib.instance.api.crateBridgeP2PBridgeNodeInfoFromBasicInfo(
     peerId: peerId,
     displayName: displayName,
     deviceName: deviceName,
@@ -98,7 +98,7 @@ class P2PBridgeNodeInfo {
   static Future<P2PBridgeNodeInfo> fromPeerIdAndInfo({
     required String peerId,
     required UserInfo info,
-  }) => P2PBridge.instance.api.crateBridgeP2PBridgeNodeInfoFromPeerIdAndInfo(
+  }) => RustLib.instance.api.crateBridgeP2PBridgeNodeInfoFromPeerIdAndInfo(
     peerId: peerId,
     info: info,
   );

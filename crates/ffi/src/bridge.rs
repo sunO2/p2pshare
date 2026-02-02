@@ -67,6 +67,19 @@ pub struct SystemStatusJson {
     pub discovered_peers: usize,
 }
 
+/// 🔥 广播信息（用于 FRB）
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct BroadcastInfoJson {
+    /// 本地 Peer ID
+    pub peer_id: String,
+    /// 设备名称
+    pub device_name: String,
+    /// 监听端口（TCP 端口）
+    pub port: u16,
+    /// 监听地址列表（IP 地址列表）
+    pub addresses: Vec<String>,
+}
+
 /// 节点信息（用于 FRB）
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct P2PBridgeNodeInfo {
@@ -153,14 +166,17 @@ pub async fn p2p_restart_discovery() -> Result<(), String> {
 ///
 /// # Arguments
 /// * `device_name` - 本设备的显示名称
-/// * `identity_path` - 密钥对保存路径（空字符串表示不持久化）
+/// * `work_dir` - 工作目录路径（所有数据将存储在此目录下的子目录中）
+///
+/// # 目录结构
+/// - `{work_dir}/data/` - 数据库文件
+/// - `{work_dir}/logs/` - 日志文件
+/// - `{work_dir}/certs/` - 证书文件（identity.key）
 #[frb(sync)]
-pub fn p2p_init(device_name: String, identity_path: String) -> Result<(), String> {
-    crate::internal_init(device_name, identity_path)
+pub fn p2p_init(device_name: String, work_dir: String) -> Result<(), String> {
+    crate::internal_init(device_name, work_dir)
 }
 
-/// 启动 P2P 服务
-#[frb(sync)]
 pub fn p2p_start() -> Result<(), String> {
     crate::internal_start()
 }
@@ -264,6 +280,16 @@ pub fn p2p_get_verified_nodes() -> Result<Vec<P2PBridgeNodeInfo>, String> {
 #[frb(sync)]
 pub fn p2p_get_system_status() -> Result<SystemStatusJson, String> {
     crate::internal_get_system_status_sync()
+}
+
+/// 🔥 获取广播信息
+///
+/// 返回当前设备的广播信息（Peer ID、设备名称、监听端口、IP 地址列表）
+///
+/// 🔄 改为异步：避免锁竞争导致 UI 卡顿
+#[frb(dart_async)]
+pub async fn p2p_get_broadcast_info() -> Result<BroadcastInfoJson, String> {
+    crate::internal_get_broadcast_info_async().await
 }
 
 // /// 获取所有节点的用户信息（包括昵称、状态等）

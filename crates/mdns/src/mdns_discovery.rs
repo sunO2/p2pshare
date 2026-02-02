@@ -365,20 +365,42 @@ impl MdnsServiceDiscovery {
     fn process_service_event(&mut self, event: &ServiceEvent) {
         match event {
             ServiceEvent::ServiceResolved(info) => {
+                tracing::info!("🔍 [DEBUG] ServiceResolved 事件触发");
+                send_log("INFO", "mdns_discovery", "🔍 [DEBUG] ServiceResolved 事件触发".to_string());
                 tracing::info!("🔍 解析服务: {}", info.get_fullname());
 
                 // 从实例名中提取 peer_id
                 // 格式：peer_id._localp2p._tcp.local
+                // Flutter 插件可能添加后缀，如: peer_id (2)._localp2p._tcp.local
                 let fullname = info.get_fullname();
-                let peer_id_str = fullname
+                let mut peer_id_str = fullname
                     .trim_end_matches(SERVICE_TYPE)
                     .trim_end_matches('.')
                     .to_string();
 
-                // 跳过自己
+                // 🔥 清理额外的后缀（如 " (2)", " (实例1)" 等）
+                // 只保留有效的 base58 字符串
+                if let Some(pos) = peer_id_str.find(' ') {
+                    peer_id_str = peer_id_str[..pos].to_string();
+                    tracing::debug!("🔧 清理后的 peer_id: {} (原始包含后缀)", peer_id_str);
+                }
+
+                // 🔥 跳过自己（使用清理后的 peer_id_str）
                 if peer_id_str == self.local_peer_id {
+                    tracing::debug!("⏭️  跳过自己（本地 Peer ID）");
                     return;
                 }
+
+                // 🔥 如果 peer_id 解析失败，跳过这个服务
+                use libp2p::PeerId;
+                let peer_id: PeerId = match peer_id_str.parse() {
+                    Ok(id) => id,
+                    Err(e) => {
+                        tracing::warn!("⚠️ Peer ID 解析失败: {} -> 错误: {}，跳过此服务", peer_id_str, e);
+                        send_log("WARN", "mdns_discovery", format!("⚠️ Peer ID 解析失败: {} | 错误: {}，跳过此服务", peer_id_str, e));
+                        return;
+                    }
+                };
 
                 // 获取地址和端口
                 let port = info.get_port();
@@ -410,12 +432,13 @@ impl MdnsServiceDiscovery {
                         _ => continue,
                     };
 
-                    // 子网掩码过滤：只连接与本机在同一子网的 IP
+                    // 🔥 临时禁用子网过滤（用于调试）
+                    // 原因：可能因为子网过滤导致同 WiFi 不同子网的设备无法发现
                     let is_same_subnet = self.is_same_subnet(ip_addr_v4);
-
                     if !is_same_subnet {
-                        tracing::debug!("跳过非同子网地址: {}", ip_addr);
-                        continue;
+                        tracing::warn!("⚠️ 跨子网地址（仍接受）: {}", ip_addr);
+                        send_log("WARN", "mdns_discovery", format!("⚠️ 跨子网地址（仍接受）: {}", ip_addr));
+                        // 不跳过，继续处理
                     }
 
                     // 转换为 Multiaddr
@@ -431,19 +454,6 @@ impl MdnsServiceDiscovery {
 
                 // 只使用第一个（最佳）地址
                 if let Some((multiaddr, _)) = filtered_addrs.first() {
-                    use libp2p::PeerId;
-                    let peer_id: PeerId = peer_id_str.parse().unwrap_or_else(|e| {
-                        tracing::warn!("⚠️ Peer ID 解析失败: {} -> 错误: {}", peer_id_str, e);
-                        send_log("WARN", "mdns_discovery", format!("⚠️ Peer ID 解析失败: {} | 错误: {}", peer_id_str, e));
-                        PeerId::random()
-                    });
-
-                    // 记录解析后的 Peer ID（用于调试）
-                    let peer_id_parsed = peer_id.to_string();
-                    if peer_id_str != peer_id_parsed {
-                        tracing::warn!("⚠️ Peer ID 不一致: 原始={} vs 解析后={}", peer_id_str, peer_id_parsed);
-                    }
-
                     // 检查是否已发现过
                     let peer_key = peer_id.to_string();
                     if !self.discovered_peers.contains_key(&peer_key) {
@@ -469,10 +479,13 @@ impl MdnsServiceDiscovery {
             }
             ServiceEvent::ServiceRemoved(fullname, _ty) => {
                 tracing::info!("🗑️ 服务已移除: {}", fullname);
+                send_log("INFO", "mdns_discovery", format!("🗑️ 服务已移除: {}", fullname));
                 // 可以从缓存中移除该节点
             }
             _ => {
-                tracing::trace!("收到其他 mDNS 事件: {:?}", event);
+                // 🔥 调试：记录所有其他事件类型
+                tracing::warn!("🔍 [DEBUG] 其他 mDNS 事件: {:?}", event);
+                send_log("WARN", "mdns_discovery", format!("🔍 [DEBUG] 其他事件: {:?}", event));
             }
         }
     }

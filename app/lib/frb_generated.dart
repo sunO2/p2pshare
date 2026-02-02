@@ -14,16 +14,15 @@ import 'third_party/localp2p_ffi/bridge.dart';
 import 'types.dart';
 
 /// Main entrypoint of the Rust API
-class P2PBridge
-    extends BaseEntrypoint<P2PBridgeApi, P2PBridgeApiImpl, P2PBridgeWire> {
+class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   @internal
-  static final instance = P2PBridge._();
+  static final instance = RustLib._();
 
-  P2PBridge._();
+  RustLib._();
 
   /// Initialize flutter_rust_bridge
   static Future<void> init({
-    P2PBridgeApi? api,
+    RustLibApi? api,
     BaseHandler? handler,
     ExternalLibrary? externalLibrary,
     bool forceSameCodegenVersion = true,
@@ -38,7 +37,7 @@ class P2PBridge
 
   /// Initialize flutter_rust_bridge in mock mode.
   /// No libraries for FFI are loaded.
-  static void initMock({required P2PBridgeApi api}) {
+  static void initMock({required RustLibApi api}) {
     instance.initMockImpl(api: api);
   }
 
@@ -49,12 +48,12 @@ class P2PBridge
   static void dispose() => instance.disposeImpl();
 
   @override
-  ApiImplConstructor<P2PBridgeApiImpl, P2PBridgeWire> get apiImplConstructor =>
-      P2PBridgeApiImpl.new;
+  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor =>
+      RustLibApiImpl.new;
 
   @override
-  WireConstructor<P2PBridgeWire> get wireConstructor =>
-      P2PBridgeWire.fromExternalLibrary;
+  WireConstructor<RustLibWire> get wireConstructor =>
+      RustLibWire.fromExternalLibrary;
 
   @override
   Future<void> executeRustInitializers() async {}
@@ -77,7 +76,7 @@ class P2PBridge
       );
 }
 
-abstract class P2PBridgeApi extends BaseApi {
+abstract class RustLibApi extends BaseApi {
   Future<void> localp2PFfiBridgeP2PBroadcastMessage({
     required List<String> targetPeerIds,
     required String message,
@@ -115,7 +114,7 @@ abstract class P2PBridgeApi extends BaseApi {
 
   void localp2PFfiBridgeP2PInit({
     required String deviceName,
-    required String identityPath,
+    required String workDir,
   });
 
   bool localp2PFfiBridgeP2PIsDiscoveryThreadAlive();
@@ -169,7 +168,7 @@ abstract class P2PBridgeApi extends BaseApi {
 
   Stream<P2PBridgeEvent> localp2PFfiBridgeP2PSetEventStream();
 
-  void localp2PFfiBridgeP2PStart();
+  Future<void> localp2PFfiBridgeP2PStart();
 
   void localp2PFfiBridgeP2PStop();
 
@@ -195,9 +194,8 @@ abstract class P2PBridgeApi extends BaseApi {
   CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UserInfoPtr;
 }
 
-class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
-    implements P2PBridgeApi {
-  P2PBridgeApiImpl({
+class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
+  RustLibApiImpl({
     required super.handler,
     required super.wire,
     required super.generalizedFrbRustBinding,
@@ -532,14 +530,14 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   @override
   void localp2PFfiBridgeP2PInit({
     required String deviceName,
-    required String identityPath,
+    required String workDir,
   }) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(deviceName, serializer);
-          sse_encode_String(identityPath, serializer);
+          sse_encode_String(workDir, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
         },
         codec: SseCodec(
@@ -547,7 +545,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kLocalp2PFfiBridgeP2PInitConstMeta,
-        argValues: [deviceName, identityPath],
+        argValues: [deviceName, workDir],
         apiImpl: this,
       ),
     );
@@ -555,7 +553,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
 
   TaskConstMeta get kLocalp2PFfiBridgeP2PInitConstMeta => const TaskConstMeta(
     debugName: "p2p_init",
-    argNames: ["deviceName", "identityPath"],
+    argNames: ["deviceName", "workDir"],
   );
 
   @override
@@ -990,12 +988,17 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       );
 
   @override
-  void localp2PFfiBridgeP2PStart() {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+  Future<void> localp2PFfiBridgeP2PStart() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 29,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2158,10 +2161,10 @@ class UserInfoImpl extends RustOpaque implements UserInfo {
 
   static final _kStaticData = RustArcStaticData(
     rustArcIncrementStrongCount:
-        P2PBridge.instance.api.rust_arc_increment_strong_count_UserInfo,
+        RustLib.instance.api.rust_arc_increment_strong_count_UserInfo,
     rustArcDecrementStrongCount:
-        P2PBridge.instance.api.rust_arc_decrement_strong_count_UserInfo,
+        RustLib.instance.api.rust_arc_decrement_strong_count_UserInfo,
     rustArcDecrementStrongCountPtr:
-        P2PBridge.instance.api.rust_arc_decrement_strong_count_UserInfoPtr,
+        RustLib.instance.api.rust_arc_decrement_strong_count_UserInfoPtr,
   );
 }

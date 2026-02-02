@@ -45,6 +45,7 @@ pub mod events;
 pub mod connection_service;
 pub mod p2p_manager;
 pub mod mdns_discovery;
+pub mod global_config;
 
 pub use config::{MdnsConfig, ServiceInfo};
 pub use node::{VerifiedNode, NodeManager, NodeManagerConfig, NodeStatus};

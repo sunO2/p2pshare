@@ -248,10 +248,10 @@ impl P2PManager {
         })
     }
 
-    /// 启动 mDNS 服务（使用 libmdns）
+    /// 启动 mDNS 服务（使用 mdns-sd）
     pub async fn start_mdns(&mut self, external_addresses: Vec<Multiaddr>) -> Result<(), MdnsError> {
         tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
-        tracing::info!("║ 🔍 [P2PManager] 启动 libmdns 服务发现");
+        tracing::info!("║ 🔍 [P2PManager] 启动 mdns-sd 服务发现");
         tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
 
         if self.mdns_running {
@@ -293,7 +293,7 @@ impl P2PManager {
 
         tracing::info!("📝 [mDNS 配置] 端口: {}, 地址: {:?}", port, addresses);
 
-        // 创建 libmdns 服务发现
+        // 创建 mdns-sd 服务发现
         use super::mdns_discovery::MdnsServiceDiscovery;
         let mut mdns_discovery = MdnsServiceDiscovery::new(
             self.peer_id.to_string(),
@@ -319,7 +319,7 @@ impl P2PManager {
         self.mdns_task = Some(task);
         self.mdns_running = true;
 
-        tracing::info!("✅ libmdns 服务发现已启动");
+        tracing::info!("✅ mdns-sd 服务发现已启动");
         tracing::info!("  └─ 广播端口: UDP 5353");
         tracing::info!("  └─ 服务类型: _localp2p._tcp");
 
@@ -584,6 +584,11 @@ impl P2PManager {
     /// 获取本地 Peer ID（字符串形式）
     pub fn local_peer_id_string(&self) -> String {
         self.peer_id.to_string()
+    }
+
+    /// 获取设备名称
+    pub fn device_name(&self) -> &str {
+        &self.local_user_info.device_name
     }
 
     /// 获取节点管理器

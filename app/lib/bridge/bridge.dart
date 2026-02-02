@@ -7,6 +7,45 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
 
+/// 🔥 广播信息（用于 FRB）
+class BroadcastInfoJson {
+  /// 本地 Peer ID
+  final String peerId;
+
+  /// 设备名称
+  final String deviceName;
+
+  /// 监听端口（TCP 端口）
+  final int port;
+
+  /// 监听地址列表（IP 地址列表）
+  final List<String> addresses;
+
+  const BroadcastInfoJson({
+    required this.peerId,
+    required this.deviceName,
+    required this.port,
+    required this.addresses,
+  });
+
+  @override
+  int get hashCode =>
+      peerId.hashCode ^
+      deviceName.hashCode ^
+      port.hashCode ^
+      addresses.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BroadcastInfoJson &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          deviceName == other.deviceName &&
+          port == other.port &&
+          addresses == other.addresses;
+}
+
 /// 外部发现的设备信息
 class ExternalDiscovery {
   final String peerId;

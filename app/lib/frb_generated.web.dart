@@ -14,8 +14,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
 import 'types.dart';
 
-abstract class P2PBridgeApiImplPlatform extends BaseApiImpl<P2PBridgeWire> {
-  P2PBridgeApiImplPlatform({
+abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
+  RustLibApiImplPlatform({
     required super.handler,
     required super.wire,
     required super.generalizedFrbRustBinding,
@@ -406,8 +406,8 @@ abstract class P2PBridgeApiImplPlatform extends BaseApiImpl<P2PBridgeWire> {
 
 // Section: wire_class
 
-class P2PBridgeWire implements BaseWire {
-  P2PBridgeWire.fromExternalLibrary(ExternalLibrary lib);
+class RustLibWire implements BaseWire {
+  RustLibWire.fromExternalLibrary(ExternalLibrary lib);
 
   void
   rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
@@ -427,11 +427,11 @@ class P2PBridgeWire implements BaseWire {
 }
 
 @JS('wasm_bindgen')
-external P2PBridgeWasmModule get wasmModule;
+external RustLibWasmModule get wasmModule;
 
 @JS()
 @anonymous
-extension type P2PBridgeWasmModule._(JSObject _) implements JSObject {
+extension type RustLibWasmModule._(JSObject _) implements JSObject {
   external void
   rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUserInfo(
     int ptr,

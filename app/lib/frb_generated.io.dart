@@ -12,8 +12,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
 import 'types.dart';
 
-abstract class P2PBridgeApiImplPlatform extends BaseApiImpl<P2PBridgeWire> {
-  P2PBridgeApiImplPlatform({
+abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
+  RustLibApiImplPlatform({
     required super.handler,
     required super.wire,
     required super.generalizedFrbRustBinding,
@@ -404,16 +404,16 @@ abstract class P2PBridgeApiImplPlatform extends BaseApiImpl<P2PBridgeWire> {
 
 // Section: wire_class
 
-class P2PBridgeWire implements BaseWire {
-  factory P2PBridgeWire.fromExternalLibrary(ExternalLibrary lib) =>
-      P2PBridgeWire(lib.ffiDynamicLibrary);
+class RustLibWire implements BaseWire {
+  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) =>
+      RustLibWire(lib.ffiDynamicLibrary);
 
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
   _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
-  P2PBridgeWire(ffi.DynamicLibrary dynamicLibrary)
+  RustLibWire(ffi.DynamicLibrary dynamicLibrary)
     : _lookup = dynamicLibrary.lookup;
 
   void

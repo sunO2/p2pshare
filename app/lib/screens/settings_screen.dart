@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -262,9 +263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             showArrow: false,
           ),
           _buildDivider(),
-          _buildSettingsRow('导出日志', '导出所有日志', onTap: _exportLogs),
-          _buildDivider(),
-          _buildSettingsRow('查看日志', '最近 500 条', onTap: _showLogs),
+          _buildSettingsRow('查看日志', '按日期查看日志', onTap: _showLogs),
           _buildDivider(),
           _buildSettingsRow('清空日志', '清空所有日志', onTap: _clearLogs),
         ],
@@ -523,47 +522,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// 导出日志
-  Future<void> _exportLogs() async {
-    try {
-      final logs = await LogService.instance.getAllLogs();
-
-      if (logs.isEmpty || logs == '日志文件不存在') {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('没有可导出的日志')));
-        }
-        return;
-      }
-
-      // 使用 share_plus 分享日志
-      await Share.share(logs, subject: 'LocalP2P Logs');
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('日志已导出')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('导出失败: $e')));
-      }
-    }
-  }
-
   /// 查看日志
   Future<void> _showLogs() async {
     try {
-      final logs = await LogService.instance.getRecentLogs(lines: 500);
-
       if (!mounted) return;
 
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => _LogsViewerScreen(logs: logs)),
+        MaterialPageRoute(builder: (context) => const LogsViewerScreen()),
       );
 
       // 刷新日志大小
@@ -572,7 +538,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('读取日志失败: $e')));
+        ).showSnackBar(SnackBar(content: Text('打开日志页面失败: $e')));
       }
     }
   }
@@ -617,17 +583,147 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// 日志查看器页面
-class _LogsViewerScreen extends StatefulWidget {
-  final String logs;
-
-  const _LogsViewerScreen({required this.logs});
+/// 日志查看器页面 - 按日期选择，实时读取
+class LogsViewerScreen extends StatefulWidget {
+  const LogsViewerScreen({super.key});
 
   @override
-  State<_LogsViewerScreen> createState() => _LogsViewerScreenState();
+  State<LogsViewerScreen> createState() => _LogsViewerScreenState();
 }
 
-class _LogsViewerScreenState extends State<_LogsViewerScreen> {
+class _LogsViewerScreenState extends State<LogsViewerScreen> {
+  String _selectedDate = '';
+  List<String> _availableDates = [];
+  List<LogLine> _logLines = []; // 🔥 使用 LogLine 而不是分别存储 Flutter/Rust
+  bool _autoScroll = true;
+  final ScrollController _scrollController = ScrollController();
+  bool _showFlutterLogs = true;
+  bool _showRustLogs = true;
+  bool _isRealtimeWatching = false; // 🔥 是否正在实时监听
+  StreamSubscription<LogLine>? _realtimeSubscription; // 🔥 实时日志流订阅
+
+  @override
+  void initState() {
+    super.initState();
+    _initDates();
+  }
+
+  @override
+  void dispose() {
+    _stopRealtimeWatch();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initDates() async {
+    try {
+      final dates = await LogService.instance.getAvailableDates();
+      if (mounted) {
+        setState(() {
+          _availableDates = dates;
+          if (dates.isNotEmpty) {
+            _selectedDate = dates.first;
+          }
+        });
+        if (_selectedDate.isNotEmpty) {
+          await _loadInitialLogs();
+          _startRealtimeWatch();
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load dates: $e');
+    }
+  }
+
+  /// 🔥 加载初始日志（历史日志）
+  Future<void> _loadInitialLogs() async {
+    if (_selectedDate.isEmpty) return;
+
+    try {
+      final flutterLogs = await LogService.instance.getLogsByDate(_selectedDate, LogType.flutter);
+      final rustLogs = await LogService.instance.getLogsByDate(_selectedDate, LogType.rust);
+
+      if (mounted) {
+        setState(() {
+          _logLines = [
+            ...flutterLogs.map((log) => LogLine(
+                  content: log,
+                  type: LogType.flutter,
+                  timestamp: DateTime.now(),
+                )),
+            ...rustLogs.map((log) => LogLine(
+                  content: log,
+                  type: LogType.rust,
+                  timestamp: DateTime.now(),
+                )),
+          ];
+          // 按时间戳排序
+          _logLines.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        });
+
+        // 滚动到底部
+        if (_autoScroll) {
+          _scrollToBottom();
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load logs: $e');
+    }
+  }
+
+  /// 🔥 开始实时监听日志
+  void _startRealtimeWatch() {
+    if (_isRealtimeWatching) return;
+
+    _isRealtimeWatching = true;
+
+    // 启动 LogService 的实时监听
+    LogService.instance.startRealtimeWatch(_selectedDate);
+
+    // 订阅实时日志流
+    _realtimeSubscription = LogService.instance.realtimeLogStream.listen(
+      (logLine) {
+        if (!mounted) return;
+
+        // 根据过滤条件决定是否添加
+        if (logLine.type == LogType.flutter && !_showFlutterLogs) return;
+        if (logLine.type == LogType.rust && !_showRustLogs) return;
+
+        setState(() {
+          _logLines.add(logLine);
+        });
+
+        // 如果启用了自动滚动，滚动到底部
+        if (_autoScroll) {
+          _scrollToBottom();
+        }
+      },
+      onError: (error) {
+        debugPrint('Realtime log stream error: $error');
+      },
+    );
+  }
+
+  /// 🔥 停止实时监听
+  void _stopRealtimeWatch() {
+    _isRealtimeWatching = false;
+    _realtimeSubscription?.cancel();
+    _realtimeSubscription = null;
+    LogService.instance.stopRealtimeWatch();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -638,45 +734,193 @@ class _LogsViewerScreenState extends State<_LogsViewerScreen> {
       ),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('日志'),
+          title: const Text('日志查看'),
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
           elevation: 0,
           actions: [
+            // 🔥 实时监听开关（绿色=正在监听，灰色=已暂停）
             IconButton(
-              icon: const Icon(Icons.share),
-              onPressed: _shareLogs,
-              tooltip: '分享',
+              icon: Icon(_isRealtimeWatching ? Icons.pause : Icons.play_arrow),
+              onPressed: () {
+                setState(() {
+                  if (_isRealtimeWatching) {
+                    _stopRealtimeWatch();
+                  } else {
+                    _startRealtimeWatch();
+                  }
+                });
+              },
+              tooltip: _isRealtimeWatching ? '暂停监听' : '开始监听',
+              color: _isRealtimeWatching ? const Color(0xFF3D8A5A) : Colors.grey,
+            ),
+            // 自动滚动开关
+            IconButton(
+              icon: Icon(_autoScroll ? Icons.arrow_downward : Icons.arrow_downward_outlined),
+              onPressed: () {
+                setState(() {
+                  _autoScroll = !_autoScroll;
+                  if (_autoScroll) _scrollToBottom();
+                });
+              },
+              tooltip: _autoScroll ? '自动滚动: 开' : '自动滚动: 关',
+              color: _autoScroll ? const Color(0xFF3D8A5A) : Colors.grey,
+            ),
+            // 日志类型过滤
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.filter_list),
+              tooltip: '过滤',
+              onSelected: (value) {
+                setState(() {
+                  if (value == 'flutter') {
+                    _showFlutterLogs = !_showFlutterLogs;
+                  } else if (value == 'rust') {
+                    _showRustLogs = !_showRustLogs;
+                  }
+                });
+              },
+              itemBuilder: (context) => [
+                CheckedPopupMenuItem(
+                  value: 'flutter',
+                  checked: _showFlutterLogs,
+                  child: const Text('Flutter 日志'),
+                ),
+                CheckedPopupMenuItem(
+                  value: 'rust',
+                  checked: _showRustLogs,
+                  child: const Text('Rust 日志'),
+                ),
+              ],
             ),
           ],
         ),
-        body: Container(
-          color: const Color(0xFF1E1E1E),
-          padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            child: Text(
-              widget.logs,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                color: Color(0xFFD4D4D4),
-              ),
+        body: Column(
+          children: [
+            // 日期选择器
+            _buildDateSelector(),
+            // 日志内容
+            Expanded(
+              child: _buildLogsContent(),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _shareLogs() async {
-    try {
-      await Share.share(widget.logs, subject: 'LocalP2P Logs');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('分享失败: $e')));
-      }
+  Widget _buildDateSelector() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[300]!),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_today, size: 20, color: Color(0xFF3D8A5A)),
+          const SizedBox(width: 12),
+          const Text('选择日期:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedDate,
+                isExpanded: true,
+                items: _availableDates.map((date) {
+                  return DropdownMenuItem<String>(
+                    value: date,
+                    child: Text(date, style: const TextStyle(fontSize: 14)),
+                  );
+                }).toList(),
+                onChanged: (value) async {
+                  if (value != null && value != _selectedDate) {
+                    // 🔥 切换日期时，先停止实时监听
+                    _stopRealtimeWatch();
+
+                    setState(() {
+                      _selectedDate = value;
+                      _logLines.clear(); // 清空当前日志
+                    });
+
+                    // 加载新日期的日志
+                    await _loadInitialLogs();
+
+                    // 重新启动实时监听
+                    _startRealtimeWatch();
+                  }
+                },
+              ),
+            ),
+          ),
+          if (_availableDates.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: () async {
+                // 🔥 刷新时重新加载日志
+                _stopRealtimeWatch();
+                setState(() {
+                  _logLines.clear();
+                });
+                await _loadInitialLogs();
+                _startRealtimeWatch();
+              },
+              tooltip: '刷新',
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogsContent() {
+    // 🔥 过滤日志行
+    final filteredLogs = _logLines.where((logLine) {
+      if (logLine.type == LogType.flutter && !_showFlutterLogs) return false;
+      if (logLine.type == LogType.rust && !_showRustLogs) return false;
+      return true;
+    }).toList();
+
+    if (filteredLogs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.description_outlined, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              _availableDates.isEmpty ? '没有可用的日志文件' : '没有日志内容',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
     }
+
+    return Container(
+      color: const Color(0xFF1E1E1E),
+      padding: const EdgeInsets.all(16),
+      child: ListView.builder(
+        controller: _scrollController,
+        itemCount: filteredLogs.length,
+        itemBuilder: (context, index) {
+          final logLine = filteredLogs[index];
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              logLine.content,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: logLine.type == LogType.flutter
+                    ? const Color(0xFF7CB9E8) // Flutter 日志用蓝色
+                    : const Color(0xFFD4D4D4), // Rust 日志用灰色
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }
