@@ -7,6 +7,25 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
 
+/// 外部发现的设备信息
+class ExternalDiscovery {
+  final String peerId;
+  final String address;
+
+  const ExternalDiscovery({required this.peerId, required this.address});
+
+  @override
+  int get hashCode => peerId.hashCode ^ address.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExternalDiscovery &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          address == other.address;
+}
+
 /// P2P 事件（用于 FRB）
 class P2PBridgeEvent {
   /// 事件类型
@@ -19,6 +38,7 @@ class P2PBridgeEvent {
   /// 7 = MessageSent
   /// 8 = PeerTyping
   /// 9 = Log (Rust 日志)
+  /// 10 = ServiceStatusChanged (服务状态变化)
   final int eventType;
 
   /// 事件数据 (JSON 字符串)
@@ -46,8 +66,10 @@ class P2PBridgeNodeInfo {
   final String? nickname;
   final String? status;
   final String? avatarUrl;
+
   /// 节点地址列表（例如: ["/ip4/192.168.1.100/tcp/50001"]）
   final List<String> addresses;
+
   /// 协议版本（例如: "/localp2p/1.0.0"）
   final String protocolVersion;
 
@@ -105,4 +127,68 @@ class P2PBridgeNodeInfo {
           avatarUrl == other.avatarUrl &&
           addresses == other.addresses &&
           protocolVersion == other.protocolVersion;
+}
+
+/// 🔥 服务健康状态（用于 FRB）
+enum ServiceHealthJson { healthy, degraded, unhealthy }
+
+/// 🔥 服务状态（用于 FRB）
+class ServiceStatusJson {
+  final String name;
+  final ServiceHealthJson health;
+  final bool isRunning;
+  final String? message;
+
+  const ServiceStatusJson({
+    required this.name,
+    required this.health,
+    required this.isRunning,
+    this.message,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^ health.hashCode ^ isRunning.hashCode ^ message.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ServiceStatusJson &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          health == other.health &&
+          isRunning == other.isRunning &&
+          message == other.message;
+}
+
+/// 🔥 系统状态（用于 FRB）
+class SystemStatusJson {
+  final ServiceStatusJson mdnsService;
+  final ServiceStatusJson connectionService;
+  final BigInt connectedPeers;
+  final BigInt discoveredPeers;
+
+  const SystemStatusJson({
+    required this.mdnsService,
+    required this.connectionService,
+    required this.connectedPeers,
+    required this.discoveredPeers,
+  });
+
+  @override
+  int get hashCode =>
+      mdnsService.hashCode ^
+      connectionService.hashCode ^
+      connectedPeers.hashCode ^
+      discoveredPeers.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SystemStatusJson &&
+          runtimeType == other.runtimeType &&
+          mdnsService == other.mdnsService &&
+          connectionService == other.connectionService &&
+          connectedPeers == other.connectedPeers &&
+          discoveredPeers == other.discoveredPeers;
 }

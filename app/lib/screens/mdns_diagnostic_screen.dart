@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/mdns_diagnostic_service.dart';
 import '../services/log_service.dart';
-import '../widgets/device_card.dart';
 
 /// mDNS 诊断页面
 ///
@@ -70,7 +69,9 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFF3D8A5A),
+                    ),
                   ),
                   SizedBox(height: 16),
                   Text('正在诊断...'),
@@ -132,16 +133,16 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
                 Text(
                   title,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 if (message.isNotEmpty)
                   Text(
                     message,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: color,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: color),
                   ),
               ],
             ),
@@ -162,7 +163,11 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.info_outline, size: 20, color: Color(0xFF6D6C6A)),
+                const Icon(
+                  Icons.info_outline,
+                  size: 20,
+                  color: Color(0xFF6D6C6A),
+                ),
                 const SizedBox(width: 8),
                 Text('详细信息', style: Theme.of(context).textTheme.titleMedium),
               ],
@@ -171,7 +176,9 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
             ...results.entries.map((entry) {
               final isValueTrue = entry.value == true;
               final icon = isValueTrue ? Icons.check : Icons.close;
-              final iconColor = isValueTrue ? const Color(0xFF3D8A5A) : Colors.red;
+              final iconColor = isValueTrue
+                  ? const Color(0xFF3D8A5A)
+                  : Colors.red;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -186,15 +193,13 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
                         children: [
                           Text(
                             _formatKey(entry.key),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w500),
                           ),
                           Text(
                             entry.value.toString(),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
                           ),
                         ],
                       ),
@@ -202,7 +207,7 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),
@@ -223,7 +228,11 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.lightbulb_outline, size: 20, color: Colors.orange[700]),
+                Icon(
+                  Icons.lightbulb_outline,
+                  size: 20,
+                  color: Colors.orange[700],
+                ),
                 const SizedBox(width: 8),
                 Text('建议', style: Theme.of(context).textTheme.titleMedium),
               ],
@@ -249,14 +258,14 @@ class _MdnsDiagnosticScreenState extends State<MdnsDiagnosticScreen> {
                       child: Text(
                         entry.value,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.orange[900],
-                            ),
+                          color: Colors.orange[900],
+                        ),
                       ),
                     ),
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

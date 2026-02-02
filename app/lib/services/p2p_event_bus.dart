@@ -57,12 +57,12 @@ class P2PEventSubscription<T> {
   T? get currentState {
     if (_peerId != null && _type != null) {
       // 返回该 peerId 的该类型最新事件的 data
-      final event = _eventBus.getLatestEvent(_peerId!, _type!);
+      final event = _eventBus.getLatestEvent(_peerId, _type);
       return event as T?;
     }
     if (_peerId != null) {
       // 返回该 peerId 的最新事件
-      final event = _eventBus.getLatestEventByPeer(_peerId!);
+      final event = _eventBus.getLatestEventByPeer(_peerId);
       return event as T?;
     }
     return null;
@@ -85,14 +85,11 @@ class P2PEventSubscription<T> {
   Future<E> asFuture<E>([E? futureValue]) =>
       _subscription.asFuture(futureValue);
 
-  void onData(void Function(T)? handleData) =>
-      _subscription.onData(handleData);
+  void onData(void Function(T)? handleData) => _subscription.onData(handleData);
 
-  void onError(Function? handleError) =>
-      _subscription.onError(handleError);
+  void onError(Function? handleError) => _subscription.onError(handleError);
 
-  void onDone(void Function()? handleDone) =>
-      _subscription.onDone(handleDone);
+  void onDone(void Function()? handleDone) => _subscription.onDone(handleDone);
 }
 
 /// P2P 状态缓存
@@ -112,14 +109,17 @@ class _P2PStateCache {
 
   void removePeer(String peerId) {
     _latestByPeer.remove(peerId);
-    _latestByPeerAndType.removeWhere((key, value) => key.startsWith('$peerId:'));
+    _latestByPeerAndType.removeWhere(
+      (key, value) => key.startsWith('$peerId:'),
+    );
   }
 
   Map<String, dynamic> toJson() => {
-        'byPeer': _latestByPeer.map((k, v) => MapEntry(k, v.toString())),
-        'byPeerAndType': _latestByPeerAndType
-            .map((k, v) => MapEntry(k, v.toString())),
-      };
+    'byPeer': _latestByPeer.map((k, v) => MapEntry(k, v.toString())),
+    'byPeerAndType': _latestByPeerAndType.map(
+      (k, v) => MapEntry(k, v.toString()),
+    ),
+  };
 }
 
 /// 增强的 P2P 事件总线（带状态缓存）
@@ -132,8 +132,7 @@ class P2PEventBus {
   }
 
   static P2PEventBus? _instance;
-  static P2PEventBus get instance =>
-      _instance ??= P2PEventBus._();
+  static P2PEventBus get instance => _instance ??= P2PEventBus._();
 
   final Logger _log = Logger();
   final _cache = _P2PStateCache();
@@ -149,11 +148,7 @@ class P2PEventBus {
     required String type,
     Map<String, dynamic>? data,
   }) {
-    final event = P2PEvent(
-      peerId: peerId,
-      type: type,
-      data: data,
-    );
+    final event = P2PEvent(peerId: peerId, type: type, data: data);
     _log.d('[EventBus] Emitting: $event');
     _controller.add(event);
   }
@@ -215,16 +210,13 @@ class P2PEventBus {
   /// print('Current: ${sub.currentState}');
   /// print('Is online: ${sub.isOnline}');
   /// ```
-  P2PEventSubscription<P2PEvent> onWithLatest({
-    String? peerId,
-    String? type,
-  }) {
+  P2PEventSubscription<P2PEvent> onWithLatest({String? peerId, String? type}) {
     // 创建流：先发送当前状态，然后发送新事件
     final latestEvent = (peerId != null && type != null)
         ? getLatestEvent(peerId, type)
         : (peerId != null)
-            ? getLatestEventByPeer(peerId)
-            : null;
+        ? getLatestEventByPeer(peerId)
+        : null;
 
     final baseStream = on(peerId: peerId, type: type);
 
@@ -243,12 +235,7 @@ class P2PEventBus {
 
     final subscription = stream.listen(null);
 
-    return P2PEventSubscription<P2PEvent>(
-      subscription,
-      peerId,
-      type,
-      this,
-    );
+    return P2PEventSubscription<P2PEvent>(subscription, peerId, type, this);
   }
 
   /// 监听并自动处理（带回调）
@@ -306,15 +293,17 @@ class P2PEventBus {
       latestEvents.add(null);
       receivedCount.add(0);
 
-      subscriptions.add(streams[i].listen((event) {
-        latestEvents[i] = event;
-        receivedCount[i]++;
+      subscriptions.add(
+        streams[i].listen((event) {
+          latestEvents[i] = event;
+          receivedCount[i]++;
 
-        // 当所有流都至少收到一个事件后，发送合并事件
-        if (receivedCount.every((count) => count > 0)) {
-          controller.add(latestEvents.whereType<P2PEvent>().toList());
-        }
-      }));
+          // 当所有流都至少收到一个事件后，发送合并事件
+          if (receivedCount.every((count) => count > 0)) {
+            controller.add(latestEvents.whereType<P2PEvent>().toList());
+          }
+        }),
+      );
     }
 
     // 当所有订阅取消时关闭控制器
@@ -344,10 +333,12 @@ class P2PEventBus {
       on(peerId: peerId, type: 'typing');
   Stream<P2PEvent> onInfoChanged(String peerId) =>
       on(peerId: peerId, type: 'info_changed');
-  Stream<P2PEvent> onNicknameChanged(String peerId) =>
-      onInfoChanged(peerId).where((e) => e.getData<String>('field') == 'nickname');
-  Stream<P2PEvent> onStatusChanged(String peerId) =>
-      onInfoChanged(peerId).where((e) => e.getData<String>('field') == 'status');
+  Stream<P2PEvent> onNicknameChanged(String peerId) => onInfoChanged(
+    peerId,
+  ).where((e) => e.getData<String>('field') == 'nickname');
+  Stream<P2PEvent> onStatusChanged(String peerId) => onInfoChanged(
+    peerId,
+  ).where((e) => e.getData<String>('field') == 'status');
 
   Stream<P2PEvent> get onAnyPeerOnline => onType('online');
   Stream<P2PEvent> get onAnyPeerOffline => onType('offline');

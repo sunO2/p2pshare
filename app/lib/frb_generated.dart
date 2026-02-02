@@ -11,6 +11,7 @@ import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'third_party/localp2p_ffi/bridge.dart';
+import 'types.dart';
 
 /// Main entrypoint of the Rust API
 class P2PBridge
@@ -66,7 +67,7 @@ class P2PBridge
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -747225674;
+  int get rustContentHash => 1497607120;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -84,11 +85,31 @@ abstract class P2PBridgeApi extends BaseApi {
 
   void localp2PFfiBridgeP2PCleanup();
 
+  Future<void> localp2PFfiBridgeP2PClearConversation({
+    required String conversationId,
+  });
+
+  Future<void> localp2PFfiBridgeP2PDeleteMessage({required String messageId});
+
+  Future<List<ConversationJson>> localp2PFfiBridgeP2PGetConversations();
+
   String localp2PFfiBridgeP2PGetDeviceName();
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetDevices();
 
+  Future<FileInfoJson> localp2PFfiBridgeP2PGetFileInfo({
+    required String fileId,
+  });
+
   String localp2PFfiBridgeP2PGetLocalPeerId();
+
+  Future<List<MessageJson>> localp2PFfiBridgeP2PGetMessagesByPeer({
+    required String peerId,
+    required int limit,
+    PlatformInt64? beforeTimestamp,
+  });
+
+  SystemStatusJson localp2PFfiBridgeP2PGetSystemStatus();
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes();
 
@@ -103,15 +124,47 @@ abstract class P2PBridgeApi extends BaseApi {
 
   bool localp2PFfiBridgeP2PIsRunning();
 
+  Future<void> localp2PFfiBridgeP2PMarkMessagesRead({
+    required String conversationId,
+    required List<String> messageIds,
+  });
+
   List<P2PBridgeEvent> localp2PFfiBridgeP2PPollEvents();
 
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PRefreshDevices();
 
+  Future<String> localp2PFfiBridgeP2PRegisterFile({
+    required String fileName,
+    required PlatformInt64 fileSize,
+    required String mimeType,
+    required String localPath,
+  });
+
+  void localp2PFfiBridgeP2PReportExternalDeviceLost({required String peerId});
+
+  void localp2PFfiBridgeP2PReportExternalDiscoveries({
+    required List<ExternalDiscovery> discoveries,
+  });
+
+  void localp2PFfiBridgeP2PReportExternalDiscovery({
+    required String peerId,
+    required String address,
+  });
+
   Future<void> localp2PFfiBridgeP2PRestartDiscovery();
+
+  Future<void> localp2PFfiBridgeP2PRevokeMessage({required String messageId});
 
   Future<void> localp2PFfiBridgeP2PSendMessage({
     required String targetPeerId,
     required String message,
+  });
+
+  Future<String> localp2PFfiBridgeP2PSendMessageEx({
+    required String targetPeerId,
+    required int messageType,
+    required String content,
+    String? extra,
   });
 
   Stream<P2PBridgeEvent> localp2PFfiBridgeP2PSetEventStream();
@@ -209,12 +262,103 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_cleanup", argNames: []);
 
   @override
+  Future<void> localp2PFfiBridgeP2PClearConversation({
+    required String conversationId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(conversationId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PClearConversationConstMeta,
+        argValues: [conversationId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PClearConversationConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_clear_conversation",
+        argNames: ["conversationId"],
+      );
+
+  @override
+  Future<void> localp2PFfiBridgeP2PDeleteMessage({required String messageId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(messageId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PDeleteMessageConstMeta,
+        argValues: [messageId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PDeleteMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_delete_message",
+        argNames: ["messageId"],
+      );
+
+  @override
+  Future<List<ConversationJson>> localp2PFfiBridgeP2PGetConversations() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_conversation_json,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PGetConversationsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PGetConversationsConstMeta =>
+      const TaskConstMeta(debugName: "p2p_get_conversations", argNames: []);
+
+  @override
   String localp2PFfiBridgeP2PGetDeviceName() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -236,7 +380,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
@@ -253,12 +397,42 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_get_devices", argNames: []);
 
   @override
+  Future<FileInfoJson> localp2PFfiBridgeP2PGetFileInfo({
+    required String fileId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(fileId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_file_info_json,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PGetFileInfoConstMeta,
+        argValues: [fileId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PGetFileInfoConstMeta =>
+      const TaskConstMeta(debugName: "p2p_get_file_info", argNames: ["fileId"]);
+
+  @override
   String localp2PFfiBridgeP2PGetLocalPeerId() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -275,12 +449,71 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_get_local_peer_id", argNames: []);
 
   @override
+  Future<List<MessageJson>> localp2PFfiBridgeP2PGetMessagesByPeer({
+    required String peerId,
+    required int limit,
+    PlatformInt64? beforeTimestamp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(peerId, serializer);
+          sse_encode_i_32(limit, serializer);
+          sse_encode_opt_box_autoadd_i_64(beforeTimestamp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_message_json,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PGetMessagesByPeerConstMeta,
+        argValues: [peerId, limit, beforeTimestamp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PGetMessagesByPeerConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_get_messages_by_peer",
+        argNames: ["peerId", "limit", "beforeTimestamp"],
+      );
+
+  @override
+  SystemStatusJson localp2PFfiBridgeP2PGetSystemStatus() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_system_status_json,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PGetSystemStatusConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PGetSystemStatusConstMeta =>
+      const TaskConstMeta(debugName: "p2p_get_system_status", argNames: []);
+
+  @override
   List<P2PBridgeNodeInfo> localp2PFfiBridgeP2PGetVerifiedNodes() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
@@ -307,7 +540,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(deviceName, serializer);
           sse_encode_String(identityPath, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -331,7 +564,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -356,7 +589,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -378,7 +611,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -395,12 +628,47 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_is_running", argNames: []);
 
   @override
+  Future<void> localp2PFfiBridgeP2PMarkMessagesRead({
+    required String conversationId,
+    required List<String> messageIds,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(conversationId, serializer);
+          sse_encode_list_String(messageIds, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PMarkMessagesReadConstMeta,
+        argValues: [conversationId, messageIds],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PMarkMessagesReadConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_mark_messages_read",
+        argNames: ["conversationId", "messageIds"],
+      );
+
+  @override
   List<P2PBridgeEvent> localp2PFfiBridgeP2PPollEvents() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_event,
@@ -422,7 +690,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_p_2_p_bridge_node_info,
@@ -439,6 +707,129 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_refresh_devices", argNames: []);
 
   @override
+  Future<String> localp2PFfiBridgeP2PRegisterFile({
+    required String fileName,
+    required PlatformInt64 fileSize,
+    required String mimeType,
+    required String localPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(fileName, serializer);
+          sse_encode_i_64(fileSize, serializer);
+          sse_encode_String(mimeType, serializer);
+          sse_encode_String(localPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 20,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PRegisterFileConstMeta,
+        argValues: [fileName, fileSize, mimeType, localPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PRegisterFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_register_file",
+        argNames: ["fileName", "fileSize", "mimeType", "localPath"],
+      );
+
+  @override
+  void localp2PFfiBridgeP2PReportExternalDeviceLost({required String peerId}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(peerId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PReportExternalDeviceLostConstMeta,
+        argValues: [peerId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PReportExternalDeviceLostConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_report_external_device_lost",
+        argNames: ["peerId"],
+      );
+
+  @override
+  void localp2PFfiBridgeP2PReportExternalDiscoveries({
+    required List<ExternalDiscovery> discoveries,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_external_discovery(discoveries, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PReportExternalDiscoveriesConstMeta,
+        argValues: [discoveries],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PReportExternalDiscoveriesConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_report_external_discoveries",
+        argNames: ["discoveries"],
+      );
+
+  @override
+  void localp2PFfiBridgeP2PReportExternalDiscovery({
+    required String peerId,
+    required String address,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(peerId, serializer);
+          sse_encode_String(address, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PReportExternalDiscoveryConstMeta,
+        argValues: [peerId, address],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PReportExternalDiscoveryConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_report_external_discovery",
+        argNames: ["peerId", "address"],
+      );
+
+  @override
   Future<void> localp2PFfiBridgeP2PRestartDiscovery() {
     return handler.executeNormal(
       NormalTask(
@@ -447,7 +838,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 24,
             port: port_,
           );
         },
@@ -466,6 +857,37 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       const TaskConstMeta(debugName: "p2p_restart_discovery", argNames: []);
 
   @override
+  Future<void> localp2PFfiBridgeP2PRevokeMessage({required String messageId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(messageId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 25,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PRevokeMessageConstMeta,
+        argValues: [messageId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PRevokeMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_revoke_message",
+        argNames: ["messageId"],
+      );
+
+  @override
   Future<void> localp2PFfiBridgeP2PSendMessage({
     required String targetPeerId,
     required String message,
@@ -479,7 +901,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 26,
             port: port_,
           );
         },
@@ -501,6 +923,45 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       );
 
   @override
+  Future<String> localp2PFfiBridgeP2PSendMessageEx({
+    required String targetPeerId,
+    required int messageType,
+    required String content,
+    String? extra,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(targetPeerId, serializer);
+          sse_encode_i_32(messageType, serializer);
+          sse_encode_String(content, serializer);
+          sse_encode_opt_String(extra, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kLocalp2PFfiBridgeP2PSendMessageExConstMeta,
+        argValues: [targetPeerId, messageType, content, extra],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kLocalp2PFfiBridgeP2PSendMessageExConstMeta =>
+      const TaskConstMeta(
+        debugName: "p2p_send_message_ex",
+        argNames: ["targetPeerId", "messageType", "content", "extra"],
+      );
+
+  @override
   Stream<P2PBridgeEvent> localp2PFfiBridgeP2PSetEventStream() {
     final streamSink = RustStreamSink<P2PBridgeEvent>();
     handler.executeSync(
@@ -508,7 +969,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_StreamSink_p_2_p_bridge_event_Sse(streamSink, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -534,7 +995,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -556,7 +1017,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -578,7 +1039,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -610,7 +1071,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 32,
             port: port_,
           );
         },
@@ -648,7 +1109,7 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 33,
             port: port_,
           );
         },
@@ -722,15 +1183,105 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   }
 
   @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
+  }
+
+  @protected
+  ConversationJson dco_decode_conversation_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return ConversationJson(
+      id: dco_decode_String(arr[0]),
+      peerId: dco_decode_String(arr[1]),
+      peerName: dco_decode_opt_String(arr[2]),
+      peerAvatar: dco_decode_opt_String(arr[3]),
+      lastMessage: dco_decode_opt_String(arr[4]),
+      lastMessageType: dco_decode_i_32(arr[5]),
+      lastMessageTime: dco_decode_opt_box_autoadd_i_64(arr[6]),
+      unreadCount: dco_decode_i_32(arr[7]),
+      isPinned: dco_decode_bool(arr[8]),
+      isMuted: dco_decode_bool(arr[9]),
+    );
+  }
+
+  @protected
+  ExternalDiscovery dco_decode_external_discovery(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ExternalDiscovery(
+      peerId: dco_decode_String(arr[0]),
+      address: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  FileInfoJson dco_decode_file_info_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    return FileInfoJson(
+      id: dco_decode_String(arr[0]),
+      messageId: dco_decode_String(arr[1]),
+      fileName: dco_decode_String(arr[2]),
+      fileSize: dco_decode_i_64(arr[3]),
+      mimeType: dco_decode_String(arr[4]),
+      localPath: dco_decode_opt_String(arr[5]),
+      thumbnailPath: dco_decode_opt_String(arr[6]),
+      duration: dco_decode_opt_box_autoadd_i_32(arr[7]),
+      width: dco_decode_opt_box_autoadd_i_32(arr[8]),
+      height: dco_decode_opt_box_autoadd_i_32(arr[9]),
+      transferStatus: dco_decode_i_32(arr[10]),
+      transferProgress: dco_decode_i_32(arr[11]),
+    );
+  }
+
+  @protected
   int dco_decode_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
   }
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<ConversationJson> dco_decode_list_conversation_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_conversation_json).toList();
+  }
+
+  @protected
+  List<ExternalDiscovery> dco_decode_list_external_discovery(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_external_discovery).toList();
+  }
+
+  @protected
+  List<MessageJson> dco_decode_list_message_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_message_json).toList();
   }
 
   @protected
@@ -754,9 +1305,41 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   }
 
   @protected
+  MessageJson dco_decode_message_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return MessageJson(
+      id: dco_decode_String(arr[0]),
+      conversationId: dco_decode_String(arr[1]),
+      senderPeerId: dco_decode_String(arr[2]),
+      messageType: dco_decode_i_32(arr[3]),
+      content: dco_decode_String(arr[4]),
+      timestamp: dco_decode_i_64(arr[5]),
+      replyToId: dco_decode_opt_String(arr[6]),
+      status: dco_decode_i_32(arr[7]),
+      isDeleted: dco_decode_bool(arr[8]),
+      isRevoked: dco_decode_bool(arr[9]),
+    );
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
   }
 
   @protected
@@ -775,8 +1358,8 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   P2PBridgeNodeInfo dco_decode_p_2_p_bridge_node_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return P2PBridgeNodeInfo(
       peerId: dco_decode_String(arr[0]),
       displayName: dco_decode_String(arr[1]),
@@ -784,6 +1367,42 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       nickname: dco_decode_opt_String(arr[3]),
       status: dco_decode_opt_String(arr[4]),
       avatarUrl: dco_decode_opt_String(arr[5]),
+      addresses: dco_decode_list_String(arr[6]),
+      protocolVersion: dco_decode_String(arr[7]),
+    );
+  }
+
+  @protected
+  ServiceHealthJson dco_decode_service_health_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ServiceHealthJson.values[raw as int];
+  }
+
+  @protected
+  ServiceStatusJson dco_decode_service_status_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ServiceStatusJson(
+      name: dco_decode_String(arr[0]),
+      health: dco_decode_service_health_json(arr[1]),
+      isRunning: dco_decode_bool(arr[2]),
+      message: dco_decode_opt_String(arr[3]),
+    );
+  }
+
+  @protected
+  SystemStatusJson dco_decode_system_status_json(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return SystemStatusJson(
+      mdnsService: dco_decode_service_status_json(arr[0]),
+      connectionService: dco_decode_service_status_json(arr[1]),
+      connectedPeers: dco_decode_usize(arr[2]),
+      discoveredPeers: dco_decode_usize(arr[3]),
     );
   }
 
@@ -858,9 +1477,95 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   }
 
   @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_32(deserializer));
+  }
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
+  ConversationJson sse_decode_conversation_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_peerId = sse_decode_String(deserializer);
+    var var_peerName = sse_decode_opt_String(deserializer);
+    var var_peerAvatar = sse_decode_opt_String(deserializer);
+    var var_lastMessage = sse_decode_opt_String(deserializer);
+    var var_lastMessageType = sse_decode_i_32(deserializer);
+    var var_lastMessageTime = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_unreadCount = sse_decode_i_32(deserializer);
+    var var_isPinned = sse_decode_bool(deserializer);
+    var var_isMuted = sse_decode_bool(deserializer);
+    return ConversationJson(
+      id: var_id,
+      peerId: var_peerId,
+      peerName: var_peerName,
+      peerAvatar: var_peerAvatar,
+      lastMessage: var_lastMessage,
+      lastMessageType: var_lastMessageType,
+      lastMessageTime: var_lastMessageTime,
+      unreadCount: var_unreadCount,
+      isPinned: var_isPinned,
+      isMuted: var_isMuted,
+    );
+  }
+
+  @protected
+  ExternalDiscovery sse_decode_external_discovery(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_peerId = sse_decode_String(deserializer);
+    var var_address = sse_decode_String(deserializer);
+    return ExternalDiscovery(peerId: var_peerId, address: var_address);
+  }
+
+  @protected
+  FileInfoJson sse_decode_file_info_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_messageId = sse_decode_String(deserializer);
+    var var_fileName = sse_decode_String(deserializer);
+    var var_fileSize = sse_decode_i_64(deserializer);
+    var var_mimeType = sse_decode_String(deserializer);
+    var var_localPath = sse_decode_opt_String(deserializer);
+    var var_thumbnailPath = sse_decode_opt_String(deserializer);
+    var var_duration = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_width = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_height = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_transferStatus = sse_decode_i_32(deserializer);
+    var var_transferProgress = sse_decode_i_32(deserializer);
+    return FileInfoJson(
+      id: var_id,
+      messageId: var_messageId,
+      fileName: var_fileName,
+      fileSize: var_fileSize,
+      mimeType: var_mimeType,
+      localPath: var_localPath,
+      thumbnailPath: var_thumbnailPath,
+      duration: var_duration,
+      width: var_width,
+      height: var_height,
+      transferStatus: var_transferStatus,
+      transferProgress: var_transferProgress,
+    );
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
   }
 
   @protected
@@ -871,6 +1576,46 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ConversationJson> sse_decode_list_conversation_json(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ConversationJson>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_conversation_json(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ExternalDiscovery> sse_decode_list_external_discovery(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ExternalDiscovery>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_external_discovery(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<MessageJson> sse_decode_list_message_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MessageJson>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_message_json(deserializer));
     }
     return ans_;
   }
@@ -911,11 +1656,60 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   }
 
   @protected
+  MessageJson sse_decode_message_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_conversationId = sse_decode_String(deserializer);
+    var var_senderPeerId = sse_decode_String(deserializer);
+    var var_messageType = sse_decode_i_32(deserializer);
+    var var_content = sse_decode_String(deserializer);
+    var var_timestamp = sse_decode_i_64(deserializer);
+    var var_replyToId = sse_decode_opt_String(deserializer);
+    var var_status = sse_decode_i_32(deserializer);
+    var var_isDeleted = sse_decode_bool(deserializer);
+    var var_isRevoked = sse_decode_bool(deserializer);
+    return MessageJson(
+      id: var_id,
+      conversationId: var_conversationId,
+      senderPeerId: var_senderPeerId,
+      messageType: var_messageType,
+      content: var_content,
+      timestamp: var_timestamp,
+      replyToId: var_replyToId,
+      status: var_status,
+      isDeleted: var_isDeleted,
+      isRevoked: var_isRevoked,
+    );
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
     } else {
       return null;
     }
@@ -940,6 +1734,8 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
     var var_nickname = sse_decode_opt_String(deserializer);
     var var_status = sse_decode_opt_String(deserializer);
     var var_avatarUrl = sse_decode_opt_String(deserializer);
+    var var_addresses = sse_decode_list_String(deserializer);
+    var var_protocolVersion = sse_decode_String(deserializer);
     return P2PBridgeNodeInfo(
       peerId: var_peerId,
       displayName: var_displayName,
@@ -947,6 +1743,49 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
       nickname: var_nickname,
       status: var_status,
       avatarUrl: var_avatarUrl,
+      addresses: var_addresses,
+      protocolVersion: var_protocolVersion,
+    );
+  }
+
+  @protected
+  ServiceHealthJson sse_decode_service_health_json(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ServiceHealthJson.values[inner];
+  }
+
+  @protected
+  ServiceStatusJson sse_decode_service_status_json(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_health = sse_decode_service_health_json(deserializer);
+    var var_isRunning = sse_decode_bool(deserializer);
+    var var_message = sse_decode_opt_String(deserializer);
+    return ServiceStatusJson(
+      name: var_name,
+      health: var_health,
+      isRunning: var_isRunning,
+      message: var_message,
+    );
+  }
+
+  @protected
+  SystemStatusJson sse_decode_system_status_json(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_mdnsService = sse_decode_service_status_json(deserializer);
+    var var_connectionService = sse_decode_service_status_json(deserializer);
+    var var_connectedPeers = sse_decode_usize(deserializer);
+    var var_discoveredPeers = sse_decode_usize(deserializer);
+    return SystemStatusJson(
+      mdnsService: var_mdnsService,
+      connectionService: var_connectionService,
+      connectedPeers: var_connectedPeers,
+      discoveredPeers: var_discoveredPeers,
     );
   }
 
@@ -1032,9 +1871,75 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   }
 
   @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_conversation_json(
+    ConversationJson self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.peerId, serializer);
+    sse_encode_opt_String(self.peerName, serializer);
+    sse_encode_opt_String(self.peerAvatar, serializer);
+    sse_encode_opt_String(self.lastMessage, serializer);
+    sse_encode_i_32(self.lastMessageType, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.lastMessageTime, serializer);
+    sse_encode_i_32(self.unreadCount, serializer);
+    sse_encode_bool(self.isPinned, serializer);
+    sse_encode_bool(self.isMuted, serializer);
+  }
+
+  @protected
+  void sse_encode_external_discovery(
+    ExternalDiscovery self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.peerId, serializer);
+    sse_encode_String(self.address, serializer);
+  }
+
+  @protected
+  void sse_encode_file_info_json(FileInfoJson self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.messageId, serializer);
+    sse_encode_String(self.fileName, serializer);
+    sse_encode_i_64(self.fileSize, serializer);
+    sse_encode_String(self.mimeType, serializer);
+    sse_encode_opt_String(self.localPath, serializer);
+    sse_encode_opt_String(self.thumbnailPath, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.duration, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.width, serializer);
+    sse_encode_opt_box_autoadd_i_32(self.height, serializer);
+    sse_encode_i_32(self.transferStatus, serializer);
+    sse_encode_i_32(self.transferProgress, serializer);
+  }
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
   }
 
   @protected
@@ -1043,6 +1948,42 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_conversation_json(
+    List<ConversationJson> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_conversation_json(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_external_discovery(
+    List<ExternalDiscovery> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_external_discovery(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_message_json(
+    List<MessageJson> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_message_json(item, serializer);
     }
   }
 
@@ -1081,12 +2022,50 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
   }
 
   @protected
+  void sse_encode_message_json(MessageJson self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.conversationId, serializer);
+    sse_encode_String(self.senderPeerId, serializer);
+    sse_encode_i_32(self.messageType, serializer);
+    sse_encode_String(self.content, serializer);
+    sse_encode_i_64(self.timestamp, serializer);
+    sse_encode_opt_String(self.replyToId, serializer);
+    sse_encode_i_32(self.status, serializer);
+    sse_encode_bool(self.isDeleted, serializer);
+    sse_encode_bool(self.isRevoked, serializer);
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
     }
   }
 
@@ -1112,6 +2091,41 @@ class P2PBridgeApiImpl extends P2PBridgeApiImplPlatform
     sse_encode_opt_String(self.nickname, serializer);
     sse_encode_opt_String(self.status, serializer);
     sse_encode_opt_String(self.avatarUrl, serializer);
+    sse_encode_list_String(self.addresses, serializer);
+    sse_encode_String(self.protocolVersion, serializer);
+  }
+
+  @protected
+  void sse_encode_service_health_json(
+    ServiceHealthJson self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_service_status_json(
+    ServiceStatusJson self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_service_health_json(self.health, serializer);
+    sse_encode_bool(self.isRunning, serializer);
+    sse_encode_opt_String(self.message, serializer);
+  }
+
+  @protected
+  void sse_encode_system_status_json(
+    SystemStatusJson self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_service_status_json(self.mdnsService, serializer);
+    sse_encode_service_status_json(self.connectionService, serializer);
+    sse_encode_usize(self.connectedPeers, serializer);
+    sse_encode_usize(self.discoveredPeers, serializer);
   }
 
   @protected

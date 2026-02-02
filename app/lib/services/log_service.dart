@@ -17,7 +17,7 @@ class LogService {
   late Logger _logger;
   late File _logFile;
   late IOSink _logSink;
-  late _FileLogOutput _logOutput;  // 保存 output 引用，用于更新 sink
+  late _FileLogOutput _logOutput; // 保存 output 引用，用于更新 sink
   final _logsController = StreamController<String>.broadcast();
   bool _initialized = false;
 

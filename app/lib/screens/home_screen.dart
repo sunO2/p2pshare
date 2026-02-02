@@ -70,11 +70,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
-        // 应用恢复 - 确保 UI 同步状态并重启事件流
-        debugPrint('应用恢复，检查 P2P 状态并重启事件流...');
+        // 应用恢复 - 检查 mDNS 服务状态
+        debugPrint('应用恢复，检查 mDNS 服务状态...');
+        _checkMdnsHealth();
+        // 同步 UI 状态并重启事件流
         _syncP2PState();
-        // 重启事件流订阅（修复后台恢复后无法接收事件的问题）
-        // 🔄 改为异步：使用 async/await 避免阻塞 UI
         P2PManager.instance.resumeEventStream();
         break;
       case AppLifecycleState.paused:
@@ -114,6 +114,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       debugPrint('同步 P2P 状态失败: $e');
+    }
+  }
+
+  /// 检查 mDNS 服务健康状态（从后台恢复时调用）
+  Future<void> _checkMdnsHealth() async {
+    try {
+      if (!P2PManager.instance.isInitialized) {
+        debugPrint('mDNS 健康检查: P2P 未初始化，跳过');
+        return;
+      }
+
+      final status = P2PManager.instance.getSystemStatus();
+      final mdnsHealth = status.mdnsService.health;
+      final mdnsRunning = status.mdnsService.isRunning;
+      final mdnsMessage = status.mdnsService.message;
+
+      debugPrint('mDNS 健康检查结果:');
+      debugPrint('  运行状态: $mdnsRunning');
+      debugPrint('  健康状态: $mdnsHealth');
+      debugPrint('  消息: $mdnsMessage');
+
+      // 🔥 从后台恢复时，总是重启 mDNS 浏览服务
+      // 这样可以确保 mDNS 浏览服务正常工作，避免长时间后台后无法发现设备
+      debugPrint('🔄 从后台恢复，重启 mDNS 浏览服务...');
+      try {
+        await P2PManager.instance.restartDiscovery();
+        debugPrint('✓ mDNS 浏览服务重启完成');
+      } catch (e) {
+        debugPrint('✗ mDNS 浏览服务重启失败: $e');
+      }
+    } catch (e) {
+      debugPrint('mDNS 健康检查失败: $e');
     }
   }
 

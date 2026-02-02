@@ -17,8 +17,7 @@ class ChatBubbleSent extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 240),
           decoration: const BoxDecoration(
             color: Color(0xFF95EC69), // 微信绿色
-            borderRadius: BorderRadius.all(Radius.circular(8),
-            ),
+            borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           margin: const EdgeInsets.only(right: 8),

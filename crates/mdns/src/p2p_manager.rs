@@ -16,7 +16,7 @@ use super::{
     managed_discovery::{ManagedDiscovery, HealthCheckConfig},
     chat::traits::ChatExtension,
     MdnsError,
-    events::DiscoveryEvent,
+    events::{DiscoveryEvent, ServiceHealth, ServiceStatus},
 };
 use libp2p::{identity::Keypair, PeerId, Multiaddr};
 use std::sync::Arc;
@@ -164,6 +164,18 @@ pub struct P2PManager {
     /// 连接服务是否正在运行
     connection_running: bool,
 
+    /// 🔥 跟踪 mDNS 服务状态（缓存最新状态）
+    mdns_service_status: super::events::ServiceStatus,
+
+    /// 🔥 跟踪连接服务状态（缓存最新状态）
+    connection_service_status: super::events::ServiceStatus,
+
+    /// 🔥 mDNS 最后一次发现设备的时间
+    mdns_last_discovery: std::time::Instant,
+
+    /// 🔥 mDNS 发现设备总数（累计）
+    mdns_discovery_count: usize,
+
     /// 聊天数据库路径（可选）
     chat_db_path: Option<PathBuf>,
 }
@@ -206,6 +218,14 @@ impl P2PManager {
 
         tracing::info!("✓ P2P 管理器初始化成功");
 
+        // ServiceHealth and ServiceStatus are imported at the top of the file
+
+        // 初始化服务状态（默认未运行）
+        let initial_mdns_status = ServiceStatus::new("mDNS Service", ServiceHealth::Unhealthy, false)
+            .with_message("服务未启动");
+        let initial_connection_status = ServiceStatus::new("Connection Service", ServiceHealth::Unhealthy, false)
+            .with_message("服务未启动");
+
         Ok(Self {
             identity,
             peer_id,
@@ -220,6 +240,10 @@ impl P2PManager {
             connection_task: None,
             mdns_running: false,
             connection_running: false,
+            mdns_service_status: initial_mdns_status,
+            connection_service_status: initial_connection_status,
+            mdns_last_discovery: std::time::Instant::now(),
+            mdns_discovery_count: 0,
             chat_db_path: config.chat_db_path,
         })
     }
@@ -335,6 +359,9 @@ impl P2PManager {
         })?;
         tracing::debug!("✓ [连接服务] 发现事件接收器已获取");
 
+        // 🔥 克隆 discovery_tx，用于 ConnectionService 通知 P2PManager
+        let discovery_tx = self.discovery_tx.clone();
+
         tracing::debug!("📝 [连接服务] 创建 ConnectionService 实例...");
         send_log("INFO", "p2p_manager", "  └─ 创建 ConnectionService...".to_string());
 
@@ -357,6 +384,7 @@ impl P2PManager {
             self.node_manager.clone(),  // 传递共享的 NodeManager
             self.local_user_info.clone(),
             discovery_rx,
+            discovery_tx,  // 🔥 传递 discovery_tx
             connection_config,
         ).await.map_err(|e| {
             tracing::error!("❌ [连接服务] 创建 ConnectionService 失败: {:?}", e);
@@ -698,37 +726,177 @@ impl P2PManager {
         Ok(())
     }
 
+    /// 🔥 更新 mDNS 发现设备追踪
+    ///
+    /// 当有新设备被发现时调用此方法，更新最后发现时间
+    pub fn update_discovery_tracking(&mut self) {
+        self.mdns_last_discovery = std::time::Instant::now();
+        self.mdns_discovery_count += 1;
+        tracing::debug!("📊 mDNS 发现追踪更新 | 总计: {} | 最后发现: now", self.mdns_discovery_count);
+    }
+
+    /// 🔥 发送服务状态到 Flutter（通过日志回调）
+    ///
+    /// 将当前系统状态通过 SERVICE_STATUS 事件发送到 Flutter
+    pub fn send_status_to_flutter(&self) {
+        if let Ok(status) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // 使用阻塞方式获取状态（在异步上下文中）
+            use tokio::runtime::Runtime;
+            let rt = Runtime::new().ok()?;
+            rt.block_on(self.get_system_status()).ok()
+        })) {
+            if let Some(system_status) = status {
+                // 发送 mDNS 状态
+                let mdns_json = serde_json::json!({
+                    "service": "mDNS",
+                    "name": system_status.mdns_service.name,
+                    "health": match system_status.mdns_service.health {
+                        super::events::ServiceHealth::Healthy => "healthy",
+                        super::events::ServiceHealth::Degraded => "degraded",
+                        super::events::ServiceHealth::Unhealthy => "unhealthy",
+                    },
+                    "is_running": system_status.mdns_service.is_running,
+                    "message": system_status.mdns_service.message,
+                });
+                send_log("SERVICE_STATUS", "p2p_manager", mdns_json.to_string());
+
+                // 发送 Connection 状态
+                let connection_json = serde_json::json!({
+                    "service": "Connection",
+                    "name": system_status.connection_service.name,
+                    "health": match system_status.connection_service.health {
+                        super::events::ServiceHealth::Healthy => "healthy",
+                        super::events::ServiceHealth::Degraded => "degraded",
+                        super::events::ServiceHealth::Unhealthy => "unhealthy",
+                    },
+                    "is_running": system_status.connection_service.is_running,
+                    "message": system_status.connection_service.message,
+                });
+                send_log("SERVICE_STATUS", "p2p_manager", connection_json.to_string());
+            }
+        }
+    }
+
     /// 🔥 获取系统状态
     ///
     /// 返回当前所有服务的运行状态和健康状态
+    /// 使用跟踪的实际状态，而不是简单检查布尔值
     pub async fn get_system_status(&self) -> Result<super::events::SystemStatus, MdnsError> {
-        use super::events::{ServiceHealth, ServiceStatus};
+        // ServiceHealth and ServiceStatus are imported at the top of the file
 
         // 获取在线和离线节点数量
         let online_nodes = self.node_manager.list_online_nodes().await;
         let all_nodes = self.node_manager.list_all_nodes().await;
 
-        // 构建 mDNS 服务状态
-        let mdns_status = if self.mdns_running {
-            ServiceStatus::new("mDNS Service", ServiceHealth::Healthy, true)
-                .with_message("服务运行中")
-        } else {
-            ServiceStatus::new("mDNS Service", ServiceHealth::Unhealthy, false)
-                .with_message("服务未运行")
-        };
-
-        // 构建连接服务状态
-        let connection_status = if self.connection_running {
-            ServiceStatus::new("Connection Service", ServiceHealth::Healthy, true)
-                .with_message("服务运行中")
-        } else {
-            ServiceStatus::new("Connection Service", ServiceHealth::Unhealthy, false)
-                .with_message("服务未运行")
-        };
+        // 🔥 使用跟踪的状态，但根据实际情况更新健康指标
+        let mdns_status = self._compute_mdns_status(&online_nodes, &all_nodes);
+        let connection_status = self._compute_connection_status(&online_nodes);
 
         Ok(super::events::SystemStatus::new(mdns_status, connection_status)
             .with_connected_peers(online_nodes.len())
             .with_discovered_peers(all_nodes.len()))
+    }
+
+    /// 🔥 计算 mDNS 服务状态（基于实际健康指标）
+    fn _compute_mdns_status(&self, online_nodes: &[VerifiedNode], all_nodes: &[VerifiedNode]) -> ServiceStatus {
+        // ServiceHealth and ServiceStatus are imported at the top of the file
+
+        // 如果服务未运行，直接返回 Unhealthy
+        if !self.mdns_running {
+            return ServiceStatus::new("mDNS Service", ServiceHealth::Unhealthy, false)
+                .with_message("服务未运行");
+        }
+
+        // 🔥 计算实际最后发现时间：使用节点的 first_seen 时间
+        // 获取最近发现的节点的时间（即最大的 first_seen）
+        let time_since_last_discovery = if all_nodes.is_empty() {
+            // 没有发现任何节点，使用服务启动时间
+            self.mdns_last_discovery.elapsed()
+        } else {
+            // 找到最近发现的节点的 first_seen 时间
+            let most_recent_discovery = all_nodes.iter()
+                .map(|n| n.first_seen)
+                .max();
+
+            match most_recent_discovery {
+                Some(instant) => instant.elapsed(),
+                None => self.mdns_last_discovery.elapsed(),
+            }
+        };
+
+        // 如果长时间未发现新设备（超过 5 分钟），标记为 Degraded
+        const DEGRADED_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(300);
+        // 如果非常长时间未发现新设备（超过 15 分钟），标记为 Unhealthy
+        const UNHEALTHY_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(900);
+        // 启动阶段：服务启动后的 60 秒内认为是正常的
+        const STARTUP_GRACE_PERIOD: std::time::Duration = std::time::Duration::from_secs(60);
+
+        let (health, message) = if !all_nodes.is_empty() && time_since_last_discovery < UNHEALTHY_THRESHOLD {
+            if time_since_last_discovery < DEGRADED_THRESHOLD {
+                (
+                    ServiceHealth::Healthy,
+                    format!(
+                        "服务运行中 | 发现 {} 个设备 | 最后发现: {}秒前",
+                        all_nodes.len(),
+                        time_since_last_discovery.as_secs()
+                    )
+                )
+            } else {
+                (
+                    ServiceHealth::Degraded,
+                    format!(
+                        "服务运行中 | 较长时间未发现新设备 | 最后发现: {}分钟前",
+                        time_since_last_discovery.as_secs() / 60
+                    )
+                )
+            }
+        } else if all_nodes.is_empty() {
+            // 🔥 如果在启动宽限期内，显示 Healthy
+            if time_since_last_discovery < STARTUP_GRACE_PERIOD {
+                (
+                    ServiceHealth::Healthy,
+                    format!("服务运行中 | 正在搜索设备... | 运行时间: {}秒", time_since_last_discovery.as_secs())
+                )
+            } else {
+                (
+                    ServiceHealth::Degraded,
+                    format!("服务运行中 | 尚未发现设备 | 运行时间: {}秒", time_since_last_discovery.as_secs())
+                )
+            }
+        } else {
+            (
+                ServiceHealth::Unhealthy,
+                format!("服务可能异常 | 最后发现: {}分钟前", time_since_last_discovery.as_secs() / 60)
+            )
+        };
+
+        ServiceStatus::new("mDNS Service", health, true).with_message(message)
+    }
+
+    /// 🔥 计算连接服务状态（基于实际健康指标）
+    fn _compute_connection_status(&self, online_nodes: &[VerifiedNode]) -> ServiceStatus {
+        // ServiceHealth and ServiceStatus are imported at the top of the file
+
+        // 如果服务未运行，直接返回 Unhealthy
+        if !self.connection_running {
+            return ServiceStatus::new("Connection Service", ServiceHealth::Unhealthy, false)
+                .with_message("服务未运行");
+        }
+
+        let (health, message) = if !online_nodes.is_empty() {
+            (
+                ServiceHealth::Healthy,
+                format!("服务运行中 | 已连接 {} 个设备", online_nodes.len())
+            )
+        } else {
+            // 服务运行中但没有连接，标记为 Degraded
+            (
+                ServiceHealth::Degraded,
+                "服务运行中 | 等待连接设备".to_string()
+            )
+        };
+
+        ServiceStatus::new("Connection Service", health, true).with_message(message)
     }
 
     /// 停止所有服务

@@ -5,9 +5,10 @@
 
 import '../../bridge.dart';
 import '../../frb_generated.dart';
+import '../../types.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// 检查 P2P 是否已初始化
 bool p2PIsInitialized() =>
@@ -84,6 +85,12 @@ String p2PGetDeviceName() =>
 List<P2PBridgeNodeInfo> p2PGetVerifiedNodes() =>
     P2PBridge.instance.api.localp2PFfiBridgeP2PGetVerifiedNodes();
 
+/// 🔥 获取系统状态
+///
+/// 返回当前所有服务的运行状态和健康状态
+SystemStatusJson p2PGetSystemStatus() =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
+
 /// 发送消息给指定节点
 ///
 /// # Arguments
@@ -114,6 +121,129 @@ Future<void> p2PBroadcastMessage({
   message: message,
 );
 
+/// 获取所有会话列表（在后台线程执行，不阻塞 UI）
+Future<List<ConversationJson>> p2PGetConversations() =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PGetConversations();
+
+/// 通过 peer_id 获取消息列表（支持分页，在后台线程执行，不阻塞 UI）
+///
+/// # Arguments
+/// * `peer_id` - 对方的 Peer ID
+/// * `limit` - 每次获取的消息数量（推荐 20-50）
+/// * `before_timestamp` - 获取此时间戳之前的消息（None 表示获取最新消息）
+///
+/// # 分页使用方式
+/// ```dart
+/// // 首次加载：获取最新的 30 条消息
+/// final messages = await RustLib.instance.api.p2pGetMessagesByPeer(
+///   peerId: "12D3KooW...",
+///   limit: 30,
+///   beforeTimestamp: null,
+/// );
+///
+/// // 加载更多：使用最旧消息的时间戳
+/// final oldestTimestamp = messages.last.timestamp;
+/// final moreMessages = await RustLib.instance.api.p2pGetMessagesByPeer(
+///   peerId: "12D3KooW...",
+///   limit: 30,
+///   beforeTimestamp: oldestTimestamp,
+/// );
+/// ```
+Future<List<MessageJson>> p2PGetMessagesByPeer({
+  required String peerId,
+  required int limit,
+  PlatformInt64? beforeTimestamp,
+}) => P2PBridge.instance.api.localp2PFfiBridgeP2PGetMessagesByPeer(
+  peerId: peerId,
+  limit: limit,
+  beforeTimestamp: beforeTimestamp,
+);
+
+/// 发送扩展消息（支持多种消息类型）
+///
+/// # Arguments
+/// * `target_peer_id` - 目标节点的 Peer ID
+/// * `message_type` - 消息类型 (1=文本, 2=图片, 3=视频, 4=文件, 5=音频, 6=红包, 7=系统)
+/// * `content` - 消息内容（JSON 字符串）
+/// * `extra` - 额外数据（可选，JSON 字符串）
+Future<String> p2PSendMessageEx({
+  required String targetPeerId,
+  required int messageType,
+  required String content,
+  String? extra,
+}) => P2PBridge.instance.api.localp2PFfiBridgeP2PSendMessageEx(
+  targetPeerId: targetPeerId,
+  messageType: messageType,
+  content: content,
+  extra: extra,
+);
+
+/// 标记消息为已读
+///
+/// # Arguments
+/// * `conversation_id` - 会话 ID
+/// * `message_ids` - 消息 ID 列表
+Future<void> p2PMarkMessagesRead({
+  required String conversationId,
+  required List<String> messageIds,
+}) => P2PBridge.instance.api.localp2PFfiBridgeP2PMarkMessagesRead(
+  conversationId: conversationId,
+  messageIds: messageIds,
+);
+
+/// 删除消息
+///
+/// # Arguments
+/// * `message_id` - 消息 ID
+Future<void> p2PDeleteMessage({required String messageId}) => P2PBridge
+    .instance
+    .api
+    .localp2PFfiBridgeP2PDeleteMessage(messageId: messageId);
+
+/// 撤回消息
+///
+/// # Arguments
+/// * `message_id` - 消息 ID
+Future<void> p2PRevokeMessage({required String messageId}) => P2PBridge
+    .instance
+    .api
+    .localp2PFfiBridgeP2PRevokeMessage(messageId: messageId);
+
+/// 清空聊天记录
+///
+/// # Arguments
+/// * `conversation_id` - 会话 ID
+Future<void> p2PClearConversation({required String conversationId}) => P2PBridge
+    .instance
+    .api
+    .localp2PFfiBridgeP2PClearConversation(conversationId: conversationId);
+
+/// 注册文件（发送前调用）
+///
+/// # Arguments
+/// * `file_name` - 文件名
+/// * `file_size` - 文件大小（字节）
+/// * `mime_type` - MIME 类型
+/// * `local_path` - 本地存储路径
+Future<String> p2PRegisterFile({
+  required String fileName,
+  required PlatformInt64 fileSize,
+  required String mimeType,
+  required String localPath,
+}) => P2PBridge.instance.api.localp2PFfiBridgeP2PRegisterFile(
+  fileName: fileName,
+  fileSize: fileSize,
+  mimeType: mimeType,
+  localPath: localPath,
+);
+
+/// 获取文件元数据
+///
+/// # Arguments
+/// * `file_id` - 文件 ID
+Future<FileInfoJson> p2PGetFileInfo({required String fileId}) =>
+    P2PBridge.instance.api.localp2PFfiBridgeP2PGetFileInfo(fileId: fileId);
+
 /// 设置事件流接收器（用于 Stream 模式）
 ///
 /// 调用此函数后，Rust 会将事件推送到 Stream，Flutter 端可以订阅这个 Stream
@@ -128,6 +258,47 @@ Stream<P2PBridgeEvent> p2PSetEventStream() =>
 /// 返回的事件按时间顺序排列
 List<P2PBridgeEvent> p2PPollEvents() =>
     P2PBridge.instance.api.localp2PFfiBridgeP2PPollEvents();
+
+/// 报告外部发现的设备（由 Flutter mDNS 发现）
+///
+/// 当 Flutter 的 mDNS 辅助服务发现设备时，调用此方法通知 Rust 层
+/// Rust 层会尝试连接到该设备
+///
+/// # Arguments
+/// * `peer_id` - 对端的 Peer ID
+/// * `address` - 对端的地址（例如 "/ip4/192.168.1.100/tcp/50001"）
+///
+/// # Example
+/// ```dart
+/// RustLib.instance.api.p2pReportExternalDiscovery(
+///     peerId: "12D3KooW...",
+///     address: "/ip4/192.168.1.100/tcp/50001",
+/// );
+/// ```
+void p2PReportExternalDiscovery({
+  required String peerId,
+  required String address,
+}) => P2PBridge.instance.api.localp2PFfiBridgeP2PReportExternalDiscovery(
+  peerId: peerId,
+  address: address,
+);
+
+/// 报告多个外部发现的设备
+///
+/// 批量报告设备，减少 FFI 调用次数
+void p2PReportExternalDiscoveries({
+  required List<ExternalDiscovery> discoveries,
+}) => P2PBridge.instance.api.localp2PFfiBridgeP2PReportExternalDiscoveries(
+  discoveries: discoveries,
+);
+
+/// 报告外部发现的设备离线
+///
+/// 当 Flutter 的 mDNS 辅助服务检测到设备离线时，调用此方法通知 Rust 层
+void p2PReportExternalDeviceLost({required String peerId}) => P2PBridge
+    .instance
+    .api
+    .localp2PFfiBridgeP2PReportExternalDeviceLost(peerId: peerId);
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UserInfo>>
 abstract class UserInfo implements RustOpaqueInterface {}

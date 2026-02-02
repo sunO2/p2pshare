@@ -1,6 +1,13 @@
 import 'dart:async';
 import 'package:nsd/nsd.dart' as nsd_pkg;
-import 'package:nsd/nsd.dart' show Discovery, Registration, Service, ServiceStatus, stopDiscovery, unregister;
+import 'package:nsd/nsd.dart'
+    show
+        Discovery,
+        Registration,
+        Service,
+        ServiceStatus,
+        stopDiscovery,
+        unregister;
 import 'log_service.dart';
 
 /// Flutter mDNS 辅助服务（使用 nsd）
@@ -11,7 +18,8 @@ import 'log_service.dart';
 /// ⚠️ 注意：nsd 在 Android 上使用 NsdManager，iOS 上使用 Bonjour
 class FlutterMdnsService {
   static FlutterMdnsService? _instance;
-  static FlutterMdnsService get instance => _instance ??= FlutterMdnsService._();
+  static FlutterMdnsService get instance =>
+      _instance ??= FlutterMdnsService._();
 
   FlutterMdnsService._();
 
@@ -45,11 +53,7 @@ class FlutterMdnsService {
       _log.d('[Flutter mDNS] 转换后的服务类型: $nsdServiceType');
 
       // nsd 支持注册服务
-      final service = Service(
-        name: name,
-        type: nsdServiceType,
-        port: port,
-      );
+      final service = Service(name: name, type: nsdServiceType, port: port);
 
       _registration = await nsd_pkg.register(service);
       _log.i('[Flutter mDNS] 服务注册成功: $_registration');
@@ -139,11 +143,7 @@ class FlutterMdnsService {
 
     try {
       // 1. 注册服务（广播自己的存在）
-      await registerService(
-        name: name,
-        port: port,
-        serviceType: serviceType,
-      );
+      await registerService(name: name, port: port, serviceType: serviceType);
 
       // 2. 开始浏览（发现其他设备）
       _log.i('[Flutter mDNS] 开始浏览其他设备');

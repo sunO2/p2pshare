@@ -126,7 +126,7 @@ class UserInfoReceivedEvent extends P2PEvent {
 /// 🔥 服务状态数据
 class ServiceStatusData {
   final String name;
-  final String health;  // "healthy", "degraded", "unhealthy"
+  final String health; // "healthy", "degraded", "unhealthy"
   final bool isRunning;
   final String? message;
 
@@ -149,13 +149,10 @@ class ServiceStatusData {
 
 /// 🔥 服务状态变化事件
 class ServiceStatusChangedEvent extends P2PEvent {
-  final String service;  // "mDNS" or "Connection"
+  final String service; // "mDNS" or "Connection"
   final ServiceStatusData status;
 
-  ServiceStatusChangedEvent({
-    required this.service,
-    required this.status,
-  });
+  ServiceStatusChangedEvent({required this.service, required this.status});
 }
 
 /// P2P 服务管理器
@@ -466,10 +463,7 @@ class P2PManager {
           _log.node('offline', peerId);
           _eventController.add(NodeOfflineEvent(peerId));
           // 转发到 EventBus
-          P2PEventBus.instance.emit(
-            peerId: peerId,
-            type: 'offline',
-          );
+          P2PEventBus.instance.emit(peerId: peerId, type: 'offline');
         } else {
           _log.w('NodeOffline 事件但无法解析 peerId: ${event.data}');
         }
@@ -502,8 +496,10 @@ class P2PManager {
           );
 
           // 检查状态是否为离线
-          final isOffline = status != null &&
-              (status.toLowerCase() == '离线' || status.toLowerCase() == 'offline');
+          final isOffline =
+              status != null &&
+              (status.toLowerCase() == '离线' ||
+                  status.toLowerCase() == 'offline');
 
           // 转发到 EventBus - 如果不是离线，发送 online 事件
           if (!isOffline) {
@@ -733,10 +729,12 @@ class P2PManager {
       }
 
       // 发送服务状态变化事件到事件流
-      _eventController.add(ServiceStatusChangedEvent(
-        service: service,
-        status: ServiceStatusData.fromJson(data),
-      ));
+      _eventController.add(
+        ServiceStatusChangedEvent(
+          service: service,
+          status: ServiceStatusData.fromJson(data),
+        ),
+      );
 
       _log.d('服务状态变化: $service -> ${data['health']}');
     } catch (e, stackTrace) {
@@ -827,7 +825,9 @@ class P2PManager {
     required String serviceType,
   }) async {
     _log.i('[Flutter mDNS 测试] 启动广播模式（仅注册，不浏览）');
-    _log.i('[Flutter mDNS 测试] Peer ID: $name, Port: $port, Service: $serviceType');
+    _log.i(
+      '[Flutter mDNS 测试] Peer ID: $name, Port: $port, Service: $serviceType',
+    );
 
     try {
       final mdnsService = FlutterMdnsService.instance;
@@ -872,7 +872,9 @@ class P2PManager {
       final port = service.port ?? 0;
       final addresses = service.addresses;
 
-      _log.i('[Flutter mDNS] 发现设备: name=$name, host=$host, port=$port, addresses=$addresses');
+      _log.i(
+        '[Flutter mDNS] 发现设备: name=$name, host=$host, port=$port, addresses=$addresses',
+      );
 
       // ⭐ 过滤：跳过自己的 Peer ID
       // 因为 Rust 端仍在广播，Flutter mDNS 会收到自己的广播
@@ -911,10 +913,7 @@ class P2PManager {
 
       try {
         // 调用生成的 FRB 函数（在 third_party/localp2p_ffi/bridge.dart 中定义）
-        frb_bridge.p2PReportExternalDiscovery(
-          peerId: name,
-          address: address,
-        );
+        frb_bridge.p2PReportExternalDiscovery(peerId: name, address: address);
         _log.i('[Flutter mDNS] 已通知 Rust 端');
       } catch (e, stackTrace) {
         _log.e('[Flutter mDNS] 通知 Rust 失败: $e', e, stackTrace);
@@ -943,9 +942,7 @@ class P2PManager {
 
       try {
         // 调用生成的 FRB 函数（在 third_party/localp2p_ffi/bridge.dart 中定义）
-        frb_bridge.p2PReportExternalDeviceLost(
-          peerId: peerId,
-        );
+        frb_bridge.p2PReportExternalDeviceLost(peerId: peerId);
         _log.i('[Flutter mDNS] 已通知 Rust 端设备离线');
       } catch (e, stackTrace) {
         _log.e('[Flutter mDNS] 通知 Rust 设备离线失败: $e', e, stackTrace);
@@ -1199,6 +1196,28 @@ class P2PManager {
     }
   }
 
+  /// 🔥 重启 mDNS 浏览服务
+  ///
+  /// 只重启 mDNS 部分，不影响 TCP 连接
+  /// 适用于从后台恢复时，确保 mDNS 浏览服务正常工作
+  Future<void> restartDiscovery() async {
+    if (!_initialized) {
+      _log.e('restartDiscovery 但未初始化');
+      throw Exception('Not initialized');
+    }
+
+    _log.i('🔄 重启 mDNS 浏览服务');
+    _log.rustCall('restartDiscovery');
+
+    try {
+      await RustLib.instance.api.localp2PFfiBridgeP2PRestartDiscovery();
+      _log.rustReturn('restartDiscovery', result: 'restarted');
+    } catch (e, stackTrace) {
+      _log.rustError('localp2PFfiBridgeP2PRestartDiscovery', e, stackTrace);
+      rethrow;
+    }
+  }
+
   /// 🔥 获取系统状态
   ///
   /// 返回当前所有服务的运行状态和健康状态
@@ -1212,7 +1231,9 @@ class P2PManager {
 
     try {
       final result = RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
-      _log.d('系统状态: mDNS=${result.mdnsService.health}, Connection=${result.connectionService.health}');
+      _log.d(
+        '系统状态: mDNS=${result.mdnsService.health}, Connection=${result.connectionService.health}',
+      );
       // 转换 bridge 类型为本地类型（BigInt -> int）
       return SystemStatusJson.fromBridge(result);
     } catch (e, stackTrace) {

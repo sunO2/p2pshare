@@ -39,6 +39,9 @@ pub enum DiscoveryEvent {
         /// 服务状态
         status: ServiceStatus,
     },
+
+    /// 🔥 节点列表已更新（触发状态刷新）
+    NodesUpdated,
 }
 
 /// P2P 连接事件

@@ -133,7 +133,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
 
       // 🔥 监听服务状态变化事件
       if (event is ServiceStatusChangedEvent) {
-        final statusEvent = event as ServiceStatusChangedEvent;
+        final statusEvent = event;
         setState(() {
           _serviceStatus[statusEvent.service] = statusEvent.status;
           // 更新设备数量统计
@@ -143,7 +143,9 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
           }).length;
           _discoveredPeers = _nodes.length;
         });
-        debugPrint('[ServiceStatus] ${statusEvent.service}: ${statusEvent.status.health}');
+        debugPrint(
+          '[ServiceStatus] ${statusEvent.service}: ${statusEvent.status.health}',
+        );
       }
     });
   }
@@ -460,11 +462,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.settings_ethernet,
-                size: 16,
-                color: Colors.grey[600],
-              ),
+              Icon(Icons.settings_ethernet, size: 16, color: Colors.grey[600]),
               const SizedBox(width: 8),
               Text(
                 '服务状态',
@@ -477,10 +475,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
               const Spacer(),
               Text(
                 '$_connectedPeers/$_discoveredPeers 设备在线',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
             ],
           ),
@@ -491,7 +486,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                 Expanded(
                   child: _buildServiceStatusCard(
                     title: 'mDNS',
-                    status: mdnsStatus!,
+                    status: mdnsStatus,
                   ),
                 ),
               if (mdnsStatus != null && connectionStatus != null)
@@ -500,7 +495,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
                 Expanded(
                   child: _buildServiceStatusCard(
                     title: '连接',
-                    status: connectionStatus!,
+                    status: connectionStatus,
                   ),
                 ),
             ],
@@ -553,21 +548,14 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: statusColor.withOpacity(0.3),
-          width: 1,
-        ),
+        border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                statusIcon,
-                size: 16,
-                color: statusColor,
-              ),
+              Icon(statusIcon, size: 16, color: statusColor),
               const SizedBox(width: 6),
               Text(
                 title,
@@ -592,10 +580,7 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
             const SizedBox(height: 2),
             Text(
               status.message!,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 10, color: Colors.grey[500]),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

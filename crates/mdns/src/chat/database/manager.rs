@@ -215,17 +215,45 @@ impl ChatDatabase for SqliteChatDatabase {
         .await
         .map_err(|e| ChatError::Serialization(format!("Failed to get conversations: {}", e)))?;
 
-        Ok(rows.into_iter().map(|row| Conversation {
-            id: row.get("id"),
-            peer_id: row.get("peer_id"),
-            peer_name: row.try_get("peer_name").ok(),
-            peer_avatar: row.try_get("peer_avatar").ok(),
-            last_message: row.try_get("last_message").ok(),
-            last_message_type: row.try_get("last_message_type").unwrap_or(MessageType::Unknown as i32),
-            last_message_time: row.try_get("last_message_time").ok(),
-            unread_count: row.get("unread_count"),
-            is_pinned: row.get::<i32, _>("is_pinned") != 0,
-            is_muted: row.get::<i32, _>("is_muted") != 0,
+        // 🔥 从设备数据库获取所有设备，用于补充会话的 peer_name
+        let devices_map = self.get_all_devices().await
+            .map_err(|e| ChatError::Serialization(format!("Failed to get devices: {}", e)))?
+            .into_iter()
+            .map(|d| (d.peer_id.clone(), d))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        Ok(rows.into_iter().map(|row| {
+            let peer_id: String = row.get("peer_id");
+            let mut peer_name: Option<String> = row.try_get("peer_name").ok();
+
+            // 🔥 如果 peer_name 为空，尝试从设备数据库获取
+            if peer_name.is_none() || peer_name.as_ref().map_or(true, |s| s.is_empty()) {
+                if let Some(device) = devices_map.get(&peer_id) {
+                    // 优先使用 display_name，其次使用 nickname，最后使用 device_name
+                    if !device.display_name.is_empty() {
+                        peer_name = Some(device.display_name.clone());
+                    } else if let Some(ref nickname) = device.nickname {
+                        if !nickname.is_empty() {
+                            peer_name = Some(nickname.clone());
+                        }
+                    } else {
+                        peer_name = Some(device.device_name.clone());
+                    }
+                }
+            }
+
+            Conversation {
+                id: row.get("id"),
+                peer_id: peer_id.clone(),
+                peer_name,
+                peer_avatar: row.try_get("peer_avatar").ok(),
+                last_message: row.try_get("last_message").ok(),
+                last_message_type: row.try_get("last_message_type").unwrap_or(MessageType::Unknown as i32),
+                last_message_time: row.try_get("last_message_time").ok(),
+                unread_count: row.get("unread_count"),
+                is_pinned: row.get::<i32, _>("is_pinned") != 0,
+                is_muted: row.get::<i32, _>("is_muted") != 0,
+            }
         }).collect())
     }
 

@@ -391,6 +391,12 @@ pub fn internal_start() -> Result<(), String> {
                             let mut known_nodes: std::collections::HashSet<String> = std::collections::HashSet::new();
                             let mut offline_nodes: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+                            // 🔥 定期状态推送（每 30 秒）
+                            let mut status_push_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+
+                            // 🔥 定期心跳检测（每 30 秒）
+                            let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+
                             loop {
                                 tokio::select! {
                                     // 处理命令
@@ -477,6 +483,12 @@ pub fn internal_start() -> Result<(), String> {
                                                 };
                                                 send_event_to_stream(event);
 
+                                                // 🔥 更新 mDNS 发现设备追踪
+                                                {
+                                                    let mut pm = p2p_manager.lock().await;
+                                                    pm.update_discovery_tracking();
+                                                }
+
                                                 // 更新最后事件时间
                                                 update_last_event_time();
                                             } else {
@@ -543,6 +555,46 @@ pub fn internal_start() -> Result<(), String> {
 
                                         // 清理已离线节点（如果需要）
                                         // known_nodes.retain(|id| !offline_nodes.contains(id));
+                                    }
+
+                                    // 🔥 定期推送服务状态到 Flutter
+                                    _ = status_push_interval.tick() => {
+                                        let pm = p2p_manager.lock().await;
+                                        pm.send_status_to_flutter();
+                                    }
+
+                                    // 🔥 定期心跳检测（验证服务事件循环是否正常）
+                                    _ = heartbeat_interval.tick() => {
+                                        // 简化版心跳：由于我们已经在事件循环内部，
+                                        // 如果这段代码能执行，说明事件循环是响应的
+                                        // 我们只需验证能够获取 P2PManager 锁即可
+                                        let heartbeat_ok = match tokio::time::timeout(
+                                            std::time::Duration::from_secs(5),
+                                            p2p_manager.lock()
+                                        ).await {
+                                            Ok(_) => {
+                                                tracing::debug!("💓 服务心跳正常（P2PManager 可访问）");
+                                                true
+                                            }
+                                            Err(_) => {
+                                                let error_msg = "P2PManager 锁获取超时（5秒），可能存在死锁".to_string();
+                                                tracing::error!("💔 服务心跳异常: {}", error_msg);
+                                                send_log_to_flutter("ERROR", "heartbeat", format!("💔 {}", error_msg));
+                                                false
+                                            }
+                                        };
+
+                                        if !heartbeat_ok {
+                                            // 🔥 发送服务状态变化事件到 Flutter，更新 UI
+                                            let status_json = serde_json::json!({
+                                                "service": "Connection",
+                                                "name": "Connection Service",
+                                                "health": "unhealthy",
+                                                "is_running": true,
+                                                "message": "P2PManager 锁获取超时，服务可能存在死锁",
+                                            });
+                                            send_log_to_flutter("SERVICE_STATUS", "heartbeat", status_json.to_string());
+                                        }
                                     }
                                 }
                             }

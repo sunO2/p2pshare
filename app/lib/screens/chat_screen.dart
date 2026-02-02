@@ -8,7 +8,6 @@ import '../widgets/chat_bubble_received.dart';
 import '../widgets/unified_app_bar.dart';
 import '../services/p2p_event_bus.dart' as eb;
 import '../bridge/types.dart';
-import '../bridge/third_party/localp2p_ffi/bridge.dart';
 import '../bridge/frb_generated.dart';
 import 'device_detail_screen.dart';
 
@@ -37,13 +36,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// 当前在线状态
   bool _isOnline = true;
+
   /// 状态文本
   String _statusText = '在线';
 
   /// 是否正在加载历史消息
   bool _isLoadingHistory = false;
+
   /// 是否还有更多历史消息
   bool _hasMore = true;
+
   /// 每页消息数量
   final int _pageSize = 20;
 
@@ -97,7 +99,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_isLoadingHistory) return;
     if (loadMore && !_hasMore) return;
 
-    debugPrint('[ChatScreen] _loadHistoricalMessages 开始加载历史消息 ${loadMore ? "(加载更多)" : ""}');
+    debugPrint(
+      '[ChatScreen] _loadHistoricalMessages 开始加载历史消息 ${loadMore ? "(加载更多)" : ""}',
+    );
     debugPrint('[ChatScreen] peerId: ${widget.peerId}');
 
     setState(() {
@@ -111,11 +115,12 @@ class _ChatScreenState extends State<ChatScreen> {
           : null;
 
       debugPrint('[ChatScreen] 调用 localp2PFfiBridgeP2PGetMessagesByPeer...');
-      final result = await RustLib.instance.api.localp2PFfiBridgeP2PGetMessagesByPeer(
-        peerId: widget.peerId,
-        limit: _pageSize,
-        beforeTimestamp: beforeTimestamp,
-      );
+      final result = await RustLib.instance.api
+          .localp2PFfiBridgeP2PGetMessagesByPeer(
+            peerId: widget.peerId,
+            limit: _pageSize,
+            beforeTimestamp: beforeTimestamp,
+          );
 
       debugPrint('[ChatScreen] 返回 ${result.length} 条消息');
 
@@ -123,7 +128,9 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() {
           // 🔥 后端返回倒序（最新的在前），reverse ListView 需要最新在 index 0
           // 所以直接使用，不需要反转
-          final newMessages = result.map((msg) => _parseMessageJson(msg)).toList();
+          final newMessages = result
+              .map((msg) => _parseMessageJson(msg))
+              .toList();
 
           if (loadMore) {
             // 加载更多：更旧的消息添加到列表末尾
@@ -275,7 +282,9 @@ class _ChatScreenState extends State<ChatScreen> {
       peerId: widget.peerId,
       onData: (event) {
         if (!mounted) return;
-        debugPrint('[EventBus] Chat peer ${widget.peerId} event: ${event.type}');
+        debugPrint(
+          '[EventBus] Chat peer ${widget.peerId} event: ${event.type}',
+        );
 
         // 更新在线状态
         if (event.type == 'online' || event.type == 'offline') {
@@ -310,34 +319,33 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     // 监听指定 peer 的消息事件
-    _messageSubscription = eb.P2PEventBus.instance.on(
-      peerId: widget.peerId,
-      type: 'message',
-    ).listen((event) {
-      if (!mounted) return;
-      debugPrint('[EventBus] Message from ${widget.peerId}: ${event.data}');
+    _messageSubscription = eb.P2PEventBus.instance
+        .on(peerId: widget.peerId, type: 'message')
+        .listen((event) {
+          if (!mounted) return;
+          debugPrint('[EventBus] Message from ${widget.peerId}: ${event.data}');
 
-      // 🔥 将收到的消息添加到列表前面（index 0 = 底部）
-      final messageData = event.data;
-      if (messageData is Map<String, dynamic>) {
-        final message = messageData['message'] as String?;
-        final timestamp = messageData['timestamp'] as int?;
-        if (message != null) {
-          setState(() {
-            _messages.insert(
-              0,
-              ChatMessageData(
-                message: message,
-                timestamp: timestamp != null
-                    ? DateTime.fromMillisecondsSinceEpoch(timestamp)
-                    : DateTime.now(),
-                isSelf: false,
-              ),
-            );
-          });
-        }
-      }
-    });
+          // 🔥 将收到的消息添加到列表前面（index 0 = 底部）
+          final messageData = event.data;
+          if (messageData is Map<String, dynamic>) {
+            final message = messageData['message'] as String?;
+            final timestamp = messageData['timestamp'] as int?;
+            if (message != null) {
+              setState(() {
+                _messages.insert(
+                  0,
+                  ChatMessageData(
+                    message: message,
+                    timestamp: timestamp != null
+                        ? DateTime.fromMillisecondsSinceEpoch(timestamp)
+                        : DateTime.now(),
+                    isSelf: false,
+                  ),
+                );
+              });
+            }
+          }
+        });
   }
 
   @override
@@ -403,7 +411,7 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: ListView.separated(
         padding: const EdgeInsets.only(top: 16, bottom: 16),
-        reverse: true,  // 🔥 反转列表，最新消息在底部
+        reverse: true, // 🔥 反转列表，最新消息在底部
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         separatorBuilder: (context, index) => const SizedBox(height: 8),
@@ -421,7 +429,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF3D8A5A),
+                        ),
                       ),
                     )
                   : const SizedBox(
@@ -430,7 +440,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 1,
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFCCCCCC)),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFFCCCCCC),
+                        ),
                       ),
                     ),
             );
@@ -473,18 +485,21 @@ class _ChatScreenState extends State<ChatScreen> {
                 hintText: '输入消息...',
                 hintStyle: TextStyle(fontSize: 15, color: Color(0xFF9C9B99)),
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 enabledBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Color(0xFF3D8A5A)),
-                  borderRadius: BorderRadius.all(Radius.circular(8))
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
                 ),
                 border: OutlineInputBorder(
                   borderSide: BorderSide(color: Color(0xFF3D8A5A)),
-                  borderRadius: BorderRadius.all(Radius.circular(8))
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Color(0xFF3D8A5A)),
-                  borderRadius: BorderRadius.all(Radius.circular(8))
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
                 ),
               ),
               onSubmitted: (_) => _sendMessage(_messageController.text),

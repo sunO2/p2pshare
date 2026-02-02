@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import '../bridge/types.dart';
-import '../bridge/third_party/localp2p_ffi/bridge.dart';
 import '../bridge/frb_generated.dart';
-import '../p2p_manager.dart';
 import 'chat_screen.dart';
 
 /// 聊天会话列表页面
@@ -35,8 +33,11 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
     });
 
     try {
-      debugPrint('[ConversationList] 调用 localp2PFfiBridgeP2PGetConversations()...');
-      final result = await RustLib.instance.api.localp2PFfiBridgeP2PGetConversations();
+      debugPrint(
+        '[ConversationList] 调用 localp2PFfiBridgeP2PGetConversations()...',
+      );
+      final result = await RustLib.instance.api
+          .localp2PFfiBridgeP2PGetConversations();
       debugPrint('[ConversationList] 返回 ${result.length} 个会话');
 
       if (mounted) {
@@ -48,7 +49,9 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
 
       // 打印每个会话的详细信息
       for (var conv in result) {
-        debugPrint('[ConversationList] 会话: peerId=${conv.peerId}, peerName=${conv.peerName}, lastMessage=${conv.lastMessage}');
+        debugPrint(
+          '[ConversationList] 会话: peerId=${conv.peerId}, peerName=${conv.peerName}, lastMessage=${conv.lastMessage}',
+        );
       }
     } catch (e, stackTrace) {
       debugPrint('[ConversationList] 加载失败: $e');
@@ -70,9 +73,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
         _buildHeaderSection(),
 
         // Content
-        Expanded(
-          child: _buildBody(),
-        ),
+        Expanded(child: _buildBody()),
       ],
     );
   }
@@ -151,7 +152,11 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             const SizedBox(height: 16),
             Text('加载失败', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _loadConversations,
@@ -171,16 +176,16 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             const SizedBox(height: 16),
             Text(
               '暂无聊天记录',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
               '去设备列表选择一个设备开始聊天吧',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[500],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
             ),
           ],
         ),
@@ -200,7 +205,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
     return RefreshIndicator(
       onRefresh: _loadConversations,
       child: ListView.separated(
-         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), 
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         itemCount: sortedConversations.length,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
@@ -237,10 +242,7 @@ class _ConversationTile extends StatelessWidget {
   final ConversationJson conversation;
   final VoidCallback onTap;
 
-  const _ConversationTile({
-    required this.conversation,
-    required this.onTap,
-  });
+  const _ConversationTile({required this.conversation, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -295,10 +297,7 @@ class _ConversationTile extends StatelessWidget {
                       ),
                       Text(
                         lastMessageTime,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
                   ),

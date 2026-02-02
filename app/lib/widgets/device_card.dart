@@ -128,7 +128,11 @@ class DeviceCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       // 状态指示器（和列表头部统一但更小）
-                      _buildStatusIndicator(statusText, statusColor, statusBackgroundColor),
+                      _buildStatusIndicator(
+                        statusText,
+                        statusColor,
+                        statusBackgroundColor,
+                      ),
                     ],
                   ),
                 ),
@@ -161,7 +165,11 @@ class DeviceCard extends StatelessWidget {
   }
 
   /// 构建状态指示器（和列表头部统一但更小）
-  Widget _buildStatusIndicator(String text, Color statusColor, Color backgroundColor) {
+  Widget _buildStatusIndicator(
+    String text,
+    Color statusColor,
+    Color backgroundColor,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(

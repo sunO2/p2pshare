@@ -8,7 +8,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 /// 用于诊断 mDNS 广播/接收问题，帮助用户自助排查故障
 class MdnsDiagnosticService {
   static MdnsDiagnosticService? _instance;
-  static MdnsDiagnosticService get instance => _instance ??= MdnsDiagnosticService._();
+  static MdnsDiagnosticService get instance =>
+      _instance ??= MdnsDiagnosticService._();
 
   MdnsDiagnosticService._();
 
@@ -85,7 +86,8 @@ class MdnsDiagnosticService {
     _log.i('[2/5] 检查 MulticastLock...');
 
     try {
-      final isHeld = await _channel.invokeMethod<bool>('isMulticastLockHeld') ?? false;
+      final isHeld =
+          await _channel.invokeMethod<bool>('isMulticastLockHeld') ?? false;
       _diagnosticResults['multicastLockHeld'] = isHeld;
 
       if (isHeld) {
@@ -106,7 +108,9 @@ class MdnsDiagnosticService {
 
     try {
       // 从原生获取网络信息
-      final networkInfo = await _channel.invokeMapMethod<String, dynamic>('getNetworkInfo');
+      final networkInfo = await _channel.invokeMapMethod<String, dynamic>(
+        'getNetworkInfo',
+      );
       if (networkInfo != null) {
         _diagnosticResults.addAll(networkInfo);
 
@@ -149,7 +153,8 @@ class MdnsDiagnosticService {
       _log.i('ℹ️  位置服务状态需要在 UI 层检查');
 
       _diagnosticResults['locationServiceRequired'] = true;
-      _diagnosticResults['locationServiceNote'] = 'Android 10+ 需要开启位置服务才能使用 mDNS';
+      _diagnosticResults['locationServiceNote'] =
+          'Android 10+ 需要开启位置服务才能使用 mDNS';
     } catch (e) {
       _log.e('检查位置服务失败: $e');
     }
@@ -256,17 +261,15 @@ class MdnsDiagnosticStatus {
   final Map<String, dynamic> results;
   final String? errorMessage;
 
-  MdnsDiagnosticStatus.ok(this.results)
-      : isSuccess = true,
-        errorMessage = null;
+  MdnsDiagnosticStatus.ok(this.results) : isSuccess = true, errorMessage = null;
 
   MdnsDiagnosticStatus.hasIssues(this.results)
-      : isSuccess = false,
-        errorMessage = '诊断发现问题，请查看详情';
+    : isSuccess = false,
+      errorMessage = '诊断发现问题，请查看详情';
 
   MdnsDiagnosticStatus.error(this.errorMessage)
-      : isSuccess = false,
-        results = {};
+    : isSuccess = false,
+      results = {};
 
   @override
   String toString() {

@@ -10,7 +10,9 @@ class ChatBubbleReceived extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 使用对方名字的首字母作为头像文字
-    final avatarText = peerName?.isNotEmpty == true ? peerName![0].toUpperCase() : '?';
+    final avatarText = peerName?.isNotEmpty == true
+        ? peerName![0].toUpperCase()
+        : '?';
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -41,8 +43,7 @@ class ChatBubbleReceived extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 240),
           decoration: const BoxDecoration(
             color: Color.fromRGBO(255, 255, 255, 1),
-            borderRadius: BorderRadius.all(Radius.circular(8),
-            ),
+            borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Text(

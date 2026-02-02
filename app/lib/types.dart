@@ -6,128 +6,178 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CStrView>>
-abstract class CStrView implements RustOpaqueInterface {
-  /// 转换为 Rust 字符串切片（unsafe）
-  ///
-  /// # Safety
-  /// 调用者必须确保原始字符串仍然有效
-  Future<void> asStr();
-
-  /// 从 Rust 字符串创建
-  static Future<CStrView> fromStr({required String s}) =>
-      P2PBridge.instance.api.crateTypesCStrViewFromStr(s: s);
-}
-
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2PEventData>>
-abstract class P2PEventData implements RustOpaqueInterface {
-  static Future<P2PEventData> default_() =>
-      P2PBridge.instance.api.crateTypesP2PEventDataDefault();
-}
-
-/// JSON 序列化的聊天消息
-class ChatMessageJson {
+/// 会话信息
+class ConversationJson {
   final String id;
-  final String senderPeerId;
-  final String content;
-  final PlatformInt64 timestamp;
+  final String peerId;
+  final String? peerName;
+  final String? peerAvatar;
+  final String? lastMessage;
+  final int lastMessageType;
+  final PlatformInt64? lastMessageTime;
+  final int unreadCount;
+  final bool isPinned;
+  final bool isMuted;
 
-  const ChatMessageJson({
+  const ConversationJson({
     required this.id,
-    required this.senderPeerId,
-    required this.content,
-    required this.timestamp,
+    required this.peerId,
+    this.peerName,
+    this.peerAvatar,
+    this.lastMessage,
+    required this.lastMessageType,
+    this.lastMessageTime,
+    required this.unreadCount,
+    required this.isPinned,
+    required this.isMuted,
   });
 
   @override
   int get hashCode =>
       id.hashCode ^
-      senderPeerId.hashCode ^
-      content.hashCode ^
-      timestamp.hashCode;
+      peerId.hashCode ^
+      peerName.hashCode ^
+      peerAvatar.hashCode ^
+      lastMessage.hashCode ^
+      lastMessageType.hashCode ^
+      lastMessageTime.hashCode ^
+      unreadCount.hashCode ^
+      isPinned.hashCode ^
+      isMuted.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ChatMessageJson &&
+      other is ConversationJson &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          senderPeerId == other.senderPeerId &&
-          content == other.content &&
-          timestamp == other.timestamp;
+          peerId == other.peerId &&
+          peerName == other.peerName &&
+          peerAvatar == other.peerAvatar &&
+          lastMessage == other.lastMessage &&
+          lastMessageType == other.lastMessageType &&
+          lastMessageTime == other.lastMessageTime &&
+          unreadCount == other.unreadCount &&
+          isPinned == other.isPinned &&
+          isMuted == other.isMuted;
 }
 
-/// P2P 错误代码
-enum P2PErrorCode {
-  /// 成功
-  success,
+/// 文件元数据
+class FileInfoJson {
+  final String id;
+  final String messageId;
+  final String fileName;
+  final PlatformInt64 fileSize;
+  final String mimeType;
+  final String? localPath;
+  final String? thumbnailPath;
+  final int? duration;
+  final int? width;
+  final int? height;
+  final int transferStatus;
+  final int transferProgress;
 
-  /// 未初始化
-  notInitialized,
-
-  /// 无效参数
-  invalidArgument,
-
-  /// 发送失败
-  sendFailed,
-
-  /// 节点未验证
-  nodeNotVerified,
-
-  /// 内存不足
-  outOfMemory,
-
-  /// 其他错误
-  unknown,
-}
-
-/// P2P 不透明句柄
-///
-/// 用于标识 P2P 实例
-class P2PHandle {
-  final int private;
-
-  const P2PHandle({required this.private});
-
-  @override
-  int get hashCode => private.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is P2PHandle &&
-          runtimeType == other.runtimeType &&
-          private == other.private;
-}
-
-/// JSON 序列化的用户信息
-class UserInfoJson {
-  final String deviceName;
-  final String? nickname;
-  final String? avatarUrl;
-  final String? status;
-
-  const UserInfoJson({
-    required this.deviceName,
-    this.nickname,
-    this.avatarUrl,
-    this.status,
+  const FileInfoJson({
+    required this.id,
+    required this.messageId,
+    required this.fileName,
+    required this.fileSize,
+    required this.mimeType,
+    this.localPath,
+    this.thumbnailPath,
+    this.duration,
+    this.width,
+    this.height,
+    required this.transferStatus,
+    required this.transferProgress,
   });
 
   @override
   int get hashCode =>
-      deviceName.hashCode ^
-      nickname.hashCode ^
-      avatarUrl.hashCode ^
-      status.hashCode;
+      id.hashCode ^
+      messageId.hashCode ^
+      fileName.hashCode ^
+      fileSize.hashCode ^
+      mimeType.hashCode ^
+      localPath.hashCode ^
+      thumbnailPath.hashCode ^
+      duration.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      transferStatus.hashCode ^
+      transferProgress.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is UserInfoJson &&
+      other is FileInfoJson &&
           runtimeType == other.runtimeType &&
-          deviceName == other.deviceName &&
-          nickname == other.nickname &&
-          avatarUrl == other.avatarUrl &&
-          status == other.status;
+          id == other.id &&
+          messageId == other.messageId &&
+          fileName == other.fileName &&
+          fileSize == other.fileSize &&
+          mimeType == other.mimeType &&
+          localPath == other.localPath &&
+          thumbnailPath == other.thumbnailPath &&
+          duration == other.duration &&
+          width == other.width &&
+          height == other.height &&
+          transferStatus == other.transferStatus &&
+          transferProgress == other.transferProgress;
+}
+
+/// 扩展消息信息
+class MessageJson {
+  final String id;
+  final String conversationId;
+  final String senderPeerId;
+  final int messageType;
+  final String content;
+  final PlatformInt64 timestamp;
+  final String? replyToId;
+  final int status;
+  final bool isDeleted;
+  final bool isRevoked;
+
+  const MessageJson({
+    required this.id,
+    required this.conversationId,
+    required this.senderPeerId,
+    required this.messageType,
+    required this.content,
+    required this.timestamp,
+    this.replyToId,
+    required this.status,
+    required this.isDeleted,
+    required this.isRevoked,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      conversationId.hashCode ^
+      senderPeerId.hashCode ^
+      messageType.hashCode ^
+      content.hashCode ^
+      timestamp.hashCode ^
+      replyToId.hashCode ^
+      status.hashCode ^
+      isDeleted.hashCode ^
+      isRevoked.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MessageJson &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          conversationId == other.conversationId &&
+          senderPeerId == other.senderPeerId &&
+          messageType == other.messageType &&
+          content == other.content &&
+          timestamp == other.timestamp &&
+          replyToId == other.replyToId &&
+          status == other.status &&
+          isDeleted == other.isDeleted &&
+          isRevoked == other.isRevoked;
 }

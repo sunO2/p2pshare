@@ -72,7 +72,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
       peerId: widget.peerId,
       onData: (event) {
         if (!mounted) return;
-        debugPrint('[EventBus] Device ${widget.peerId} status changed: ${event.type}');
+        debugPrint(
+          '[EventBus] Device ${widget.peerId} status changed: ${event.type}',
+        );
         // 重新加载节点信息以更新 UI
         _loadNodeInfo();
       },
@@ -112,11 +114,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Device Info Card - 可滚动
-          Expanded(
-            child: SingleChildScrollView(
-              child: _buildDeviceInfoCard(),
-            ),
-          ),
+          Expanded(child: SingleChildScrollView(child: _buildDeviceInfoCard())),
           const SizedBox(height: 20),
 
           // Action Buttons - 固定在底部
@@ -203,9 +201,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
         GestureDetector(
           onLongPress: () {
             Clipboard.setData(ClipboardData(text: widget.peerId));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Peer ID 已复制')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Peer ID 已复制')));
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -308,7 +306,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     }
 
     // 使用 / 拆分协议版本，过滤掉空字符串
-    final parts = protocolVersion.split('/').where((part) => part.isNotEmpty).toList();
+    final parts = protocolVersion
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .toList();
 
     if (parts.isEmpty) {
       return const SizedBox.shrink();
@@ -359,7 +360,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
 
   Widget _buildStatusIndicator() {
     final status = _nodeInfo?.status;
-    final isOffline = status != null && (status.toLowerCase() == '离线' || status.toLowerCase() == 'offline');
+    final isOffline =
+        status != null &&
+        (status.toLowerCase() == '离线' || status.toLowerCase() == 'offline');
 
     // 状态颜色
     final Color statusColor;

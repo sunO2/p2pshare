@@ -96,6 +96,9 @@ pub struct ConnectionService {
     /// 发现事件接收器（使用 Option 包装，允许为 None）
     discovery_rx: Option<mpsc::UnboundedReceiver<DiscoveryEvent>>,
 
+    /// 🔥 发现事件发送器（用于通知 P2PManager 节点变化）
+    discovery_tx: Option<mpsc::UnboundedSender<DiscoveryEvent>>,
+
     /// 🔥 mDNS 服务是否仍在运行
     mdns_service_running: bool,
 
@@ -143,6 +146,7 @@ impl ConnectionService {
         node_manager: Arc<NodeManager>,  // 改为接受共享的 NodeManager
         local_user_info: user_info::UserInfo,
         discovery_rx: mpsc::UnboundedReceiver<DiscoveryEvent>,
+        discovery_tx: mpsc::UnboundedSender<DiscoveryEvent>,
         config: ConnectionServiceConfig,
     ) -> Result<Self, MdnsError> {
         tracing::info!("正在初始化连接服务...");
@@ -238,6 +242,7 @@ impl ConnectionService {
             swarm,
             node_manager,
             discovery_rx: Some(discovery_rx),  // 🔥 包装在 Option 中
+            discovery_tx: Some(discovery_tx),  // 🔥 发送器用于通知 P2PManager
             mdns_service_running: true,  // 🔥 初始状态：mDNS 服务运行中
             local_user_info,
             protocol_version,
@@ -551,6 +556,10 @@ impl ConnectionService {
                             // 通过 send_log 发送服务状态事件（使用特殊前缀）
                             crate::send_log("SERVICE_STATUS", "connection_service", status_json.to_string());
                         }
+                        DiscoveryEvent::NodesUpdated => {
+                            // 🔥 节点列表已更新，发送连接状态到 Flutter
+                            self.send_connection_status_to_flutter();
+                        }
                     }
                 }
             }
@@ -669,6 +678,9 @@ impl ConnectionService {
                     self.node_manager.mark_node_online(&peer_id).await;
                     crate::send_log("INFO", "connection_service", format!("✅ 节点 {} 已标记为在线", peer_id));
 
+                    // 🔥 发送连接状态更新到 Flutter
+                    self.send_connection_status_to_flutter();
+
                     // 请求用户信息（获取设备名称等）
                     crate::send_log("INFO", "connection_service", format!("📋 向 {} 请求用户信息", peer_id));
                     let _ = self.swarm.behaviour_mut().request_response.send_request(
@@ -694,6 +706,9 @@ impl ConnectionService {
                     if self.node_manager.mark_node_offline(&peer_id, "连接关闭").await {
                         tracing::info!("已标记节点为离线: {}", peer_id);
                     }
+
+                    // 🔥 发送连接状态更新到 Flutter（设备离线）
+                    self.send_connection_status_to_flutter();
                 }
             }
 
@@ -735,6 +750,9 @@ impl ConnectionService {
                                     // 标记节点为在线
                                     self.node_manager.mark_node_online(&peer_id).await;
                                     crate::send_log("INFO", "connection_service", format!("✅ 节点 {} 已标记为在线", peer_id));
+
+                                    // 🔥 发送连接状态更新到 Flutter
+                                    self.send_connection_status_to_flutter();
 
                                     // 如果还未收到用户信息，请求用户信息
                                     if !self.peer_user_info.contains_key(&peer_id) {
@@ -880,6 +898,44 @@ impl ConnectionService {
             }
         }
         Ok(())
+    }
+
+    /// 🔥 发送连接服务状态到 Flutter
+    ///
+    /// 当节点列表变化时调用此方法，通知 Flutter 更新 UI
+    fn send_connection_status_to_flutter(&self) {
+        // 🔥 克隆 NodeManager 引用，在独立任务中发送状态
+        let node_manager = self.node_manager.clone();
+
+        // 在新任务中执行异步操作，避免在当前上下文中持有 &self
+        tokio::spawn(async move {
+            let online_nodes = node_manager.list_online_nodes().await;
+            let all_nodes = node_manager.list_all_nodes().await;
+
+            let (health, message) = if !online_nodes.is_empty() {
+                (
+                    "healthy",
+                    format!("服务运行中 | 已连接 {} 个设备", online_nodes.len())
+                )
+            } else {
+                (
+                    "degraded",
+                    "服务运行中 | 等待连接设备".to_string()
+                )
+            };
+
+            let status_json = serde_json::json!({
+                "service": "Connection",
+                "name": "Connection Service",
+                "health": health,
+                "is_running": true,
+                "message": message,
+                "connected_peers": online_nodes.len(),
+                "discovered_peers": all_nodes.len(),
+            });
+
+            crate::send_log("SERVICE_STATUS", "connection_service", status_json.to_string());
+        });
     }
 }
 
