@@ -9,6 +9,7 @@ import '../widgets/unified_app_bar.dart';
 import '../services/p2p_event_bus.dart' as eb;
 import '../bridge/types.dart';
 import '../bridge/frb_generated.dart';
+import '../data/models/chat_message_model.dart';
 import 'device_detail_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -364,7 +365,7 @@ class _ChatScreenState extends State<ChatScreen> {
               // Header - use UnifiedAppBar
               UnifiedAppBar(
                 title: widget.peerName,
-                statusIndicator: _buildStatusIndicator(),
+                subtitleWidget: _buildStatusIndicator(),
                 actions: [
                   // 设备详情按钮
                   GestureDetector(
@@ -555,63 +556,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// 构建动态状态指示器
   Widget _buildStatusIndicator() {
-    // 状态颜色
-    final Color statusColor;
-    final Color backgroundColor;
-
     if (!_isOnline) {
-      statusColor = const Color(0xFFD32F2F); // Red
-      backgroundColor = const Color(0xFFFFEBEE);
-    } else {
-      statusColor = const Color(0xFF3D8A5A); // Green
-      backgroundColor = const Color(0xFFC8F0D8);
+      return const OfflineStatusIndicator(text: '离线');
     }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: statusColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            _statusText,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.normal,
-              color: statusColor,
-            ),
-          ),
-        ],
-      ),
-    );
+    return OnlineStatusIndicator(text: _statusText);
   }
 
   /// 创建设备详情页面
   Widget _createDeviceDetailScreen() {
     return DeviceDetailScreen(peerId: widget.peerId);
   }
-}
-
-class ChatMessageData {
-  final String message;
-  final DateTime timestamp;
-  final bool isSelf;
-
-  ChatMessageData({
-    required this.message,
-    required this.timestamp,
-    required this.isSelf,
-  });
 }

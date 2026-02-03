@@ -32,6 +32,9 @@ dependencies:
   # freezed support (required by flutter_rust_bridge for complex types)
   freezed_annotation: ^2.4.0
 
+  # GetX - 状态管理、路由、依赖注入
+  get: ^4.7.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

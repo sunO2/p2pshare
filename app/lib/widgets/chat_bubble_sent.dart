@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../screens/chat_screen.dart';
+import '../data/models/chat_message_model.dart';
 
 class ChatBubbleSent extends StatelessWidget {
   final ChatMessageData message;
