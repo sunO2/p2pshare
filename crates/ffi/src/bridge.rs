@@ -197,12 +197,18 @@ pub fn p2p_cleanup() {
 // 节点管理
 // ============================================================================
 
-/// 获取本地 Peer ID
+/// 获取本地 Peer ID（同步版本，兼容旧代码）
 #[frb(sync)]
 pub fn p2p_get_local_peer_id() -> Result<String, String> {
     let runtime = crate::get_runtime().ok_or("No runtime")?;
     let peer_id = runtime.block_on(crate::internal_get_local_peer_id())?;
     Ok(peer_id)
+}
+
+/// 🔥 获取本地 Peer ID（异步版本，避免阻塞 UI）
+#[frb(dart_async)]
+pub async fn p2p_get_local_peer_id_async() -> Result<String, String> {
+    crate::internal_get_local_peer_id().await
 }
 
 /// 获取已发现的节点列表
@@ -249,6 +255,13 @@ pub fn p2p_trigger_refresh() -> Result<(), String> {
     crate::internal_trigger_refresh_sync()
 }
 
+/// 🔥 主动触发设备发现刷新（异步版本，避免阻塞 UI）
+#[frb(dart_async)]
+pub async fn p2p_trigger_refresh_async() -> Result<(), String> {
+    tracing::info!("🔄 [Bridge] Flutter 请求主动刷新 (异步)");
+    crate::internal_trigger_refresh_async().await
+}
+
 /// 获取设备名称
 #[frb(sync)]
 pub fn p2p_get_device_name() -> Result<String, String> {
@@ -280,6 +293,12 @@ pub fn p2p_get_verified_nodes() -> Result<Vec<P2PBridgeNodeInfo>, String> {
 #[frb(sync)]
 pub fn p2p_get_system_status() -> Result<SystemStatusJson, String> {
     crate::internal_get_system_status_sync()
+}
+
+/// 🔥 获取系统状态（异步版本，避免阻塞 UI）
+#[frb(dart_async)]
+pub async fn p2p_get_system_status_async() -> Result<SystemStatusJson, String> {
+    crate::internal_get_system_status_async().await
 }
 
 /// 🔥 获取广播信息

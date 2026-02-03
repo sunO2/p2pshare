@@ -134,6 +134,10 @@ pub struct ConnectionService {
 
     /// 🔥 跟踪每个节点的重连尝试次数
     reconnect_attempts: HashMap<PeerId, u32>,
+
+    /// 🔥 跟踪待处理的 dial 尝试 (addr_string -> peer_id)
+    /// 用于处理 OutgoingConnectionError 中 peer_id = None 的情况
+    pending_dials: HashMap<String, PeerId>,
 }
 
 impl ConnectionService {
@@ -255,12 +259,15 @@ impl ConnectionService {
             config,
             last_health_check: Instant::now(),
             reconnect_attempts: HashMap::new(),
+            pending_dials: HashMap::new(),
         })
     }
 
     /// 连接到指定的节点（带重试机制）
     ///
     /// ⭐ 方案3: 添加重试机制，解决设备同时启动时的竞态条件
+    ///
+    /// 🔥 修复：跟踪 dial 尝试，以便在 OutgoingConnectionError 中恢复 peer_id
     pub async fn connect(&mut self, peer_id: PeerId, addr: Multiaddr) {
         const MAX_RETRIES: u32 = 3;
         let mut last_error = None;
@@ -274,14 +281,21 @@ impl ConnectionService {
                 crate::send_log("INFO", "connection_service", format!("🔌 正在连接到 {} at {}", peer_id, addr));
             }
 
+            // 🔥 关键修复：在 dial 前记录地址到 peer_id 的映射
+            // 这样即使 OutgoingConnectionError 中 peer_id = None，我们也能知道是哪个 peer
+            let addr_str = addr.to_string();
+            self.pending_dials.insert(addr_str.clone(), peer_id);
+
             match self.swarm.dial(addr.clone()) {
                 Ok(_) => {
-                    tracing::info!("✅ 成功连接到 {}", peer_id);
-                    crate::send_log("INFO", "connection_service", format!("✅ 成功连接到 {}", peer_id));
+                    tracing::info!("✅ 已发送连接请求到 {}", peer_id);
+                    crate::send_log("INFO", "connection_service", format!("✅ 已发送连接请求到 {}", peer_id));
                     return;
                 }
                 Err(e) => {
                     tracing::warn!("⚠️  连接失败 [尝试 {}/{}]: {} - {}", attempt, MAX_RETRIES, peer_id, e);
+                    // 连接立即失败，清理 pending_dials
+                    self.pending_dials.remove(&addr_str);
                     last_error = Some(e);
 
                     // 如果不是最后一次尝试，等待一段时间后重试
@@ -388,9 +402,14 @@ impl ConnectionService {
             }
 
             // 尝试重连
+            // 🔥 修复：跟踪 pending dial
             for addr in &node.addresses {
                 let attempt_num = *attempts + 1;
                 tracing::info!("🔄 自动重连到 {} at {} (尝试 {})", peer_id, addr, attempt_num);
+
+                // 🔥 跟踪 pending dial
+                let addr_str = addr.to_string();
+                self.pending_dials.insert(addr_str.clone(), peer_id);
 
                 match self.swarm.dial(addr.clone()) {
                     Ok(_) => {
@@ -398,9 +417,12 @@ impl ConnectionService {
                         reconnect_count += 1;
                         crate::send_log("INFO", "connection_service",
                             format!("🔄 自动重连: {} (尝试 {})", peer_id, attempt_num));
+                        break; // 成功发送一次即可，不需要尝试多个地址
                     }
                     Err(e) => {
                         tracing::warn!("重连失败 {}: {:?}", peer_id, e);
+                        // 立即失败，清理 pending dial
+                        self.pending_dials.remove(&addr_str);
                     }
                 }
             }
@@ -644,7 +666,7 @@ impl ConnectionService {
     ) -> Result<(), MdnsError> {
         match event {
             // 连接建立
-            libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint: _, .. } => {
+            libp2p::swarm::SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
                 tracing::info!("✓ 与 {} 建立新连接", peer_id);
                 crate::send_log("INFO", "connection_service", format!("✓ 与 {} 建立新连接", peer_id));
                 let conn_count = self.active_connections.entry(peer_id).or_insert(0);
@@ -653,6 +675,11 @@ impl ConnectionService {
 
                 // 🔥 连接成功后，重置重连计数
                 self.reconnect_attempts.remove(&peer_id);
+
+                // 🔥 清理 pending_dials 中与该 peer 相关的条目
+                // 通过 endpoint 获取地址，从 pending_dials 中移除
+                let endpoint_addr = endpoint.get_remote_address();
+                self.pending_dials.remove(&endpoint_addr.to_string());
 
                 if is_first_connection {
                     // ⚠️ 关键修复：在连接建立时立即添加节点到 NodeManager
@@ -709,6 +736,45 @@ impl ConnectionService {
 
                     // 🔥 发送连接状态更新到 Flutter（设备离线）
                     self.send_connection_status_to_flutter();
+                }
+            }
+
+            // 🔥 出站连接错误 - 连接尝试失败
+            libp2p::swarm::SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                if let Some(pid) = peer_id {
+                    tracing::warn!("❌ 连接到 {} 失败: {:?}", pid, error);
+                    crate::send_log("WARN", "connection_service", format!("❌ 连接失败: {} - {}", pid, error));
+
+                    // 增加重连计数
+                    let attempts = self.reconnect_attempts.entry(pid).or_insert(0);
+                    *attempts += 1;
+
+                    // 如果重连次数过多，标记为离线
+                    if *attempts >= 3 {
+                        tracing::warn!("⚠️ 节点 {} 连接失败次数过多 ({}), 标记为离线", pid, attempts);
+                        if self.node_manager.mark_node_offline(&pid, "连接失败").await {
+                            tracing::info!("已标记节点为离线: {}", pid);
+                        }
+                        self.send_connection_status_to_flutter();
+                    }
+                } else {
+                    // 🔥 peer_id = None 表示连接在握手前就失败了
+                    // 无法确定具体是哪个 peer，清理所有 pending dials 作为安全措施
+                    tracing::warn!("❌ 连接失败（无 peer_id）: {:?}，清理 {} 个待处理 dial", error, self.pending_dials.len());
+                    crate::send_log("WARN", "connection_service", format!("❌ 连接失败（握手前）: {} | 清理 {} 个待处理 dial",
+                        error, self.pending_dials.len()));
+
+                    // 清理所有 pending dials（它们可能都失败了）
+                    for (addr, pid) in &self.pending_dials {
+                        tracing::debug!("清理待处理 dial: {} -> {}", addr, pid);
+
+                        // 增加重连计数（因为 dial 失败了）
+                        let attempts = self.reconnect_attempts.entry(*pid).or_insert(0);
+                        *attempts += 1;
+                    }
+
+                    // 清空 pending dials
+                    self.pending_dials.clear();
                 }
             }
 

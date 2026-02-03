@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1067281298;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2098660628;
 
 // Section: executor
 
@@ -387,6 +387,41 @@ fn wire__localp2p_ffi__bridge__p2p_get_local_peer_id_impl(
         },
     )
 }
+fn wire__localp2p_ffi__bridge__p2p_get_local_peer_id_async_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "p2p_get_local_peer_id_async",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::bridge::p2p_get_local_peer_id_async().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__localp2p_ffi__bridge__p2p_get_messages_by_peer_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -456,6 +491,41 @@ fn wire__localp2p_ffi__bridge__p2p_get_system_status_impl(
                 let output_ok = crate::bridge::p2p_get_system_status()?;
                 Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__localp2p_ffi__bridge__p2p_get_system_status_async_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "p2p_get_system_status_async",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::bridge::p2p_get_system_status_async().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
         },
     )
 }
@@ -1124,6 +1194,41 @@ fn wire__localp2p_ffi__bridge__p2p_trigger_refresh_impl(
         },
     )
 }
+fn wire__localp2p_ffi__bridge__p2p_trigger_refresh_async_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "p2p_trigger_refresh_async",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::bridge::p2p_trigger_refresh_async().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__bridge__p_2_p_bridge_node_info_from_basic_info_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1661,40 +1766,58 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         9 => wire__localp2p_ffi__bridge__p2p_get_file_info_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__localp2p_ffi__bridge__p2p_get_messages_by_peer_impl(
+        11 => wire__localp2p_ffi__bridge__p2p_get_local_peer_id_async_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => wire__localp2p_ffi__bridge__p2p_mark_messages_read_impl(
+        12 => wire__localp2p_ffi__bridge__p2p_get_messages_by_peer_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        21 => wire__localp2p_ffi__bridge__p2p_register_file_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__localp2p_ffi__bridge__p2p_restart_discovery_impl(
+        14 => wire__localp2p_ffi__bridge__p2p_get_system_status_async_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        26 => {
+        20 => wire__localp2p_ffi__bridge__p2p_mark_messages_read_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        23 => wire__localp2p_ffi__bridge__p2p_register_file_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__localp2p_ffi__bridge__p2p_restart_discovery_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        28 => {
             wire__localp2p_ffi__bridge__p2p_revoke_message_impl(port, ptr, rust_vec_len, data_len)
         }
-        27 => wire__localp2p_ffi__bridge__p2p_send_message_impl(port, ptr, rust_vec_len, data_len),
-        28 => {
+        29 => wire__localp2p_ffi__bridge__p2p_send_message_impl(port, ptr, rust_vec_len, data_len),
+        30 => {
             wire__localp2p_ffi__bridge__p2p_send_message_ex_impl(port, ptr, rust_vec_len, data_len)
         }
-        30 => wire__localp2p_ffi__bridge__p2p_start_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__bridge__p_2_p_bridge_node_info_from_basic_info_impl(
+        32 => wire__localp2p_ffi__bridge__p2p_start_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__localp2p_ffi__bridge__p2p_trigger_refresh_async_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        34 => wire__crate__bridge__p_2_p_bridge_node_info_from_peer_id_and_info_impl(
+        36 => wire__crate__bridge__p_2_p_bridge_node_info_from_basic_info_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        37 => wire__crate__bridge__p_2_p_bridge_node_info_from_peer_id_and_info_impl(
             port,
             ptr,
             rust_vec_len,
@@ -1716,36 +1839,36 @@ fn pde_ffi_dispatcher_sync_impl(
         7 => wire__localp2p_ffi__bridge__p2p_get_device_name_impl(ptr, rust_vec_len, data_len),
         8 => wire__localp2p_ffi__bridge__p2p_get_devices_impl(ptr, rust_vec_len, data_len),
         10 => wire__localp2p_ffi__bridge__p2p_get_local_peer_id_impl(ptr, rust_vec_len, data_len),
-        12 => wire__localp2p_ffi__bridge__p2p_get_system_status_impl(ptr, rust_vec_len, data_len),
-        13 => wire__localp2p_ffi__bridge__p2p_get_verified_nodes_impl(ptr, rust_vec_len, data_len),
-        14 => wire__localp2p_ffi__bridge__p2p_init_impl(ptr, rust_vec_len, data_len),
-        15 => wire__localp2p_ffi__bridge__p2p_is_discovery_thread_alive_impl(
+        13 => wire__localp2p_ffi__bridge__p2p_get_system_status_impl(ptr, rust_vec_len, data_len),
+        15 => wire__localp2p_ffi__bridge__p2p_get_verified_nodes_impl(ptr, rust_vec_len, data_len),
+        16 => wire__localp2p_ffi__bridge__p2p_init_impl(ptr, rust_vec_len, data_len),
+        17 => wire__localp2p_ffi__bridge__p2p_is_discovery_thread_alive_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => wire__localp2p_ffi__bridge__p2p_is_initialized_impl(ptr, rust_vec_len, data_len),
-        17 => wire__localp2p_ffi__bridge__p2p_is_running_impl(ptr, rust_vec_len, data_len),
-        19 => wire__localp2p_ffi__bridge__p2p_poll_events_impl(ptr, rust_vec_len, data_len),
-        20 => wire__localp2p_ffi__bridge__p2p_refresh_devices_impl(ptr, rust_vec_len, data_len),
-        22 => wire__localp2p_ffi__bridge__p2p_report_external_device_lost_impl(
+        18 => wire__localp2p_ffi__bridge__p2p_is_initialized_impl(ptr, rust_vec_len, data_len),
+        19 => wire__localp2p_ffi__bridge__p2p_is_running_impl(ptr, rust_vec_len, data_len),
+        21 => wire__localp2p_ffi__bridge__p2p_poll_events_impl(ptr, rust_vec_len, data_len),
+        22 => wire__localp2p_ffi__bridge__p2p_refresh_devices_impl(ptr, rust_vec_len, data_len),
+        24 => wire__localp2p_ffi__bridge__p2p_report_external_device_lost_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        23 => wire__localp2p_ffi__bridge__p2p_report_external_discoveries_impl(
+        25 => wire__localp2p_ffi__bridge__p2p_report_external_discoveries_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        24 => wire__localp2p_ffi__bridge__p2p_report_external_discovery_impl(
+        26 => wire__localp2p_ffi__bridge__p2p_report_external_discovery_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__localp2p_ffi__bridge__p2p_set_event_stream_impl(ptr, rust_vec_len, data_len),
-        31 => wire__localp2p_ffi__bridge__p2p_stop_impl(ptr, rust_vec_len, data_len),
-        32 => wire__localp2p_ffi__bridge__p2p_trigger_refresh_impl(ptr, rust_vec_len, data_len),
+        31 => wire__localp2p_ffi__bridge__p2p_set_event_stream_impl(ptr, rust_vec_len, data_len),
+        33 => wire__localp2p_ffi__bridge__p2p_stop_impl(ptr, rust_vec_len, data_len),
+        34 => wire__localp2p_ffi__bridge__p2p_trigger_refresh_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

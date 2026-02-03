@@ -56,9 +56,13 @@ void p2PStop() => RustLib.instance.api.localp2PFfiBridgeP2PStop();
 /// 清理资源
 void p2PCleanup() => RustLib.instance.api.localp2PFfiBridgeP2PCleanup();
 
-/// 获取本地 Peer ID
+/// 获取本地 Peer ID（同步版本，兼容旧代码）
 String p2PGetLocalPeerId() =>
     RustLib.instance.api.localp2PFfiBridgeP2PGetLocalPeerId();
+
+/// 🔥 获取本地 Peer ID（异步版本，避免阻塞 UI）
+Future<String> p2PGetLocalPeerIdAsync() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PGetLocalPeerIdAsync();
 
 /// 获取已发现的节点列表
 ///
@@ -80,6 +84,10 @@ List<P2PBridgeNodeInfo> p2PRefreshDevices() =>
 void p2PTriggerRefresh() =>
     RustLib.instance.api.localp2PFfiBridgeP2PTriggerRefresh();
 
+/// 🔥 主动触发设备发现刷新（异步版本，避免阻塞 UI）
+Future<void> p2PTriggerRefreshAsync() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PTriggerRefreshAsync();
+
 /// 获取设备名称
 String p2PGetDeviceName() =>
     RustLib.instance.api.localp2PFfiBridgeP2PGetDeviceName();
@@ -93,6 +101,10 @@ List<P2PBridgeNodeInfo> p2PGetVerifiedNodes() =>
 /// 返回当前所有服务的运行状态和健康状态
 SystemStatusJson p2PGetSystemStatus() =>
     RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatus();
+
+/// 🔥 获取系统状态（异步版本，避免阻塞 UI）
+Future<SystemStatusJson> p2PGetSystemStatusAsync() =>
+    RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatusAsync();
 
 /// 🔥 获取广播信息
 ///

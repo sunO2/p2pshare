@@ -1099,6 +1099,19 @@ class P2PManager {
     return result;
   }
 
+  /// 🔥 获取本地 Peer ID（异步版本，避免阻塞 UI）
+  Future<String> getLocalPeerIdAsync() async {
+    if (!_initialized) {
+      _log.e('getLocalPeerIdAsync 但未初始化');
+      throw Exception('Not initialized');
+    }
+
+    _log.t('获取本地 Peer ID (异步)');
+    final result = await RustLib.instance.api.localp2PFfiBridgeP2PGetLocalPeerIdAsync();
+    _log.d('本地 Peer ID: $result');
+    return result;
+  }
+
   /// 获取设备名称
   String getDeviceName() {
     if (!_initialized) {
@@ -1211,6 +1224,8 @@ class P2PManager {
   /// 主动触发刷新
   ///
   /// 触发 mDNS 重新广播和重新发现，并尝试重新连接到所有已知节点
+  ///
+  /// 🔄 改为异步：避免阻塞 UI
   Future<void> triggerRefresh() async {
     if (!_initialized) {
       _log.e('triggerRefresh 但未初始化');
@@ -1221,10 +1236,10 @@ class P2PManager {
     _log.rustCall('triggerRefresh');
 
     try {
-      RustLib.instance.api.localp2PFfiBridgeP2PTriggerRefresh();
+      await RustLib.instance.api.localp2PFfiBridgeP2PTriggerRefreshAsync();
       _log.rustReturn('triggerRefresh', result: 'refreshed');
     } catch (e, stackTrace) {
-      _log.rustError('localp2PFfiBridgeP2PTriggerRefresh', e, stackTrace);
+      _log.rustError('localp2PFfiBridgeP2PTriggerRefreshAsync', e, stackTrace);
       rethrow;
     }
   }
@@ -1271,6 +1286,30 @@ class P2PManager {
       return SystemStatusJson.fromBridge(result);
     } catch (e, stackTrace) {
       _log.rustError('localp2PFfiBridgeP2PGetSystemStatus', e, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// 🔥 获取系统状态（异步版本，避免阻塞 UI）
+  ///
+  /// 返回当前所有服务的运行状态和健康状态
+  Future<SystemStatusJson> getSystemStatusAsync() async {
+    if (!_initialized) {
+      _log.e('getSystemStatusAsync 但未初始化');
+      throw Exception('Not initialized');
+    }
+
+    _log.t('获取系统状态 (异步)');
+
+    try {
+      final result = await RustLib.instance.api.localp2PFfiBridgeP2PGetSystemStatusAsync();
+      _log.d(
+        '系统状态: mDNS=${result.mdnsService.health}, Connection=${result.connectionService.health}',
+      );
+      // 转换 bridge 类型为本地类型（BigInt -> int）
+      return SystemStatusJson.fromBridge(result);
+    } catch (e, stackTrace) {
+      _log.rustError('localp2PFfiBridgeP2PGetSystemStatusAsync', e, stackTrace);
       rethrow;
     }
   }

@@ -1064,6 +1064,58 @@ pub fn internal_get_system_status_sync() -> Result<bridge::SystemStatusJson, Str
     }
 }
 
+/// 🔥 获取系统状态（异步版本，避免阻塞 UI）
+pub async fn internal_get_system_status_async() -> Result<bridge::SystemStatusJson, String> {
+    let start = std::time::Instant::now();
+    tracing::info!("📊 [FFI] 获取系统状态 (异步)");
+
+    // 🔥 使用 spawn_blocking 在后台线程执行同步版本
+    // 这样可以避免 Send/Sync 问题
+    let result = tokio::task::spawn_blocking(move || {
+        internal_get_system_status_sync()
+    }).await;
+
+    match result {
+        Ok(status) => {
+            tracing::info!("✓ [FFI] 系统状态获取成功");
+            tracing::info!("⏱️  [FFI] 获取系统状态耗时: {:?}", start.elapsed());
+            status
+        }
+        Err(_) => {
+            tracing::error!("❌ [FFI] 获取系统状态失败: 任务被取消");
+            Err("获取系统状态失败: 任务被取消".to_string())
+        }
+    }
+}
+
+/// 🔥 触发刷新（异步版本，避免阻塞 UI）
+pub async fn internal_trigger_refresh_async() -> Result<(), String> {
+    let start = std::time::Instant::now();
+    tracing::info!("🔄 [FFI] 开始触发刷新 (异步)");
+
+    // 🔥 使用 spawn_blocking 在后台线程执行同步版本
+    // 这样可以避免 Send/Sync 问题
+    let result = tokio::task::spawn_blocking(move || {
+        internal_trigger_refresh_sync()
+    }).await;
+
+    match result {
+        Ok(Ok(())) => {
+            tracing::info!("✓ [FFI] 刷新成功");
+            tracing::info!("⏱️  [FFI] 刷新总耗时: {:?}", start.elapsed());
+            Ok(())
+        }
+        Ok(Err(e)) => {
+            tracing::error!("❌ [FFI] 刷新失败: {:?}", e);
+            Err(e)
+        }
+        Err(_) => {
+            tracing::error!("❌ [FFI] 刷新失败: 任务被取消");
+            Err("刷新失败: 任务被取消".to_string())
+        }
+    }
+}
+
 /// 🔥 获取广播信息（异步版本，避免阻塞 UI）
 pub async fn internal_get_broadcast_info_async() -> Result<bridge::BroadcastInfoJson, String> {
     use libp2p::{multiaddr::Protocol, Multiaddr};
@@ -1082,17 +1134,30 @@ pub async fn internal_get_broadcast_info_async() -> Result<bridge::BroadcastInfo
         }
 
         let p2p_manager = resources.p2p_manager.as_ref().unwrap();
-        let manager = p2p_manager.lock().await;
 
-        // 获取基本信息
-        let peer_id = manager.local_peer_id().to_string();
-        let device_name = manager.device_name().to_string();
+        // 🔥 第一阶段：获取基本信息（持有 P2PManager 锁）
+        let (peer_id, device_name) = {
+            let manager = p2p_manager.lock().await;
+            (
+                manager.local_peer_id().to_string(),
+                manager.device_name().to_string(),
+            )
+        }; // 🔒 锁在这里释放
 
-        // 获取 ConnectionService 的监听地址
-        let connection_service = manager.connection_service()
-            .ok_or("ConnectionService not available")?;
+        // 🔥 第二阶段：获取监听地址（单独获取 ConnectionService 锁）
+        // 这样避免持有 P2PManager 锁时等待 ConnectionService 锁
+        let listeners: Vec<Multiaddr> = {
+            let manager = p2p_manager.lock().await;
+            let connection_service = manager.connection_service()
+                .ok_or("ConnectionService not available")?.clone();
+            drop(manager); // 释放 P2PManager 锁
 
-        let listeners: Vec<Multiaddr> = connection_service.lock().await.listeners();
+            // 在单独作用域内获取监听列表
+            let conn_guard = connection_service.lock().await;
+            let result = conn_guard.listeners();
+            drop(conn_guard); // 释放 ConnectionService 锁
+            result
+        }; // 🔒 ConnectionService 锁在这里已释放
 
         // 提取端口（从第一个监听地址中获取）
         let port = listeners.first()
@@ -1120,8 +1185,6 @@ pub async fn internal_get_broadcast_info_async() -> Result<bridge::BroadcastInfo
                 None
             })
             .collect();
-
-        drop(manager); // 尽早释放锁
 
         tracing::info!("✓ [FFI] 广播信息获取成功: peer_id={}, device_name={}, port={}, addresses={:?}",
             peer_id, device_name, port, addresses);

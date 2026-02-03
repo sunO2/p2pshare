@@ -103,7 +103,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (P2PManager.instance.isInitialized) {
         // 从存储服务获取设备名称（确保使用正确的设备名称）
         final deviceName = await StorageService.instance.getDeviceName();
-        final localPeerId = P2PManager.instance.getLocalPeerId();
+        // 🔥 使用异步版本，避免阻塞 UI
+        final localPeerId = await P2PManager.instance.getLocalPeerIdAsync();
 
         setState(() {
           _isInitialized = true;
@@ -129,7 +130,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
 
-      final status = P2PManager.instance.getSystemStatus();
+      // 🔥 使用异步版本，避免阻塞 UI
+      final status = await P2PManager.instance.getSystemStatusAsync();
       final mdnsHealth = status.mdnsService.health;
       final mdnsRunning = status.mdnsService.isRunning;
       final mdnsMessage = status.mdnsService.message;

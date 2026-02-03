@@ -30,11 +30,15 @@ class _DeviceListScreenState extends State<DeviceListScreen>
   // 🔥 广播信息悬浮浮层显示状态
   bool _showBroadcastInfoPopup = false;
 
-  // 🔥 Info 按钮 GlobalKey，用于获取按钮位置
-  final GlobalKey _infoButtonKey = GlobalKey();
+  // 🔥 Info 按钮占位符 GlobalKey，用于定位
+  final GlobalKey _infoPlaceholderKey = GlobalKey();
 
   // 🔥 Stack GlobalKey，用于浮层定位
   final GlobalKey _stackKey = GlobalKey();
+
+  // 🔥 Info 按钮位置缓存（避免每帧计算）
+  Offset? _infoButtonPosition;
+  bool _infoButtonPositionCalculated = false;
 
   // 🔥 广播信息
   BroadcastInfoJson? _broadcastInfo;
@@ -217,6 +221,13 @@ class _DeviceListScreenState extends State<DeviceListScreen>
 
   @override
   Widget build(BuildContext context) {
+    // 首次布局后计算 info 按钮位置
+    if (!_infoButtonPositionCalculated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _calculateInfoButtonPosition();
+      });
+    }
+
     return Stack(
       key: _stackKey,
       children: [
@@ -236,6 +247,8 @@ class _DeviceListScreenState extends State<DeviceListScreen>
         ),
         // 🔥 广播信息悬浮浮层
         if (_showBroadcastInfoPopup) _buildBroadcastInfoPopup(context),
+        // 🔥 Info 按钮（Positioned 放在 Stack 末尾，z-index 最高）
+        if (_infoButtonPosition != null) _buildPositionedInfoButton(),
       ],
     );
   }
@@ -508,48 +521,11 @@ class _DeviceListScreenState extends State<DeviceListScreen>
                 ),
               ),
               const Spacer(),
-              // 🔥 Info 按钮，显示广播信息悬浮浮层
-              InkWell(
-                key: _infoButtonKey,
-                onTap: () async {
-                  // 获取广播信息（异步调用，避免阻塞 UI）
-                  try {
-                    final info = await P2PManager.instance.getBroadcastInfo();
-
-                    // 如果浮层已显示，播放关闭动画
-                    if (_showBroadcastInfoPopup) {
-                      await _popupAnimationController.reverse();
-                      if (mounted) {
-                        setState(() {
-                          _showBroadcastInfoPopup = false;
-                        });
-                      }
-                      return;
-                    }
-
-                    // 显示浮层并播放打开动画
-                    setState(() {
-                      _broadcastInfo = info;
-                      _showBroadcastInfoPopup = true;
-                    });
-                    _popupAnimationController.forward();
-                  } catch (e) {
-                    debugPrint('Failed to get broadcast info: $e');
-                  }
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
-                ),
+              // 🔥 Info 按钮占位符（用于定位）
+              SizedBox(
+                key: _infoPlaceholderKey,
+                width: 28,
+                height: 28,
               ),
             ],
           ),
@@ -672,20 +648,20 @@ class _DeviceListScreenState extends State<DeviceListScreen>
       return const Positioned(child: SizedBox.shrink());
     }
 
-    // 获取 Stack 和按钮的 RenderBox
+    // 获取 Stack 和占位符的 RenderBox
     final RenderBox? stackBox =
         _stackKey.currentContext?.findRenderObject() as RenderBox?;
-    final RenderBox? buttonBox =
-        _infoButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? placeholderBox =
+        _infoPlaceholderKey.currentContext?.findRenderObject() as RenderBox?;
 
-    if (stackBox == null || buttonBox == null) {
+    if (stackBox == null || placeholderBox == null) {
       return const Positioned(child: SizedBox.shrink());
     }
 
-    // 获取按钮相对于 Stack 的位置（使用 globalToLocal 转换）
-    final buttonGlobalPosition = buttonBox.localToGlobal(Offset.zero);
-    final buttonLocalPosition = stackBox.globalToLocal(buttonGlobalPosition);
-    final buttonSize = buttonBox.size;
+    // 获取占位符相对于 Stack 的位置（使用 globalToLocal 转换）
+    final placeholderGlobalPosition = placeholderBox.localToGlobal(Offset.zero);
+    final placeholderLocalPosition = stackBox.globalToLocal(placeholderGlobalPosition);
+    final placeholderSize = placeholderBox.size;
 
     final info = _broadcastInfo!;
     const popupWidth = 320.0;
@@ -694,8 +670,9 @@ class _DeviceListScreenState extends State<DeviceListScreen>
       animation: _scaleAnimation,
       builder: (context, child) {
         return Positioned(
-          left: buttonLocalPosition.dx + buttonSize.width - popupWidth,
-          top: buttonLocalPosition.dy,
+          // 🔥 位置：往右 16，往上 16
+          left: placeholderLocalPosition.dx + placeholderSize.width - popupWidth + 16,
+          top: placeholderLocalPosition.dy - 16,
           child: Transform.scale(
             scale: _scaleAnimation.value,
             alignment: Alignment.topRight,
@@ -731,27 +708,6 @@ class _DeviceListScreenState extends State<DeviceListScreen>
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF333333),
-                            ),
-                          ),
-                          const Spacer(),
-                          // 关闭按钮
-                          GestureDetector(
-                            onTap: () async {
-                              // 🔥 播放关闭动画，动画完成后隐藏浮层
-                              await _popupAnimationController.reverse();
-                              if (mounted) {
-                                setState(() {
-                                  _showBroadcastInfoPopup = false;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.grey,
-                                size: 20,
-                              ),
                             ),
                           ),
                         ],
@@ -905,6 +861,84 @@ class _DeviceListScreenState extends State<DeviceListScreen>
           ),
         ),
       ],
+    );
+  }
+
+  /// 🔥 计算 info 按钮位置（基于占位符）
+  void _calculateInfoButtonPosition() {
+    final RenderBox? stackBox =
+        _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? placeholderBox =
+        _infoPlaceholderKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (stackBox == null || placeholderBox == null) {
+      return;
+    }
+
+    // 获取占位符相对于 Stack 的位置
+    final placeholderGlobalPosition = placeholderBox.localToGlobal(Offset.zero);
+    final placeholderLocalPosition = stackBox.globalToLocal(placeholderGlobalPosition);
+
+    if (mounted) {
+      setState(() {
+        _infoButtonPosition = placeholderLocalPosition;
+        _infoButtonPositionCalculated = true;
+      });
+    }
+  }
+
+  /// 🔥 构建 Positioned 的 Info 按钮（z-index 最高）
+  Widget _buildPositionedInfoButton() {
+    if (_infoButtonPosition == null) {
+      return const Positioned(child: SizedBox.shrink());
+    }
+
+    return Positioned(
+      left: _infoButtonPosition!.dx,
+      top: _infoButtonPosition!.dy,
+      child: InkWell(
+        onTap: () async {
+          // 获取广播信息（异步调用，避免阻塞 UI）
+          try {
+            final info = await P2PManager.instance.getBroadcastInfo();
+
+            // 如果浮层已显示，播放关闭动画
+            if (_showBroadcastInfoPopup) {
+              await _popupAnimationController.reverse();
+              if (mounted) {
+                setState(() {
+                  _showBroadcastInfoPopup = false;
+                });
+              }
+              return;
+            }
+
+            // 显示浮层并播放打开动画
+            setState(() {
+              _broadcastInfo = info;
+              _showBroadcastInfoPopup = true;
+            });
+            _popupAnimationController.forward();
+          } catch (e) {
+            debugPrint('Failed to get broadcast info: $e');
+          }
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          width: 28,
+          height: 28,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Icon(
+            Icons.info_outline,
+            size: 16,
+            color: Colors.grey,
+          ),
+        ),
+      ),
     );
   }
 }
