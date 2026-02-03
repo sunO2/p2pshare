@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import '../../../p2p_manager.dart';
 import '../../../services/log_service.dart';
 import '../../../services/storage_service.dart';
-import '../../../screens/settings_screen.dart';
+import '../views/debug/logs_viewer_view.dart';
 
 /// 设置页面控制器
 ///
@@ -178,7 +178,7 @@ class SettingsController extends GetxController {
 
   /// 查看日志
   void showLogs() {
-    Get.to(() => const LogsViewerScreen());
+    Get.to(() => const LogsViewerView());
     loadLogInfo();
   }
 
@@ -240,195 +240,5 @@ class SettingsController extends GetxController {
       return '${peerId.substring(0, 10)}...';
     }
     return peerId;
-  }
-}
-
-/// 日志查看器页面控制器
-class LogsViewerController extends GetxController {
-  /// 选中的日期
-  final selectedDate = ''.obs;
-
-  /// 可用日期列表
-  final availableDates = <String>[].obs;
-
-  /// 日志行列表
-  final logLines = <LogLine>[].obs;
-
-  /// 自动滚动
-  final autoScroll = true.obs;
-
-  /// 显示 Flutter 日志
-  final showFlutterLogs = true.obs;
-
-  /// 显示 Rust 日志
-  final showRustLogs = true.obs;
-
-  /// 是否正在实时监听
-  final isRealtimeWatching = false.obs;
-
-  /// 滚动控制器
-  late final ScrollController scrollController;
-
-  /// 实时日志订阅
-  StreamSubscription<LogLine>? realtimeSubscription;
-
-  final LogService _log = Get.find<LogService>();
-
-  @override
-  void onInit() {
-    super.onInit();
-    scrollController = ScrollController();
-    initDates();
-  }
-
-  @override
-  void onClose() {
-    stopRealtimeWatch();
-    scrollController.dispose();
-    super.onClose();
-  }
-
-  /// 初始化日期
-  Future<void> initDates() async {
-    try {
-      final dates = await _log.getAvailableDates();
-      availableDates.assignAll(dates);
-      if (dates.isNotEmpty) {
-        selectedDate.value = dates.first;
-        await loadInitialLogs();
-        startRealtimeWatch();
-      }
-    } catch (e) {
-      _log.e('Failed to load dates: $e', e);
-    }
-  }
-
-  /// 加载初始日志
-  Future<void> loadInitialLogs() async {
-    if (selectedDate.value.isEmpty) return;
-
-    try {
-      final flutterLogs = await _log.getLogsByDate(selectedDate.value, LogType.flutter);
-      final rustLogs = await _log.getLogsByDate(selectedDate.value, LogType.rust);
-
-      final lines = [
-        ...flutterLogs.map((log) => LogLine(
-              content: log,
-              type: LogType.flutter,
-              timestamp: DateTime.now(),
-            )),
-        ...rustLogs.map((log) => LogLine(
-              content: log,
-              type: LogType.rust,
-              timestamp: DateTime.now(),
-            )),
-      ];
-      lines.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-      logLines.assignAll(lines);
-      if (autoScroll.value) {
-        scrollToBottom();
-      }
-    } catch (e) {
-      _log.e('Failed to load logs: $e', e);
-    }
-  }
-
-  /// 切换日期
-  Future<void> changeDate(String? newDate) async {
-    if (newDate == null || newDate == selectedDate.value) return;
-
-    stopRealtimeWatch();
-    selectedDate.value = newDate;
-    logLines.clear();
-    await loadInitialLogs();
-    startRealtimeWatch();
-  }
-
-  /// 刷新日志
-  Future<void> refreshLogs() async {
-    stopRealtimeWatch();
-    logLines.clear();
-    await loadInitialLogs();
-    startRealtimeWatch();
-  }
-
-  /// 开始实时监听
-  void startRealtimeWatch() {
-    if (isRealtimeWatching.value) return;
-
-    isRealtimeWatching.value = true;
-    _log.startRealtimeWatch(selectedDate.value);
-
-    realtimeSubscription = _log.realtimeLogStream.listen((logLine) {
-      // 过滤
-      if (logLine.type == LogType.flutter && !showFlutterLogs.value) return;
-      if (logLine.type == LogType.rust && !showRustLogs.value) return;
-
-      logLines.add(logLine);
-
-      if (autoScroll.value) {
-        scrollToBottom();
-      }
-    }, onError: (error) {
-      _log.e('Realtime log stream error: $error', error);
-    });
-  }
-
-  /// 停止实时监听
-  void stopRealtimeWatch() {
-    isRealtimeWatching.value = false;
-    realtimeSubscription?.cancel();
-    realtimeSubscription = null;
-    _log.stopRealtimeWatch();
-  }
-
-  /// 切换实时监听
-  void toggleRealtimeWatch() {
-    if (isRealtimeWatching.value) {
-      stopRealtimeWatch();
-    } else {
-      startRealtimeWatch();
-    }
-  }
-
-  /// 切换自动滚动
-  void toggleAutoScroll() {
-    autoScroll.value = !autoScroll.value;
-    if (autoScroll.value) {
-      scrollToBottom();
-    }
-  }
-
-  /// 切换 Flutter 日志显示
-  void toggleFlutterLogs() {
-    showFlutterLogs.value = !showFlutterLogs.value;
-  }
-
-  /// 切换 Rust 日志显示
-  void toggleRustLogs() {
-    showRustLogs.value = !showRustLogs.value;
-  }
-
-  /// 滚动到底部
-  void scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (scrollController.hasClients) {
-        scrollController.animateTo(
-          scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  /// 过滤后的日志
-  List<LogLine> get filteredLogs {
-    return logLines.where((logLine) {
-      if (logLine.type == LogType.flutter && !showFlutterLogs.value) return false;
-      if (logLine.type == LogType.rust && !showRustLogs.value) return false;
-      return true;
-    }).toList();
   }
 }

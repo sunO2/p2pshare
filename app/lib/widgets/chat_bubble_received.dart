@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/models/chat_message_model.dart';
+import '../core/theme/app_theme.dart';
 
 class ChatBubbleReceived extends StatelessWidget {
   final ChatMessageData message;
@@ -9,6 +10,7 @@ class ChatBubbleReceived extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.customTheme;
     // 使用对方名字的首字母作为头像文字
     final avatarText = peerName?.isNotEmpty == true
         ? peerName![0].toUpperCase()
@@ -23,7 +25,7 @@ class ChatBubbleReceived extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF3D8A5A),
+            color: theme.statusGreen,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
@@ -41,14 +43,14 @@ class ChatBubbleReceived extends StatelessWidget {
         // 气泡
         Container(
           constraints: const BoxConstraints(maxWidth: 240),
-          decoration: const BoxDecoration(
-            color: Color.fromRGBO(255, 255, 255, 1),
-            borderRadius: BorderRadius.all(Radius.circular(8)),
+          decoration: BoxDecoration(
+            color: theme.cardBackground,
+            borderRadius: const BorderRadius.all(Radius.circular(8)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Text(
             message.message,
-            style: const TextStyle(fontSize: 16, color: Colors.black),
+            style: TextStyle(fontSize: 16, color: theme.iconColor),
           ),
         ),
       ],

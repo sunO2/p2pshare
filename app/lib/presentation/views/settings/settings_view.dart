@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../../controllers/settings_controller.dart';
 import '../../../widgets/unified_app_bar.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// 设置页面视图
 class SettingsView extends GetView<SettingsController> {
@@ -10,27 +11,30 @@ class SettingsView extends GetView<SettingsController> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.customTheme;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: Colors.white,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarColor: theme.scaffoldBackground,
+        statusBarIconBrightness: theme.scaffoldBackground == AppTheme.backgroundDark
+            ? Brightness.light
+            : Brightness.dark,
+        statusBarBrightness: theme.scaffoldBackground == AppTheme.backgroundDark
+            ? Brightness.dark
+            : Brightness.light,
       ),
       child: Scaffold(
-        body: Column(
-          children: [
-            const UnifiedAppBar(title: '设置', showBackButton: false),
-            Expanded(child: _buildContent(context)),
-          ],
-        ),
+        backgroundColor: theme.scaffoldBackground,
+        appBar: const UnifiedAppBar(title: '设置', showBackButton: false),
+        body: _buildContent(context),
       ),
     );
   }
 
   /// 构建内容
   Widget _buildContent(BuildContext context) {
+    final theme = context.customTheme;
     return Container(
-      color: const Color(0xFFF8F8F6),
+      color: theme.scaffoldBackground,
       padding: const EdgeInsets.all(24),
       child: ListView(
         children: [
@@ -67,6 +71,7 @@ class SettingsView extends GetView<SettingsController> {
 
   /// 构建个人资料卡片
   Widget _buildProfileCard(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() {
       final deviceName = controller.deviceName.value;
       final peerId = controller.localPeerId.value;
@@ -74,7 +79,7 @@ class SettingsView extends GetView<SettingsController> {
       return Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -82,15 +87,15 @@ class SettingsView extends GetView<SettingsController> {
             Container(
               width: 56,
               height: 56,
-              decoration: const BoxDecoration(
-                color: Color(0xFF3D8A5A),
+              decoration: BoxDecoration(
+                color: theme.statusGreen,
                 shape: BoxShape.circle,
               ),
               child: Center(
                 child: Container(
                   width: 28,
                   height: 28,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
                   ),
@@ -122,13 +127,14 @@ class SettingsView extends GetView<SettingsController> {
 
   /// 构建设备设置卡片
   Widget _buildDeviceSettingsCard(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() {
       final deviceName = controller.deviceName.value;
       final peerId = controller.localPeerId.value;
 
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -144,7 +150,7 @@ class SettingsView extends GetView<SettingsController> {
                 isDeviceName: true,
               ),
             ),
-            _buildDivider(),
+            _buildDivider(context),
             _buildSettingsRow(
               context,
               'Peer ID',
@@ -159,13 +165,14 @@ class SettingsView extends GetView<SettingsController> {
 
   /// 构建用户资料卡片
   Widget _buildUserProfileCard(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() {
       final nickname = controller.nickname.value;
       final status = controller.status.value;
 
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -181,7 +188,7 @@ class SettingsView extends GetView<SettingsController> {
                 isNickname: true,
               ),
             ),
-            _buildDivider(),
+            _buildDivider(context),
             _buildSettingsRow(
               context,
               '状态',
@@ -196,13 +203,14 @@ class SettingsView extends GetView<SettingsController> {
 
   /// 构建应用设置卡片
   Widget _buildAppSettingsCard(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() {
       final notifications = controller.notificationsEnabled.value;
       final autoScan = controller.autoScanEnabled.value;
 
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -213,7 +221,7 @@ class SettingsView extends GetView<SettingsController> {
               notifications,
               onChanged: (value) => controller.toggleNotifications(value),
             ),
-            _buildDivider(),
+            _buildDivider(context),
             _buildToggleRow(
               context,
               '自动扫描设备',
@@ -228,12 +236,13 @@ class SettingsView extends GetView<SettingsController> {
 
   /// 构建调试卡片
   Widget _buildDebugCard(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() {
       final logSize = controller.logFileSize.value;
 
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -244,14 +253,14 @@ class SettingsView extends GetView<SettingsController> {
               controller.formatFileSize(logSize),
               showArrow: false,
             ),
-            _buildDivider(),
+            _buildDivider(context),
             _buildSettingsRow(
               context,
               '查看日志',
               '按日期查看日志',
               onTap: controller.showLogs,
             ),
-            _buildDivider(),
+            _buildDivider(context),
             _buildSettingsRow(
               context,
               '清空日志',
@@ -272,6 +281,7 @@ class SettingsView extends GetView<SettingsController> {
     VoidCallback? onTap,
     bool showArrow = true,
   }) {
+    final theme = context.customTheme;
     return InkWell(
       onTap: onTap,
       borderRadius: const BorderRadius.vertical(
@@ -289,8 +299,8 @@ class SettingsView extends GetView<SettingsController> {
               value,
               style: context.textTheme.bodyLarge?.copyWith(
                 color: label == '状态'
-                    ? const Color(0xFF3D8A5A)
-                    : const Color(0xFF6D6C6A),
+                    ? theme.statusGreen
+                    : theme.iconColor,
               ),
             ),
             if (showArrow) ...[
@@ -299,7 +309,7 @@ class SettingsView extends GetView<SettingsController> {
                 width: 16,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFA8A7A5),
+                  color: theme.iconColorLight,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -317,6 +327,7 @@ class SettingsView extends GetView<SettingsController> {
     bool value, {
     required ValueChanged<bool> onChanged,
   }) {
+    final theme = context.customTheme;
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -332,8 +343,8 @@ class SettingsView extends GetView<SettingsController> {
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: value
-                    ? const Color(0xFF3D8A5A)
-                    : const Color(0xFFEDECEA),
+                    ? theme.statusGreen
+                    : theme.dividerColor.withOpacity(0.5),
                 borderRadius: BorderRadius.circular(100),
               ),
               child: AnimatedAlign(
@@ -356,11 +367,12 @@ class SettingsView extends GetView<SettingsController> {
   }
 
   /// 构建分隔线
-  Widget _buildDivider() {
+  Widget _buildDivider(BuildContext context) {
+    final theme = context.customTheme;
     return Container(
       height: 1,
       margin: const EdgeInsets.only(left: 18),
-      color: const Color(0xFFE5E4E1),
+      color: theme.dividerColor,
     );
   }
 
@@ -411,18 +423,20 @@ class SettingsView extends GetView<SettingsController> {
 
   /// 显示状态选择对话框
   void _showStatusDialog(BuildContext context) {
+    final theme = context.customTheme;
     final statuses = ['在线', '忙碌', '离开', '隐身'];
 
     Get.dialog(
       AlertDialog(
-        title: const Text('选择状态'),
+        backgroundColor: theme.cardBackground,
+        title: Text('选择状态', style: TextStyle(color: theme.iconColor)),
         content: Obx(() => Column(
               mainAxisSize: MainAxisSize.min,
               children: statuses.map((status) {
                 return ListTile(
-                  title: Text(status),
+                  title: Text(status, style: TextStyle(color: theme.iconColor)),
                   trailing: controller.status.value == status
-                      ? const Icon(Icons.check, color: Color(0xFF3D8A5A))
+                      ? Icon(Icons.check, color: theme.statusGreen)
                       : null,
                   onTap: () async {
                     Get.back();
@@ -434,7 +448,7 @@ class SettingsView extends GetView<SettingsController> {
         actions: [
           TextButton(
             onPressed: () => Get.back(),
-            child: const Text('取消'),
+            child: Text('取消', style: TextStyle(color: theme.statusGreen)),
           ),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/home_controller.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// 首页视图
 ///
@@ -24,13 +25,14 @@ class HomeView extends GetView<HomeController> {
             children: controller.pages,
           );
         }),
-        bottomNavigationBar: _buildBottomNavigationBar(),
+        bottomNavigationBar: _buildBottomNavigationBar(context),
       ),
     );
   }
 
   /// 构建加载界面
   Widget _buildLoading(BuildContext context) {
+    final theme = context.customTheme;
     return Center(
       child: Obx(() {
         if (controller.initError.value == null) {
@@ -38,8 +40,8 @@ class HomeView extends GetView<HomeController> {
           return Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(theme.statusGreen),
               ),
               const SizedBox(height: 16),
               Text(
@@ -49,7 +51,7 @@ class HomeView extends GetView<HomeController> {
               const SizedBox(height: 24),
               Text(
                 '正在加载 P2P 模块，请稍候...',
-                style: context.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                style: context.textTheme.bodySmall?.copyWith(color: theme.iconColorLight),
               ),
             ],
           );
@@ -58,7 +60,7 @@ class HomeView extends GetView<HomeController> {
           return Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
+              Icon(Icons.error_outline, size: 64, color: theme.statusRed),
               const SizedBox(height: 16),
               Text('初始化失败', style: context.textTheme.titleLarge),
               const SizedBox(height: 16),
@@ -66,13 +68,13 @@ class HomeView extends GetView<HomeController> {
                 padding: const EdgeInsets.all(16),
                 margin: const EdgeInsets.symmetric(horizontal: 24),
                 decoration: BoxDecoration(
-                  color: Colors.red[50],
+                  color: theme.statusRed.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red[200]!),
+                  border: Border.all(color: theme.statusRed.withOpacity(0.3)),
                 ),
                 child: Text(
                   controller.initError.value!,
-                  style: context.textTheme.bodyMedium?.copyWith(color: Colors.red[700]),
+                  style: context.textTheme.bodyMedium?.copyWith(color: theme.statusRed),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -82,7 +84,7 @@ class HomeView extends GetView<HomeController> {
                 '• 设备已授予必要权限\n'
                 '• 库文件正确安装\n'
                 '• 网络连接正常',
-                style: context.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                style: context.textTheme.bodySmall?.copyWith(color: theme.iconColorLight),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -91,7 +93,7 @@ class HomeView extends GetView<HomeController> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('重试'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3D8A5A),
+                  backgroundColor: theme.statusGreen,
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -103,11 +105,12 @@ class HomeView extends GetView<HomeController> {
   }
 
   /// 构建底部导航栏
-  Widget _buildBottomNavigationBar() {
+  Widget _buildBottomNavigationBar(BuildContext context) {
+    final theme = context.customTheme;
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8F8F6),
-        border: Border(top: BorderSide(color: Color(0xFFCCCCCC), width: 1)),
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackground,
+        border: Border(top: BorderSide(color: theme.dividerColor, width: 1)),
       ),
       child: SafeArea(
         top: false,
@@ -116,10 +119,10 @@ class HomeView extends GetView<HomeController> {
           child: Obx(() => Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildTabItem(0, Icons.devices_outlined, '设备'),
-              _buildTabItem(1, Icons.chat_bubble_outline, '聊天'),
-              _buildTabItem(2, Icons.folder_outlined, '文件'),
-              _buildTabItem(3, Icons.settings_outlined, '设置'),
+              _buildTabItem(context, 0, Icons.devices_outlined, '设备'),
+              _buildTabItem(context, 1, Icons.chat_bubble_outline, '聊天'),
+              _buildTabItem(context, 2, Icons.folder_outlined, '文件'),
+              _buildTabItem(context, 3, Icons.settings_outlined, '设置'),
             ],
           )),
         ),
@@ -128,11 +131,12 @@ class HomeView extends GetView<HomeController> {
   }
 
   /// 构建单个导航标签
-  Widget _buildTabItem(int index, IconData icon, String label) {
+  Widget _buildTabItem(BuildContext context, int index, IconData icon, String label) {
+    final theme = context.customTheme;
     final isSelected = controller.currentIndex.value == index;
     final color = isSelected
-        ? const Color(0xFF3D8A5A)
-        : const Color(0xFF999999);
+        ? theme.statusGreen
+        : theme.statusGrey;
 
     return SizedBox(
       width: 64,
@@ -147,8 +151,8 @@ class HomeView extends GetView<HomeController> {
               Container(
                 width: 32,
                 height: 32,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF3D8A5A),
+                decoration: BoxDecoration(
+                  color: theme.statusGreen,
                   shape: BoxShape.circle,
                 ),
                 child: Center(child: Icon(icon, size: 18, color: Colors.white)),

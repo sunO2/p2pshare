@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import '../p2p_manager.dart';
 import '../bridge/bridge.dart';
 import '../widgets/device_card.dart';
 import '../services/p2p_event_bus.dart' as eb;
-import 'chat_screen.dart';
 import 'device_detail_screen.dart';
 
 class DeviceListScreen extends StatefulWidget {
@@ -480,12 +480,12 @@ class _DeviceListScreenState extends State<DeviceListScreen>
   }
 
   void _openChat(P2PBridgeNodeInfo node) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            ChatScreen(peerId: node.peerId, peerName: node.deviceName),
-      ),
+    Get.toNamed(
+      '/chat',
+      parameters: {
+        'peerId': node.peerId,
+        'peerName': node.deviceName,
+      },
     );
   }
 

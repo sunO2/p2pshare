@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 import '../p2p_manager.dart';
 import '../bridge/bridge.dart';
 import '../widgets/unified_app_bar.dart';
+import '../core/theme/app_theme.dart';
 import '../services/p2p_event_bus.dart' as eb;
-import 'chat_screen.dart';
 
 class DeviceDetailScreen extends StatefulWidget {
   final String peerId;
@@ -83,13 +84,19 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.customTheme;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: Colors.white,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarColor: theme.scaffoldBackground,
+        statusBarIconBrightness: theme.scaffoldBackground == AppTheme.backgroundDark
+            ? Brightness.light
+            : Brightness.dark,
+        statusBarBrightness: theme.scaffoldBackground == AppTheme.backgroundDark
+            ? Brightness.dark
+            : Brightness.light,
       ),
       child: Scaffold(
+        backgroundColor: theme.scaffoldBackground,
         body: SafeArea(
           bottom: false,
           child: Column(
@@ -107,8 +114,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildContent() {
+    final theme = context.customTheme;
     return Container(
-      color: const Color(0xFFF8F8F6),
+      color: theme.scaffoldBackground,
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,12 +133,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildDeviceInfoCard() {
+    final theme = context.customTheme;
     final nodeInfo = _nodeInfo;
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardBackground,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -142,8 +151,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
               Container(
                 width: 56,
                 height: 56,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEDECEA),
+                decoration: BoxDecoration(
+                  color: theme.dividerColor.withOpacity(0.3),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -151,7 +160,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6D6C6A),
+                      color: theme.iconColor,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -164,7 +173,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                   children: [
                     Text(
                       nodeInfo?.deviceName ?? 'Unknown',
-                      style: Theme.of(context).textTheme.displaySmall,
+                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                        color: theme.iconColor,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     _buildStatusIndicator(),
@@ -176,7 +187,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           const SizedBox(height: 16),
 
           // Divider
-          Container(height: 1, color: const Color(0xFFE5E4E1)),
+          Container(height: 1, color: theme.dividerColor),
           const SizedBox(height: 16),
 
           // Device Details
@@ -193,10 +204,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildPeerIdSection() {
+    final theme = context.customTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Peer ID', style: Theme.of(context).textTheme.bodySmall),
+        Text('Peer ID', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: theme.iconColorLight)),
         const SizedBox(height: 8),
         GestureDetector(
           onLongPress: () {
@@ -208,12 +220,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0F0F0),
+              color: theme.searchBackground,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               widget.peerId,
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: theme.iconColor),
             ),
           ),
         ),
@@ -222,6 +234,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildAddressesSection() {
+    final theme = context.customTheme;
     final addresses = _nodeInfo?.addresses ?? [];
 
     if (addresses.isEmpty) {
@@ -231,7 +244,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('地址', style: Theme.of(context).textTheme.bodySmall),
+        Text('地址', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: theme.iconColorLight)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -243,9 +256,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildAddressTag(String address) {
+    final theme = context.customTheme;
     // 解析地址类型
     String label = 'IPv4';
-    Color labelColor = const Color(0xFF3D8A5A);
+    Color labelColor = theme.statusGreen;
 
     if (address.startsWith('/ip6')) {
       label = 'IPv6';
@@ -255,7 +269,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F0F0),
+        color: theme.searchBackground,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -279,7 +293,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           const SizedBox(width: 6),
           Text(
             _formatAddress(address),
-            style: Theme.of(context).textTheme.bodySmall,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: theme.iconColor),
           ),
         ],
       ),
@@ -299,6 +313,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildProtocolVersionSection() {
+    final theme = context.customTheme;
     final protocolVersion = _nodeInfo?.protocolVersion ?? '';
 
     if (protocolVersion.isEmpty) {
@@ -318,7 +333,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('协议版本', style: Theme.of(context).textTheme.bodySmall),
+        Text('协议版本', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: theme.iconColorLight)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -330,17 +345,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildProtocolPart(String part) {
+    final theme = context.customTheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F0F0),
+        color: theme.searchBackground,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Text(
         part,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: const Color(0xFF424242),
+          color: theme.iconColor,
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -348,17 +364,19 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildLastSeenSection() {
+    final theme = context.customTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('最后活跃', style: Theme.of(context).textTheme.bodySmall),
+        Text('最后活跃', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: theme.iconColorLight)),
         const SizedBox(height: 4),
-        Text('刚刚', style: Theme.of(context).textTheme.bodyLarge),
+        Text('刚刚', style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: theme.iconColor)),
       ],
     );
   }
 
   Widget _buildStatusIndicator() {
+    final theme = context.customTheme;
     final status = _nodeInfo?.status;
     final isOffline =
         status != null &&
@@ -370,21 +388,21 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     final String statusText;
 
     if (isOffline) {
-      statusColor = const Color(0xFFD32F2F);
-      backgroundColor = const Color(0xFFFFEBEE);
+      statusColor = theme.statusRed;
+      backgroundColor = theme.statusRed.withOpacity(0.1);
       statusText = '离线';
     } else if (status != null) {
       switch (status.toLowerCase()) {
         case '在线':
         case 'online':
-          statusColor = const Color(0xFF3D8A5A);
-          backgroundColor = const Color(0xFFC8F0D8);
+          statusColor = theme.statusGreen;
+          backgroundColor = theme.statusGreenBg;
           statusText = status;
           break;
         case '忙碌':
         case 'busy':
-          statusColor = const Color(0xFFF57C00);
-          backgroundColor = const Color(0xFFFFE0B2);
+          statusColor = theme.statusOrange;
+          backgroundColor = theme.statusOrange.withOpacity(0.2);
           statusText = status;
           break;
         case '离开':
@@ -394,15 +412,15 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           statusText = status;
           break;
         default:
-          statusColor = const Color(0xFF3D8A5A);
-          backgroundColor = const Color(0xFFC8F0D8);
+          statusColor = theme.statusGreen;
+          backgroundColor = theme.statusGreenBg;
           statusText = status;
           break;
       }
     } else {
       // 默认在线
-      statusColor = const Color(0xFF3D8A5A);
-      backgroundColor = const Color(0xFFC8F0D8);
+      statusColor = theme.statusGreen;
+      backgroundColor = theme.statusGreenBg;
       statusText = '在线';
     }
 
@@ -426,9 +444,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           const SizedBox(width: 6),
           Text(
             statusText,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: statusColor),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: statusColor),
           ),
         ],
       ),
@@ -436,6 +452,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   }
 
   Widget _buildActionButtons() {
+    final theme = context.customTheme;
     return Column(
       children: [
         // Chat Button
@@ -444,18 +461,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           height: 52,
           child: ElevatedButton(
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChatScreen(
-                    peerId: widget.peerId,
-                    peerName: _nodeInfo?.deviceName ?? 'Unknown',
-                  ),
-                ),
+              Get.toNamed(
+                '/chat',
+                parameters: {
+                  'peerId': widget.peerId,
+                  'peerName': _nodeInfo?.deviceName ?? 'Unknown',
+                },
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3D8A5A),
+              backgroundColor: theme.statusGreen,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -478,8 +493,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
               ).showSnackBar(const SnackBar(content: Text('文件传输功能开发中...')));
             },
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF3D8A5A),
-              side: const BorderSide(color: Color(0xFF3D8A5A), width: 2),
+              foregroundColor: theme.statusGreen,
+              side: BorderSide(color: theme.statusGreen, width: 2),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

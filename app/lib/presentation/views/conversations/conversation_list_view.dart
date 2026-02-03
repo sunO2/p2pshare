@@ -30,6 +30,7 @@ class ConversationListView extends GetView<ConversationController> {
   Widget _buildTopBar(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
     final totalHeight = 70.0 + topPadding;
+    final theme = context.customTheme;
 
     return Container(
       height: totalHeight,
@@ -39,7 +40,7 @@ class ConversationListView extends GetView<ConversationController> {
         right: 24,
         bottom: 16,
       ),
-      decoration: const BoxDecoration(color: Color(0xFFF8F8F6)),
+      decoration: BoxDecoration(color: theme.scaffoldBackground),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -47,7 +48,11 @@ class ConversationListView extends GetView<ConversationController> {
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('我的聊天', style: context.appTextTheme.appBarTitle),
+              Text('我的聊天', style: context.appTextTheme.appBarTitle.copyWith(
+                color: theme.scaffoldBackground == AppTheme.backgroundDark
+                    ? Colors.white
+                    : AppTheme.textPrimary,
+              )),
               const SizedBox(height: 4),
               Obx(() => Text(
                 '有 ${controller.conversations.length} 个对话',
@@ -58,8 +63,8 @@ class ConversationListView extends GetView<ConversationController> {
           Container(
             width: 44,
             height: 44,
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            decoration: BoxDecoration(
+              color: theme.cardBackground,
               shape: BoxShape.circle,
             ),
             child: Material(
@@ -67,10 +72,10 @@ class ConversationListView extends GetView<ConversationController> {
               child: InkWell(
                 borderRadius: BorderRadius.circular(22),
                 onTap: () => controller.refreshConversations(),
-                child: const Icon(
+                child: Icon(
                   Icons.refresh,
                   size: 20,
-                  color: Color(0xFF6D6C6A),
+                  color: theme.iconColor,
                 ),
               ),
             ),
@@ -81,17 +86,18 @@ class ConversationListView extends GetView<ConversationController> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() {
       if (controller.isLoading.value) {
-        return const Center(
+        return Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3D8A5A)),
+                valueColor: AlwaysStoppedAnimation<Color>(theme.statusGreen),
               ),
-              SizedBox(height: 16),
-              Text('正在加载聊天记录...'),
+              const SizedBox(height: 16),
+              Text('正在加载聊天记录...', style: TextStyle(color: theme.iconColor)),
             ],
           ),
         );
@@ -102,18 +108,22 @@ class ConversationListView extends GetView<ConversationController> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
+              Icon(Icons.error_outline, size: 64, color: theme.statusRed),
               const SizedBox(height: 16),
               Text('加载失败', style: context.appTextTheme.titleLarge),
               const SizedBox(height: 8),
               Text(
                 controller.error.value!,
-                style: const TextStyle(color: Colors.red),
+                style: TextStyle(color: theme.statusRed),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () => controller.loadConversations(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.statusGreen,
+                  foregroundColor: Colors.white,
+                ),
                 child: const Text('重试'),
               ),
             ],
@@ -126,16 +136,16 @@ class ConversationListView extends GetView<ConversationController> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
+              Icon(Icons.chat_bubble_outline, size: 64, color: theme.iconColorLight),
               const SizedBox(height: 16),
               Text(
                 '暂无聊天记录',
-                style: context.appTextTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
+                style: context.appTextTheme.bodyLarge?.copyWith(color: theme.iconColor),
               ),
               const SizedBox(height: 8),
               Text(
                 '去设备列表选择一个设备开始聊天吧',
-                style: context.appTextTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+                style: context.appTextTheme.bodySmall?.copyWith(color: theme.iconColorLight),
               ),
             ],
           ),
@@ -144,6 +154,7 @@ class ConversationListView extends GetView<ConversationController> {
 
       return RefreshIndicator(
         onRefresh: controller.refreshConversations,
+        color: theme.statusGreen,
         child: ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           itemCount: controller.sortedConversations.length,
@@ -170,6 +181,7 @@ class _ConversationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.customTheme;
     final lastMessage = conversation.lastMessage ?? '暂无消息';
     final unreadCount = conversation.unreadCount;
     final peerName = conversation.peerName ?? conversation.peerId;
@@ -180,16 +192,16 @@ class _ConversationTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardBackground,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE8E8E6)),
+          border: Border.all(color: theme.dividerColor),
         ),
         child: Row(
           children: [
             // 头像
             CircleAvatar(
               radius: 28,
-              backgroundColor: const Color(0xFF3D8A5A),
+              backgroundColor: theme.statusGreen,
               child: Text(
                 peerName.isNotEmpty ? peerName[0].toUpperCase() : '?',
                 style: const TextStyle(
@@ -210,9 +222,10 @@ class _ConversationTile extends StatelessWidget {
                       Expanded(
                         child: Text(
                           peerName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
+                            color: theme.iconColor,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -220,7 +233,7 @@ class _ConversationTile extends StatelessWidget {
                       ),
                       Text(
                         _formatTime(conversation.lastMessageTime),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 12, color: theme.iconColorLight),
                       ),
                     ],
                   ),
@@ -232,7 +245,7 @@ class _ConversationTile extends StatelessWidget {
                           lastMessage,
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey[600],
+                            color: theme.iconColorLight,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -245,7 +258,7 @@ class _ConversationTile extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF3D8A5A),
+                            color: theme.statusGreen,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           constraints: const BoxConstraints(

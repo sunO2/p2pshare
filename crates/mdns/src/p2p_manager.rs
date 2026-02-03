@@ -451,6 +451,14 @@ impl P2PManager {
             send_log("INFO", "p2p_manager", format!("  └─ 监听地址: {}", addr));
         }
 
+        // 🔥 发送 Connection 服务初始状态（降级，因为还没有设备连接）
+        tracing::debug!("📝 [连接服务] 发送初始服务状态...");
+        let service = connection_service_shared.lock().await;
+        service.send_connection_status_to_flutter();
+        drop(service);
+        tracing::info!("✓ [连接服务] 初始服务状态已发送（degraded）");
+        send_log("INFO", "connection_service", "🔔 初始服务状态已发送: degraded".to_string());
+
         Ok(listeners)
     }
 

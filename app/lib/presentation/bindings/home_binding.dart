@@ -3,6 +3,7 @@ import '../controllers/home_controller.dart';
 import '../controllers/device_controller.dart';
 import '../controllers/conversation_controller.dart';
 import '../controllers/settings_controller.dart';
+import '../views/debug/logs_viewer_view.dart';
 
 /// 首页依赖注入
 ///
@@ -14,9 +15,22 @@ class HomeBinding extends Bindings {
     Get.lazyPut<HomeController>(() => HomeController());
 
     // 注入所有子页面控制器（因为首页使用 IndexedStack 同时加载所有页面）
-    Get.lazyPut<DeviceController>(() => DeviceController());
-    Get.lazyPut<ConversationController>(() => ConversationController());
-    Get.lazyPut<SettingsController>(() => SettingsController());
+    // 使用 Get.put 而不是 Get.lazyPut，因为页面会被立即创建
+    Get.put(DeviceController());
+    Get.put(ConversationController());
+    Get.put(SettingsController());
+
+    // 强制触发 Controller 初始化（确保 onInit 被调用）
+    // 这对于 IndexedStack 中的 GetView 很重要
+    try {
+      Get.find<DeviceController>();
+      Get.find<ConversationController>();
+      Get.find<SettingsController>();
+    } catch (e) {
+      // 忽略错误
+    }
+
+    // 日志查看器使用 lazyPut，因为它是按需打开的
     Get.lazyPut<LogsViewerController>(() => LogsViewerController());
   }
 }

@@ -14,6 +14,13 @@ class AppTheme {
   static const Color backgroundLight = Color(0xFFF8F8F6);
   static const Color backgroundDark = Color(0xFF1A1A1A);
 
+  /// 卡片背景色
+  static const Color cardBackgroundLight = Color(0xFFFFFFFF);
+  static const Color cardBackgroundDark = Color(0xFF2D2D2D);
+
+  /// 分隔线边框颜色
+  static const Color dividerBorderColorDark = Color(0xFF404040);
+
   /// 文字颜色
   static const Color textPrimary = Color(0xFF1A1A1A);
   static const Color textSecondary = Color(0xFF6D6C6A);
@@ -171,6 +178,23 @@ class AppTheme {
         unselectedLabelStyle: TextStyle(fontSize: 10),
       ),
       textTheme: _buildTextTheme(Brightness.light),
+      // 扩展主题数据
+      extensions: [
+        _CustomTheme(
+          scaffoldBackground: backgroundLight,
+          cardBackground: cardBackgroundLight,
+          dividerColor: dividerBorderColor,
+          iconColor: textSecondary,
+          iconColorLight: textSecondary,
+          searchBackground: Colors.white,
+          statusGreen: Color(0xFF3D8A5A),
+          statusOrange: Color(0xFFF57C00),
+          statusRed: Color(0xFFD32F2F),
+          statusGrey: Color(0xFF9E9E9E),
+          statusGreenBg: Color(0xFFC8F0D8),
+          statusGreenBgLight: Color(0xFFE8F5E9),
+        ),
+      ],
     );
   }
 
@@ -205,6 +229,22 @@ class AppTheme {
         unselectedLabelStyle: TextStyle(fontSize: 10),
       ),
       textTheme: _buildTextTheme(Brightness.dark),
+      extensions: [
+        _CustomTheme(
+          scaffoldBackground: backgroundDark,
+          cardBackground: cardBackgroundDark,
+          dividerColor: dividerBorderColorDark,
+          iconColor: Colors.white70,
+          iconColorLight: Colors.white54,
+          searchBackground: const Color(0xFF2D2D2D),
+          statusGreen: Color(0xFF6BC48A),
+          statusOrange: Color(0xFFB97D00),
+          statusRed: Color(0xFFEF5350),
+          statusGrey: Color(0xFF757575),
+          statusGreenBg: Color(0xFF2D5A3A),
+          statusGreenBgLight: Color(0xFF1A3A2A),
+        ),
+      ],
     );
   }
 
@@ -300,4 +340,94 @@ class GetTextTheme {
 extension AppThemeContextExtension on BuildContext {
   /// 获取应用文字主题（避免与 GetX 的 textTheme 冲突）
   GetTextTheme get appTextTheme => GetTextTheme(Theme.of(this).textTheme);
+
+  /// 获取自定义主题扩展
+  _CustomTheme get customTheme => Theme.of(this).extension<_CustomTheme>()!;
 }
+
+/// 自定义主题扩展
+///
+/// 用于定义两套主题（浅色/深色）的自定义颜色
+@immutable
+class _CustomTheme extends ThemeExtension<_CustomTheme> {
+  final Color scaffoldBackground;
+  final Color cardBackground;
+  final Color dividerColor;
+  final Color iconColor;
+  final Color iconColorLight;
+  final Color searchBackground;
+  final Color statusGreen;
+  final Color statusOrange;
+  final Color statusRed;
+  final Color statusGrey;
+  final Color statusGreenBg;
+  final Color statusGreenBgLight;
+
+  const _CustomTheme({
+    required this.scaffoldBackground,
+    required this.cardBackground,
+    required this.dividerColor,
+    required this.iconColor,
+    required this.iconColorLight,
+    required this.searchBackground,
+    required this.statusGreen,
+    required this.statusOrange,
+    required this.statusRed,
+    required this.statusGrey,
+    required this.statusGreenBg,
+    required this.statusGreenBgLight,
+  });
+
+  @override
+  _CustomTheme copyWith({
+    Color? scaffoldBackground,
+    Color? cardBackground,
+    Color? dividerColor,
+    Color? iconColor,
+    Color? iconColorLight,
+    Color? searchBackground,
+    Color? statusGreen,
+    Color? statusOrange,
+    Color? statusRed,
+    Color? statusGrey,
+    Color? statusGreenBg,
+    Color? statusGreenBgLight,
+  }) {
+    return _CustomTheme(
+      scaffoldBackground: scaffoldBackground ?? this.scaffoldBackground,
+      cardBackground: cardBackground ?? this.cardBackground,
+      dividerColor: dividerColor ?? this.dividerColor,
+      iconColor: iconColor ?? this.iconColor,
+      iconColorLight: iconColorLight ?? this.iconColorLight,
+      searchBackground: searchBackground ?? this.searchBackground,
+      statusGreen: statusGreen ?? this.statusGreen,
+      statusOrange: statusOrange ?? this.statusOrange,
+      statusRed: statusRed ?? this.statusRed,
+      statusGrey: statusGrey ?? this.statusGrey,
+      statusGreenBg: statusGreenBg ?? this.statusGreenBg,
+      statusGreenBgLight: statusGreenBgLight ?? this.statusGreenBgLight,
+    );
+  }
+
+  @override
+  _CustomTheme lerp(covariant ThemeExtension<_CustomTheme>? other, double t) {
+    if (other is! _CustomTheme) {
+      return this;
+    }
+    return _CustomTheme(
+      scaffoldBackground: Color.lerp(scaffoldBackground, other.scaffoldBackground, t)!,
+      cardBackground: Color.lerp(cardBackground, other.cardBackground, t)!,
+      dividerColor: Color.lerp(dividerColor, other.dividerColor, t)!,
+      iconColor: Color.lerp(iconColor, other.iconColor, t)!,
+      iconColorLight: Color.lerp(iconColorLight, other.iconColorLight, t)!,
+      searchBackground: Color.lerp(searchBackground, other.searchBackground, t)!,
+      statusGreen: Color.lerp(statusGreen, other.statusGreen, t)!,
+      statusOrange: Color.lerp(statusOrange, other.statusOrange, t)!,
+      statusRed: Color.lerp(statusRed, other.statusRed, t)!,
+      statusGrey: Color.lerp(statusGrey, other.statusGrey, t)!,
+      statusGreenBg: Color.lerp(statusGreenBg, other.statusGreenBg, t)!,
+      statusGreenBgLight: Color.lerp(statusGreenBgLight, other.statusGreenBgLight, t)!,
+    );
+  }
+}
+

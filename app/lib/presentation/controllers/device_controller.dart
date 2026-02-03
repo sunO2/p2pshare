@@ -137,6 +137,10 @@ class DeviceController extends GetxController
     try {
       final systemStatus = _p2p.manager.getSystemStatus();
 
+      _log.i('[服务状态初始化] mDNS: ${systemStatus.mdnsService.health.name} (running: ${systemStatus.mdnsService.isRunning})');
+      _log.i('[服务状态初始化] Connection: ${systemStatus.connectionService.health.name} (running: ${systemStatus.connectionService.isRunning})');
+      _log.i('[服务状态初始化] connectedPeers: ${systemStatus.connectedPeers}, discoveredPeers: ${systemStatus.discoveredPeers}');
+
       serviceStatus['mDNS'] = ServiceStatusData(
         name: systemStatus.mdnsService.name,
         health: systemStatus.mdnsService.health.name,

@@ -1104,7 +1104,7 @@ impl ConnectionService {
     /// 🔥 发送连接服务状态到 Flutter
     ///
     /// 当节点列表变化时调用此方法，通知 Flutter 更新 UI
-    fn send_connection_status_to_flutter(&self) {
+    pub fn send_connection_status_to_flutter(&self) {
         // 🔥 克隆 NodeManager 引用，在独立任务中发送状态
         let node_manager = self.node_manager.clone();
 

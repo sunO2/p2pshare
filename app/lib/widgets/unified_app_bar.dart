@@ -66,8 +66,8 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// 右侧操作按钮
   final List<Widget>? actions;
 
-  /// 导航栏背景色
-  final Color backgroundColor;
+  /// 导航栏背景色（null 时使用主题背景色）
+  final Color? backgroundColor;
 
   const UnifiedAppBar({
     super.key,
@@ -77,7 +77,7 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.subtitle,
     this.subtitleWidget,
     this.actions,
-    this.backgroundColor = const Color(0xFFF8F8F6),
+    this.backgroundColor,
   });
 
   @override
@@ -87,6 +87,7 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
     final totalHeight = 70.0 + topPadding;
+    final theme = context.customTheme;
 
     // 判断是否显示返回按钮
     final shouldShowBack = _shouldShowBackButton(context);
@@ -102,7 +103,7 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
         right: 24,
         bottom: 16,
       ),
-      decoration: BoxDecoration(color: backgroundColor),
+      decoration: BoxDecoration(color: backgroundColor ?? theme.scaffoldBackground),
       child: Row(
         children: [
           // Back button
@@ -112,14 +113,14 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: Container(
                 width: 36,
                 height: 36,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE8E8E6),
+                decoration: BoxDecoration(
+                  color: theme.dividerColor.withOpacity(0.3),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.arrow_back,
                   size: 18,
-                  color: Color(0xFF6D6C6A),
+                  color: theme.iconColor,
                 ),
               ),
             ),
@@ -137,7 +138,9 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
                 Text(
                   title,
                   style: AppTheme.appBarTitle.copyWith(
-                    color: const Color(0xFF1A1918),
+                    color: theme.scaffoldBackground == AppTheme.backgroundDark
+                        ? Colors.white
+                        : AppTheme.textPrimary,
                   ),
                 ),
                 if (childWidget != null) ...[
@@ -190,9 +193,10 @@ class OnlineStatusIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = backgroundColor ?? const Color(0xFFC8F0D8);
-    final txtColor = textColor ?? const Color(0xFF3D8A5A);
-    final dtColor = dotColor ?? const Color(0xFF3D8A5A);
+    final theme = context.customTheme;
+    final bgColor = backgroundColor ?? theme.statusGreenBg;
+    final txtColor = textColor ?? theme.statusGreen;
+    final dtColor = dotColor ?? theme.statusGreen;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -243,11 +247,12 @@ class OfflineStatusIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.customTheme;
     return OnlineStatusIndicator(
       text: text,
-      backgroundColor: backgroundColor ?? const Color(0xFFFFEBEE),
-      textColor: textColor ?? const Color(0xFFD32F2F),
-      dotColor: dotColor ?? const Color(0xFFD32F2F),
+      backgroundColor: backgroundColor ?? theme.statusRed.withOpacity(0.1),
+      textColor: textColor ?? theme.statusRed,
+      dotColor: dotColor ?? theme.statusRed,
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../bridge/bridge.dart';
+import '../core/theme/app_theme.dart';
 
 class DeviceCard extends StatelessWidget {
   final P2PBridgeNodeInfo node;
@@ -15,24 +16,25 @@ class DeviceCard extends StatelessWidget {
     this.onChatTap,
   });
 
-  Color _getStatusColor(String? status) {
-    if (status == null) return const Color(0xFF3D8A5A); // 默认在线
+  Color _getStatusColor(BuildContext context, String? status) {
+    final theme = context.customTheme;
+    if (status == null) return theme.statusGreen;
 
     switch (status.toLowerCase()) {
       case '在线':
       case 'online':
-        return const Color(0xFF3D8A5A);
+        return theme.statusGreen;
       case '离线':
       case 'offline':
-        return const Color(0xFFD32F2F);
+        return theme.statusRed;
       case '忙碌':
       case 'busy':
-        return const Color(0xFFF57C00);
+        return theme.statusOrange;
       case '离开':
       case 'away':
         return const Color(0xFFF9A825);
       default:
-        return const Color(0xFF6D6C6A);
+        return theme.iconColor;
     }
   }
 
@@ -43,40 +45,42 @@ class DeviceCard extends StatelessWidget {
     return status;
   }
 
-  Color _getStatusBackgroundColor(String? status) {
-    if (status == null) return const Color(0xFFC8F0D8);
+  Color _getStatusBackgroundColor(BuildContext context, String? status) {
+    final theme = context.customTheme;
+    if (status == null) return theme.statusGreenBg;
 
     switch (status.toLowerCase()) {
       case '在线':
       case 'online':
-        return const Color(0xFFC8F0D8);
+        return theme.statusGreenBg;
       case '离线':
       case 'offline':
-        return const Color(0xFFFFEBEE);
+        return theme.statusRed.withOpacity(0.1);
       case '忙碌':
       case 'busy':
-        return const Color(0xFFFFE0B2);
+        return theme.statusOrange.withOpacity(0.2);
       case '离开':
       case 'away':
         return const Color(0xFFFFF9C4);
       default:
-        return const Color(0xFFE8E8E6);
+        return theme.dividerColor.withOpacity(0.3);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = _getStatusColor(node.status);
+    final theme = context.customTheme;
+    final statusColor = _getStatusColor(context, node.status);
     final statusText = _getStatusText(node.status);
-    final statusBackgroundColor = _getStatusBackgroundColor(node.status);
+    final statusBackgroundColor = _getStatusBackgroundColor(context, node.status);
 
     return Container(
       width: double.infinity,
       height: 80,
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F6),
+        color: theme.cardBackground,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFCCCCCC)),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Material(
         color: Colors.transparent,
@@ -94,7 +98,7 @@ class DeviceCard extends StatelessWidget {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE8E8E6),
+                      color: theme.dividerColor.withOpacity(0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
@@ -102,7 +106,7 @@ class DeviceCard extends StatelessWidget {
                         width: 24,
                         height: 24,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6D6C6A),
+                          color: theme.iconColor,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -120,15 +124,16 @@ class DeviceCard extends StatelessWidget {
                       // 显示昵称（如果有）或设备名称
                       Text(
                         node.nickname ?? node.deviceName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.normal,
-                          color: Color(0xFF1A1918),
+                          color: theme.iconColor,
                         ),
                       ),
                       const SizedBox(height: 4),
                       // 状态指示器（和列表头部统一但更小）
                       _buildStatusIndicator(
+                        context,
                         statusText,
                         statusColor,
                         statusBackgroundColor,
@@ -146,13 +151,13 @@ class DeviceCard extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE8E8E6),
+                      color: theme.dividerColor.withOpacity(0.3),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.chat_bubble_outline,
                       size: 18,
-                      color: Color(0xFF6D6C6A),
+                      color: theme.iconColor,
                     ),
                   ),
                 ),
@@ -166,6 +171,7 @@ class DeviceCard extends StatelessWidget {
 
   /// 构建状态指示器（和列表头部统一但更小）
   Widget _buildStatusIndicator(
+    BuildContext context,
     String text,
     Color statusColor,
     Color backgroundColor,

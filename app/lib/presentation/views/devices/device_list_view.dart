@@ -66,6 +66,7 @@ class DeviceListView extends GetView<DeviceController> {
   Widget _buildTopBar(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
     final totalHeight = 70.0 + topPadding;
+    final theme = context.customTheme;
 
     return Container(
       height: totalHeight,
@@ -75,7 +76,7 @@ class DeviceListView extends GetView<DeviceController> {
         right: 24,
         bottom: 16,
       ),
-      decoration: const BoxDecoration(color: Color(0xFFF8F8F6)),
+      decoration: BoxDecoration(color: theme.scaffoldBackground),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -83,7 +84,11 @@ class DeviceListView extends GetView<DeviceController> {
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('我的设备', style: context.appTextTheme.appBarTitle),
+              Text('我的设备', style: context.appTextTheme.appBarTitle.copyWith(
+                color: theme.scaffoldBackground == AppTheme.backgroundDark
+                    ? Colors.white
+                    : AppTheme.textPrimary,
+              )),
               const SizedBox(height: 4),
               Obx(() => Text(
                 '发现 ${controller.nodes.length} 个设备',
@@ -94,8 +99,8 @@ class DeviceListView extends GetView<DeviceController> {
           Container(
             width: 44,
             height: 44,
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            decoration: BoxDecoration(
+              color: theme.cardBackground,
               shape: BoxShape.circle,
             ),
             child: Material(
@@ -109,10 +114,10 @@ class DeviceListView extends GetView<DeviceController> {
                     // This would need HomeController to have changeTab method accessible
                   }
                 },
-                child: const Icon(
+                child: Icon(
                   Icons.settings_outlined,
                   size: 20,
-                  color: Color(0xFF6D6C6A),
+                  color: theme.iconColor,
                 ),
               ),
             ),
@@ -124,8 +129,10 @@ class DeviceListView extends GetView<DeviceController> {
 
   /// 构建扩展内容区域（服务状态、搜索、在线设备标题）
   Widget _buildExtendedContent(BuildContext context) {
+    final theme = context.customTheme;
+
     return Container(
-      color: const Color(0xFFF8F8F6),
+      color: theme.scaffoldBackground,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
@@ -137,14 +144,14 @@ class DeviceListView extends GetView<DeviceController> {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFFF8F8F6),
+              color: theme.searchBackground,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFCCCCCC)),
+              border: Border.all(color: theme.dividerColor),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Icon(Icons.search, size: 18, color: Colors.grey[600]),
+                Icon(Icons.search, size: 18, color: theme.iconColor),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
@@ -205,7 +212,7 @@ class DeviceListView extends GetView<DeviceController> {
                             size: 16,
                             color: controller.isRefreshing.value
                                 ? Colors.grey[500]
-                                : const Color(0xFF3D8A5A),
+                                : context.customTheme.statusGreen,
                           ),
                           if (controller.isRefreshing.value) ...[
                             const SizedBox(width: 8),
@@ -235,10 +242,11 @@ class DeviceListView extends GetView<DeviceController> {
   }
 
   Widget _buildStatusIndicator(BuildContext context) {
+    final theme = context.customTheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFC8F0D8),
+        color: theme.statusGreenBg,
         borderRadius: BorderRadius.circular(100),
       ),
       child: Row(
@@ -247,15 +255,15 @@ class DeviceListView extends GetView<DeviceController> {
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              color: Color(0xFF3D8A5A),
+            decoration: BoxDecoration(
+              color: theme.statusGreen,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 6),
           Text(
             '在线',
-            style: context.appTextTheme.labelSmall?.copyWith(color: const Color(0xFF3D8A5A)),
+            style: context.appTextTheme.labelSmall?.copyWith(color: theme.statusGreen),
           ),
         ],
       ),
@@ -263,15 +271,16 @@ class DeviceListView extends GetView<DeviceController> {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() => Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.search, size: 48, color: Colors.grey[400]),
+          Icon(Icons.search, size: 48, color: theme.iconColorLight),
           const SizedBox(height: 16),
           Text(
             controller.searchQuery.value.isEmpty ? '正在扫描局域网内的设备...' : '未找到匹配的设备',
-            style: const TextStyle(fontSize: 15, color: Color(0xFF6D6C6A)),
+            style: TextStyle(fontSize: 15, color: theme.iconColor),
           ),
         ],
       ),
@@ -297,6 +306,8 @@ class DeviceListView extends GetView<DeviceController> {
 
   /// 构建服务状态显示组件
   Widget _buildServiceStatusSection(BuildContext context) {
+    final theme = context.customTheme;
+
     return Obx(() {
       if (controller.serviceStatus.isEmpty) {
         return const SizedBox.shrink();
@@ -308,23 +319,23 @@ class DeviceListView extends GetView<DeviceController> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F8F6),
+          color: theme.scaffoldBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
+          border: Border.all(color: theme.dividerColor),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.settings_ethernet, size: 16, color: Colors.grey[600]),
+                Icon(Icons.settings_ethernet, size: 16, color: theme.iconColor),
                 const SizedBox(width: 8),
                 Text(
                   '服务状态',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: Colors.grey[700],
+                    color: theme.iconColor,
                   ),
                 ),
                 const Spacer(),
@@ -372,34 +383,36 @@ class DeviceListView extends GetView<DeviceController> {
     required String title,
     required ServiceStatusData status,
   }) {
+    final theme = context.customTheme;
+
     // 根据健康状态选择颜色
     final Color statusColor;
     final String statusText;
     final IconData statusIcon;
 
     if (!status.isRunning) {
-      statusColor = const Color(0xFFD32F2F); // Red
+      statusColor = theme.statusRed;
       statusText = '未运行';
       statusIcon = Icons.error_outline;
     } else {
       switch (status.health) {
         case 'healthy':
-          statusColor = const Color(0xFF3D8A5A); // Green
+          statusColor = theme.statusGreen;
           statusText = '正常';
           statusIcon = Icons.check_circle_outline;
           break;
         case 'degraded':
-          statusColor = const Color(0xFFF57C00); // Orange
+          statusColor = theme.statusOrange;
           statusText = '降级';
           statusIcon = Icons.warning_outlined;
           break;
         case 'unhealthy':
-          statusColor = const Color(0xFFD32F2F); // Red
+          statusColor = theme.statusRed;
           statusText = '异常';
           statusIcon = Icons.error_outline;
           break;
         default:
-          statusColor = const Color(0xFF9E9E9E); // Grey
+          statusColor = theme.statusGrey;
           statusText = '未知';
           statusIcon = Icons.help_outline;
       }
@@ -408,7 +421,7 @@ class DeviceListView extends GetView<DeviceController> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardBackground,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
       ),
@@ -424,7 +437,7 @@ class DeviceListView extends GetView<DeviceController> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: Colors.grey[700],
+                  color: theme.iconColor,
                 ),
               ),
             ],
@@ -442,7 +455,7 @@ class DeviceListView extends GetView<DeviceController> {
             const SizedBox(height: 2),
             Text(
               status.message!,
-              style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 10, color: theme.iconColorLight),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -454,6 +467,8 @@ class DeviceListView extends GetView<DeviceController> {
 
   /// 构建广播信息悬浮浮层（无蒙层，从按钮缩放展开）
   Widget _buildBroadcastInfoPopup(BuildContext context) {
+    final theme = context.customTheme;
+
     return Obx(() {
       final info = controller.broadcastInfo.value;
       // 如果没有广播信息，显示加载中
@@ -494,7 +509,7 @@ class DeviceListView extends GetView<DeviceController> {
                   width: popupWidth,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: theme.cardBackground,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
@@ -511,14 +526,14 @@ class DeviceListView extends GetView<DeviceController> {
                       // 标题栏
                       Row(
                         children: [
-                          Icon(Icons.wifi_tethering, color: const Color(0xFF3D8A5A), size: 20),
+                          Icon(Icons.wifi_tethering, color: theme.statusGreen, size: 20),
                           const SizedBox(width: 8),
-                          const Text(
+                          Text(
                             '广播信息',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF333333),
+                              color: theme.iconColor,
                             ),
                           ),
                         ],
@@ -526,6 +541,7 @@ class DeviceListView extends GetView<DeviceController> {
                       const SizedBox(height: 16),
                       // Peer ID
                       _buildInfoRow(
+                        context,
                         icon: Icons.fingerprint,
                         label: 'Peer ID',
                         value: info.peerId,
@@ -534,6 +550,7 @@ class DeviceListView extends GetView<DeviceController> {
                       const SizedBox(height: 12),
                       // 设备名称
                       _buildInfoRow(
+                        context,
                         icon: Icons.router,
                         label: '设备名称',
                         value: info.deviceName,
@@ -541,28 +558,28 @@ class DeviceListView extends GetView<DeviceController> {
                       ),
                       const SizedBox(height: 12),
                       // 端口信息（区分 IPv4 和 IPv6）
-                      _buildPortsSection(info.addresses),
+                      _buildPortsSection(context, info.addresses),
                       const SizedBox(height: 12),
                       // IP 地址列表（区分 IPv4 和 IPv6，支持换行）
-                      _buildIPsSection(info.addresses),
+                      _buildIPsSection(context, info.addresses),
                       const SizedBox(height: 12),
                       // 提示信息
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF3D8A5A).withOpacity(0.1),
+                          color: theme.statusGreenBgLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.info_outline, size: 14, color: const Color(0xFF3D8A5A)),
+                            Icon(Icons.info_outline, size: 14, color: theme.statusGreen),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 'mDNS 广播用于发现同一网络中的其他设备',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: const Color(0xFF3D8A5A),
+                                  color: theme.statusGreen,
                                 ),
                               ),
                             ),
@@ -581,12 +598,14 @@ class DeviceListView extends GetView<DeviceController> {
   }
 
   /// 构建信息行
-  Widget _buildInfoRow({
+  Widget _buildInfoRow(
+    BuildContext context, {
     required IconData icon,
     required String label,
     required String value,
     required bool isLast,
   }) {
+    final theme = context.customTheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -594,10 +613,10 @@ class DeviceListView extends GetView<DeviceController> {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: const Color(0xFF3D8A5A).withOpacity(0.1),
+            color: theme.statusGreenBgLight,
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Icon(icon, size: 16, color: const Color(0xFF3D8A5A)),
+          child: Icon(icon, size: 16, color: theme.statusGreen),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -608,15 +627,15 @@ class DeviceListView extends GetView<DeviceController> {
                 label,
                 style: TextStyle(
                   fontSize: 11,
-                  color: Colors.grey[600],
+                  color: theme.iconColorLight,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: Color(0xFF333333),
+                  color: theme.iconColor,
                   fontWeight: FontWeight.w500,
                 ),
                 maxLines: null,
@@ -629,12 +648,14 @@ class DeviceListView extends GetView<DeviceController> {
   }
 
   /// 构建端口信息区域（区分 IPv4 和 IPv6）
-  Widget _buildPortsSection(List<String> addresses) {
+  Widget _buildPortsSection(BuildContext context, List<String> addresses) {
+    final theme = context.customTheme;
     final (ipv4Ports, ipv6Ports) = _DeviceListViewHelper._extractPorts(addresses);
 
     // 如果都没有端口，显示未知
     if (ipv4Ports.isEmpty && ipv6Ports.isEmpty) {
       return _buildInfoRow(
+        context,
         icon: Icons.settings_ethernet,
         label: '监听端口',
         value: '未知',
@@ -652,17 +673,17 @@ class DeviceListView extends GetView<DeviceController> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF3D8A5A).withOpacity(0.1),
+                color: theme.statusGreenBgLight,
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: const Icon(Icons.settings_ethernet, size: 16, color: Color(0xFF3D8A5A)),
+              child: Icon(Icons.settings_ethernet, size: 16, color: theme.statusGreen),
             ),
             const SizedBox(width: 12),
             Text(
               '监听端口',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey[600],
+                color: theme.iconColorLight,
               ),
             ),
           ],
@@ -693,9 +714,9 @@ class DeviceListView extends GetView<DeviceController> {
                 const SizedBox(width: 8),
                 Text(
                   ipv4Ports.map((p) => p.toString()).join(', '),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF333333),
+                    color: theme.iconColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -729,9 +750,9 @@ class DeviceListView extends GetView<DeviceController> {
                 const SizedBox(width: 8),
                 Text(
                   ipv6Ports.map((p) => p.toString()).join(', '),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF333333),
+                    color: theme.iconColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -743,12 +764,14 @@ class DeviceListView extends GetView<DeviceController> {
   }
 
   /// 构建 IP 地址信息区域（区分 IPv4 和 IPv6，支持换行）
-  Widget _buildIPsSection(List<String> addresses) {
+  Widget _buildIPsSection(BuildContext context, List<String> addresses) {
+    final theme = context.customTheme;
     final (ipv4Addresses, ipv6Addresses) = _DeviceListViewHelper._extractIPs(addresses);
 
     // 如果都没有 IP 地址，显示未知
     if (ipv4Addresses.isEmpty && ipv6Addresses.isEmpty) {
       return _buildInfoRow(
+        context,
         icon: Icons.router,
         label: 'IP 地址',
         value: '未知',
@@ -766,17 +789,17 @@ class DeviceListView extends GetView<DeviceController> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF3D8A5A).withOpacity(0.1),
+                color: theme.statusGreenBgLight,
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: const Icon(Icons.router, size: 16, color: Color(0xFF3D8A5A)),
+              child: Icon(Icons.router, size: 16, color: theme.statusGreen),
             ),
             const SizedBox(width: 12),
             Text(
               'IP 地址',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey[600],
+                color: theme.iconColorLight,
               ),
             ),
           ],
@@ -813,9 +836,9 @@ class DeviceListView extends GetView<DeviceController> {
                     Flexible(
                       child: Text(
                         ip,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF333333),
+                          color: theme.iconColor,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -858,9 +881,9 @@ class DeviceListView extends GetView<DeviceController> {
                     Flexible(
                       child: Text(
                         ip,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF333333),
+                          color: theme.iconColor,
                           fontWeight: FontWeight.w500,
                         ),
                         maxLines: 2,
@@ -878,6 +901,7 @@ class DeviceListView extends GetView<DeviceController> {
 
   /// 构建 Positioned 的 Info 按钮（z-index 最高）
   Widget _buildPositionedInfoButton(BuildContext context) {
+    final theme = context.customTheme;
     return Obx(() {
       final position = controller.infoButtonPosition.value;
       if (position == null) {
@@ -895,13 +919,13 @@ class DeviceListView extends GetView<DeviceController> {
             height: 28,
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: Colors.grey[200],
+              color: theme.dividerColor.withOpacity(0.5),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.info_outline,
               size: 16,
-              color: Colors.grey,
+              color: theme.iconColorLight,
             ),
           ),
         ),

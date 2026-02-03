@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:get/get.dart';
 import '../bridge/types.dart';
 import '../bridge/frb_generated.dart';
-import 'chat_screen.dart';
 
 /// 聊天会话列表页面
 class ConversationListScreen extends StatefulWidget {
@@ -221,15 +221,13 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
 
   void _openChat(ConversationJson conversation) {
     debugPrint('[ConversationList] 打开聊天: peerId=${conversation.peerId}');
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          peerId: conversation.peerId,
-          peerName: conversation.peerName ?? conversation.peerId,
-        ),
-      ),
-    ).then((_) {
+    Get.toNamed(
+      '/chat',
+      parameters: {
+        'peerId': conversation.peerId,
+        'peerName': conversation.peerName ?? conversation.peerId,
+      },
+    )?.then((_) {
       // 从聊天页面返回时，刷新会话列表
       debugPrint('[ConversationList] 返回，刷新会话列表');
       _loadConversations();

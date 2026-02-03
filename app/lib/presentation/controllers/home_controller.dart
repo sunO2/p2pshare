@@ -8,6 +8,7 @@ import '../../../p2p_manager.dart';
 import '../views/devices/device_list_view.dart';
 import '../views/conversations/conversation_list_view.dart';
 import '../views/settings/settings_view.dart';
+import 'settings_controller.dart';
 
 /// 首页控制器
 ///
@@ -160,6 +161,15 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         initError.value = null;
 
         _log.i('同步 P2P 状态: Peer ID = $localPeerId, Device Name = $deviceName');
+
+        // 刷新设置数据
+        try {
+          final settingsController = Get.find<SettingsController>();
+          await settingsController.loadDeviceInfo();
+          _log.i('[HomeController] P2P 初始化完成，已刷新设置数据');
+        } catch (e) {
+          _log.e('[HomeController] 刷新设置数据失败: $e');
+        }
       }
     } catch (e) {
       _log.e('同步 P2P 状态失败: $e');
@@ -207,6 +217,18 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   /// 切换底部导航
   void changeTab(int index) {
     currentIndex.value = index;
+
+    // 切换到设置标签时，刷新设置数据
+    if (index == 3) {
+      try {
+        final settingsController = Get.find<SettingsController>();
+        settingsController.loadDeviceInfo();
+        settingsController.loadLogInfo();
+        _log.i('[HomeController] 切换到设置标签，已刷新数据');
+      } catch (e) {
+        _log.e('[HomeController] 刷新设置数据失败: $e');
+      }
+    }
   }
 
   /// 重试初始化
@@ -247,10 +269,10 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   /// 子页面列表（用于 IndexedStack）
   /// 注意：不能使用 const，因为 GetView 需要动态绑定 Controller
   List<Widget> get pages => [
-    const DeviceListView(),
-    const ConversationListView(),
+    DeviceListView(),
+    ConversationListView(),
     const _FilePlaceholderScreen(),
-    const SettingsView(),
+    SettingsView(),
   ];
 }
 
