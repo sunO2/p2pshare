@@ -8,5 +8,5 @@ pub mod manager;
 
 // 公共 API 导出
 pub use manager::{ChatDatabase, SqliteChatDatabase};
-pub use models::{Conversation, Message, DbMessage, DbConversation};
+pub use models::{Conversation, Message, DbMessage, DbConversation, DbDevice, Device};
 pub use schema::{DB_VERSION, SCHEMA_SQL};

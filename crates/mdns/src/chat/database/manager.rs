@@ -112,6 +112,8 @@ impl SqliteChatDatabase {
     async fn execute_schema(&self) -> Result<(), ChatError> {
         use super::schema::SCHEMA_SQL;
 
+        crate::send_log("INFO", "database", "初始化数据库表结构".to_string());
+
         // 分割 SQL 语句并逐个执行
         let statements: Vec<&str> = SCHEMA_SQL
             .split(';')
@@ -126,6 +128,7 @@ impl SqliteChatDatabase {
                 .map_err(|e| ChatError::Serialization(format!("Failed to execute schema: {}", e)))?;
         }
 
+        crate::send_log("INFO", "database", "✅ 数据库表结构初始化完成".to_string());
         Ok(())
     }
 }
@@ -133,6 +136,7 @@ impl SqliteChatDatabase {
 #[async_trait::async_trait]
 impl ChatDatabase for SqliteChatDatabase {
     async fn initialize(&self) -> Result<(), ChatError> {
+        // 直接执行最新的 schema（CREATE TABLE IF NOT EXISTS 会跳过已存在的表）
         self.execute_schema().await
     }
 
@@ -599,8 +603,8 @@ impl ChatDatabase for SqliteChatDatabase {
     async fn upsert_device(&self, device: DbDevice) -> Result<(), ChatError> {
         sqlx::query(
             "INSERT INTO devices (peer_id, display_name, device_name, nickname, status, avatar_url,
-                                  protocol_version, addresses, last_seen, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                                  protocol_version, addresses, first_seen, last_seen, last_online, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT(peer_id) DO UPDATE SET
                 display_name = excluded.display_name,
                 device_name = excluded.device_name,
@@ -609,7 +613,9 @@ impl ChatDatabase for SqliteChatDatabase {
                 avatar_url = excluded.avatar_url,
                 protocol_version = excluded.protocol_version,
                 addresses = excluded.addresses,
+                first_seen = excluded.first_seen,
                 last_seen = excluded.last_seen,
+                last_online = excluded.last_online,
                 updated_at = excluded.updated_at"
         )
         .bind(&device.peer_id)
@@ -620,7 +626,9 @@ impl ChatDatabase for SqliteChatDatabase {
         .bind(&device.avatar_url)
         .bind(&device.protocol_version)
         .bind(&device.addresses)
+        .bind(device.first_seen)
         .bind(device.last_seen)
+        .bind(device.last_online)
         .bind(device.created_at.timestamp_millis())
         .bind(device.updated_at.timestamp_millis())
         .execute(&self.pool)
@@ -632,7 +640,7 @@ impl ChatDatabase for SqliteChatDatabase {
     async fn get_device(&self, peer_id: &str) -> Result<Option<Device>, ChatError> {
         let row = sqlx::query(
             "SELECT peer_id, display_name, device_name, nickname, status, avatar_url,
-                    protocol_version, addresses, last_seen
+                    protocol_version, addresses, first_seen, last_seen, last_online
              FROM devices
              WHERE peer_id = ?1"
         )
@@ -653,7 +661,9 @@ impl ChatDatabase for SqliteChatDatabase {
                 addresses: row.try_get::<String, _>("addresses")
                     .ok()
                     .and_then(|s| serde_json::from_str(&s).ok()),
+                first_seen: row.get("first_seen"),
                 last_seen: row.try_get("last_seen").ok(),
+                last_online: row.try_get("last_online").ok(),
             }))
         } else {
             Ok(None)
@@ -663,7 +673,7 @@ impl ChatDatabase for SqliteChatDatabase {
     async fn get_all_devices(&self) -> Result<Vec<Device>, ChatError> {
         let rows = sqlx::query(
             "SELECT peer_id, display_name, device_name, nickname, status, avatar_url,
-                    protocol_version, addresses, last_seen
+                    protocol_version, addresses, first_seen, last_seen, last_online
              FROM devices
              ORDER BY last_seen DESC"
         )
@@ -682,7 +692,9 @@ impl ChatDatabase for SqliteChatDatabase {
             addresses: row.try_get::<String, _>("addresses")
                 .ok()
                 .and_then(|s| serde_json::from_str(&s).ok()),
+            first_seen: row.get("first_seen"),
             last_seen: row.try_get("last_seen").ok(),
+            last_online: row.try_get("last_online").ok(),
         }).collect())
     }
 

@@ -6,6 +6,7 @@ use super::{
     node::NodeManager,
     user_info, MdnsError, events::DiscoveryEvent,
     chat::{ChatManager, ChatMessage, manager::ChatDatabaseConfig},
+    chat::database::manager::ChatDatabase,
 };
 use futures::StreamExt;
 use libp2p::{
@@ -118,7 +119,7 @@ pub struct ConnectionService {
     peer_user_info: HashMap<PeerId, user_info::UserInfo>,
 
     /// 聊天管理器
-    chat_manager: Option<ChatManager>,
+    chat_manager: Option<Arc<ChatManager>>,
 
     /// 聊天事件接收器
     chat_event_rx: Option<mpsc::UnboundedReceiver<super::chat::ChatEvent>>,
@@ -253,7 +254,7 @@ impl ConnectionService {
             agent_version,
             active_connections: HashMap::new(),
             peer_user_info: HashMap::new(),
-            chat_manager: Some(chat_manager),
+            chat_manager: Some(Arc::new(chat_manager)),
             chat_event_rx: Some(chat_event_rx),
             local_peer_id,
             config,
@@ -331,7 +332,7 @@ impl ConnectionService {
 
     /// 获取聊天管理器（用于发送消息）
     pub fn chat_manager(&self) -> Option<&ChatManager> {
-        self.chat_manager.as_ref()
+        self.chat_manager.as_ref().map(|v| &**v)
     }
 
     /// 发送聊天消息
@@ -693,10 +694,46 @@ impl ConnectionService {
                     // 创建节点（使用默认协议版本，因为还没有 Identify 信息）
                     let node = super::VerifiedNode::new(
                         peer_id,
-                        addresses,
+                        addresses.clone(),
                         self.node_manager.config().expected_protocol_version.clone(),
                         "localp2p-unknown".to_string(),  // 未知 agent 版本
                     );
+
+                    // 🔥 保存设备信息到数据库（异步，不阻塞当前流程）
+                    // 首次连接时使用 peer_id 作为显示名称，稍后收到 Identify 信息时会更新
+                    if let Some(chat_manager) = self.chat_manager.clone() {
+                        let peer_id_save = peer_id;
+                        let addresses_save = addresses.clone();
+                        let protocol_version = self.node_manager.config().expected_protocol_version.clone();
+                        tokio::spawn(async move {
+                            // 将 Multiaddr 转换为字符串列表
+                            let addr_strings: Vec<String> = addresses_save.iter()
+                                .map(|addr| addr.to_string())
+                                .collect();
+
+                            // 创建 DbDevice 记录
+                            let device = crate::chat::database::DbDevice::new(
+                                peer_id_save.to_string(),
+                                peer_id_save.to_string(),
+                                peer_id_save.to_string(),
+                                protocol_version,
+                                Some(addr_strings),
+                            );
+
+                            // 保存到数据库
+                            if let Some(db) = chat_manager.get_database().await {
+                                if let Err(e) = db.upsert_device(device).await {
+                                    tracing::error!("❌ 保存设备 {} 到数据库失败: {}", peer_id_save, e);
+                                    crate::send_log("ERROR", "connection_service",
+                                        format!("❌ 保存设备到数据库失败: {} - {}", peer_id_save, e));
+                                } else {
+                                    tracing::info!("✅ 设备 {} 已保存到数据库", peer_id_save);
+                                    crate::send_log("INFO", "connection_service",
+                                        format!("💾 设备 {} 已保存到数据库", peer_id_save));
+                                }
+                            }
+                        });
+                    }
 
                     self.node_manager.add_or_update_node(node).await;
                     crate::send_log("INFO", "connection_service", format!("✅ 节点 {} 已添加到 NodeManager", peer_id));
@@ -714,6 +751,55 @@ impl ConnectionService {
                         &peer_id,
                         user_info::UserInfoRequest,
                     );
+                } else {
+                    // 🔥 非首次连接，也更新数据库中的地址信息（异步）
+                    let addresses: Vec<Multiaddr> = self.swarm.listeners().cloned().collect();
+                    if let Some(chat_manager) = self.chat_manager.clone() {
+                        let peer_id_update = peer_id;
+                        tokio::spawn(async move {
+                            // 将 Multiaddr 转换为字符串列表
+                            let addr_strings: Vec<String> = addresses.iter()
+                                .map(|addr| addr.to_string())
+                                .collect();
+
+                            if let Some(db) = chat_manager.get_database().await {
+                                // 尝试获取现有设备
+                                match db.get_device(&peer_id_update.to_string()).await {
+                                    Ok(Some(existing_device)) => {
+                                        // 设备已存在，创建 DbDevice 更新在线状态
+                                        let mut db_device = crate::chat::database::DbDevice::new(
+                                            existing_device.peer_id.clone(),
+                                            existing_device.display_name.clone(),
+                                            existing_device.device_name.clone(),
+                                            existing_device.protocol_version.clone(),
+                                            Some(addr_strings.clone()),
+                                        );
+                                        // 保留原有的 first_seen、nickname、avatar_url 等信息
+                                        db_device.first_seen = existing_device.first_seen;
+                                        db_device.nickname = existing_device.nickname.clone();
+                                        db_device.avatar_url = existing_device.avatar_url.clone();
+                                        // 标记为上线
+                                        db_device.mark_online(addr_strings);
+
+                                        if let Err(e) = db.upsert_device(db_device).await {
+                                            tracing::error!("❌ 更新设备 {} 在线状态失败: {}", peer_id_update, e);
+                                        } else {
+                                            tracing::info!("✅ 设备 {} 在线状态已更新到数据库", peer_id_update);
+                                            crate::send_log("INFO", "connection_service",
+                                                format!("🔄 设备 {} 在线状态已更新", peer_id_update));
+                                        }
+                                    }
+                                    Ok(None) => {
+                                        // 设备不存在，记录警告
+                                        tracing::warn!("⚠️ 设备 {} 不存在于数据库中，无法更新在线状态", peer_id_update);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("❌ 获取设备 {} 失败: {}", peer_id_update, e);
+                                    }
+                                }
+                            }
+                        });
+                    }
                 }
             }
 
@@ -909,6 +995,55 @@ impl ConnectionService {
 
                                 // ⭐ 同时保存到 NodeManager 的 attributes 中（供 FFI 层读取）
                                 self.node_manager.update_node_user_info(&peer, &user_info).await;
+
+                                // 🔥 更新数据库中的设备信息（异步）
+                                if let Some(chat_manager) = self.chat_manager.clone() {
+                                    let peer_id_update = peer;
+                                    let device_name_clone = response.device_name.clone();
+                                    let nickname_clone = response.nickname.clone();
+                                    let avatar_url_clone = response.avatar_url.clone();
+                                    tokio::spawn(async move {
+                                        if let Some(db) = chat_manager.get_database().await {
+                                            // 尝试获取现有设备
+                                            match db.get_device(&peer_id_update.to_string()).await {
+                                                Ok(Some(existing_device)) => {
+                                                    // existing_device.addresses 已经是 Option<Vec<String>> 类型
+                                                    let existing_addresses = existing_device.addresses.unwrap_or_default();
+
+                                                    // 创建更新的设备记录，保留原有的 first_seen 等信息
+                                                    let mut db_device = crate::chat::database::DbDevice::new(
+                                                        existing_device.peer_id.clone(),
+                                                        device_name_clone.clone(),
+                                                        device_name_clone.clone(),
+                                                        existing_device.protocol_version.clone(),
+                                                        Some(existing_addresses.clone()),
+                                                    );
+                                                    // 保留原有的首次发现时间和其他信息
+                                                    db_device.first_seen = existing_device.first_seen;
+                                                    db_device.nickname = nickname_clone;
+                                                    db_device.avatar_url = avatar_url_clone;
+                                                    db_device.status = Some("online".to_string());
+                                                    // 更新最后上线时间
+                                                    db_device.mark_online(existing_addresses);
+
+                                                    if let Err(e) = db.upsert_device(db_device).await {
+                                                        tracing::error!("❌ 更新设备 {} 信息失败: {}", peer_id_update, e);
+                                                    } else {
+                                                        tracing::info!("✅ 设备 {} 信息已更新到数据库: {}", peer_id_update, device_name_clone);
+                                                        crate::send_log("INFO", "connection_service",
+                                                            format!("💾 设备 {} 信息已更新: {}", peer_id_update, device_name_clone));
+                                                    }
+                                                }
+                                                Ok(None) => {
+                                                    tracing::warn!("⚠️ 设备 {} 不存在于数据库中，等待下次连接时创建", peer_id_update);
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("❌ 获取设备 {} 失败: {}", peer_id_update, e);
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
                             }
                         }
                     }

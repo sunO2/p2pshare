@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 use num_derive::{FromPrimitive, ToPrimitive};
 
 /// 数据库版本号
-pub const DB_VERSION: i32 = 2;  // 🔥 版本升级到 2
+pub const DB_VERSION: i32 = 3;  // 🔥 版本升级到 3（添加 first_seen 字段）
 
 /// 数据库初始化 SQL
 pub const SCHEMA_SQL: &str = r#"
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS files (
 -- 创建文件表索引
 CREATE INDEX IF NOT EXISTS idx_files_message_id ON files(message_id);
 
--- 🔥 创建设备信息表
+-- 🔥 创建设备信息表（版本 3：包含 last_online 字段）
 CREATE TABLE IF NOT EXISTS devices (
     peer_id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
@@ -82,13 +82,16 @@ CREATE TABLE IF NOT EXISTS devices (
     avatar_url TEXT,
     protocol_version TEXT NOT NULL,
     addresses TEXT,
+    first_seen INTEGER NOT NULL,
     last_seen INTEGER,
+    last_online INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
 
 -- 创建设备表索引
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_devices_first_seen ON devices(first_seen DESC);
 CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
 CREATE INDEX IF NOT EXISTS idx_devices_device_name ON devices(device_name);
 
@@ -99,7 +102,7 @@ CREATE TABLE IF NOT EXISTS metadata (
 );
 
 -- 插入当前数据库版本
-INSERT OR REPLACE INTO metadata (key, value) VALUES ('db_version', '2');
+INSERT OR REPLACE INTO metadata (key, value) VALUES ('db_version', '3');
 "#;
 
 /// 消息发送状态
@@ -192,6 +195,6 @@ mod tests {
 
     #[test]
     fn test_db_version() {
-        assert_eq!(DB_VERSION, 2);
+        assert_eq!(DB_VERSION, 3);
     }
 }

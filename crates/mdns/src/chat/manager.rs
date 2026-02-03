@@ -397,7 +397,7 @@ impl ChatManager {
     }
 
     /// 获取数据库实例（如果已初始化）
-    async fn get_database(&self) -> Option<Arc<SqliteChatDatabase>> {
+    pub async fn get_database(&self) -> Option<Arc<SqliteChatDatabase>> {
         let db_guard = self.database.lock().await;
         db_guard.clone()
     }

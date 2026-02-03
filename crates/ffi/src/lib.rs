@@ -174,6 +174,7 @@ fn init_file_logging(work_dir: &str) -> Result<(), String> {
                 .with_thread_names(false)
                 .with_file(false)
                 .with_line_number(false)
+                .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339()) // 🔥 使用本地时间（UTC+8）
         )
         .try_init()
         .map_err(|e| format!("Failed to initialize tracing: {}", e))?;
@@ -1172,18 +1173,10 @@ pub async fn internal_get_broadcast_info_async() -> Result<bridge::BroadcastInfo
             })
             .unwrap_or(0);
 
-        // 提取 IP 地址列表
+        // 🔥 返回完整的 multiaddr 格式地址列表（包含端口信息）
+        // 格式如: /ip4/192.168.1.100/tcp/12345 或 /ip6/::1/tcp/23456
         let addresses: Vec<String> = listeners.iter()
-            .filter_map(|addr: &Multiaddr| {
-                for protocol in addr.iter() {
-                    match protocol {
-                        Protocol::Ip4(ipv4) => return Some(ipv4.to_string()),
-                        Protocol::Ip6(ipv6) => return Some(ipv6.to_string()),
-                        _ => continue,
-                    }
-                }
-                None
-            })
+            .map(|addr: &Multiaddr| addr.to_string())
             .collect();
 
         tracing::info!("✓ [FFI] 广播信息获取成功: peer_id={}, device_name={}, port={}, addresses={:?}",
@@ -1245,18 +1238,10 @@ pub fn internal_get_broadcast_info_sync() -> Result<bridge::BroadcastInfoJson, S
                 })
                 .unwrap_or(0);
 
-            // 提取 IP 地址列表
+            // 🔥 返回完整的 multiaddr 格式地址列表（包含端口信息）
+            // 格式如: /ip4/192.168.1.100/tcp/12345 或 /ip6/::1/tcp/23456
             let addresses: Vec<String> = listeners.iter()
-                .filter_map(|addr: &Multiaddr| {
-                    for protocol in addr.iter() {
-                        match protocol {
-                            Protocol::Ip4(ipv4) => return Some(ipv4.to_string()),
-                            Protocol::Ip6(ipv6) => return Some(ipv6.to_string()),
-                            _ => continue,
-                        }
-                    }
-                    None
-                })
+                .map(|addr: &Multiaddr| addr.to_string())
                 .collect();
 
             Ok::<_, String>((peer_id, device_name, port, addresses))

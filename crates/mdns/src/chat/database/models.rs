@@ -268,8 +268,12 @@ pub struct DbDevice {
     pub protocol_version: String,
     /// 地址列表（JSON 数组）
     pub addresses: Option<String>,
-    /// 最后可见时间
+    /// 🔥 首次发现时间（毫秒时间戳）
+    pub first_seen: i64,
+    /// 最后可见时间（毫秒时间戳）
     pub last_seen: Option<i64>,
+    /// 🔥 最后上线时间（毫秒时间戳）
+    pub last_online: Option<i64>,
     /// 创建时间
     pub created_at: DateTime<Utc>,
     /// 更新时间
@@ -283,18 +287,22 @@ impl DbDevice {
         display_name: String,
         device_name: String,
         protocol_version: String,
+        addresses: Option<Vec<String>>,
     ) -> Self {
         let now = Utc::now();
+        let now_millis = now.timestamp_millis();
         Self {
             peer_id,
             display_name,
             device_name,
             nickname: None,
-            status: None,
+            status: Some("offline".to_string()), // 初始状态为离线
             avatar_url: None,
             protocol_version,
-            addresses: None,
-            last_seen: Some(now.timestamp_millis()),
+            addresses: addresses.and_then(|a| serde_json::to_string(&a).ok()),
+            first_seen: now_millis, // 首次发现时间 = 创建时间
+            last_seen: Some(now_millis),
+            last_online: None, // 尚未上线
             created_at: now,
             updated_at: now,
         }
@@ -315,6 +323,24 @@ impl DbDevice {
             self.addresses = Some(serde_json::to_string(&addrs).unwrap_or_default());
         }
         self.updated_at = Utc::now();
+    }
+
+    /// 🔥 标记为上线（连接成功时调用）
+    pub fn mark_online(&mut self, addresses: Vec<String>) {
+        self.status = Some("online".to_string());
+        let now = Utc::now().timestamp_millis();
+        self.last_seen = Some(now);
+        self.last_online = Some(now); // 更新最后上线时间
+        self.addresses = Some(serde_json::to_string(&addresses).unwrap_or_default());
+        self.updated_at = Utc::now();
+    }
+
+    /// 🔥 标记为离线（连接断开时调用）
+    pub fn mark_offline(&mut self, reason: Option<&str>) {
+        self.status = Some("offline".to_string());
+        self.last_seen = Some(Utc::now().timestamp_millis());
+        self.updated_at = Utc::now();
+        // last_online 保持不变，记录上次在线时间
     }
 }
 
@@ -337,8 +363,12 @@ pub struct Device {
     pub protocol_version: String,
     /// 地址列表
     pub addresses: Option<Vec<String>>,
-    /// 最后可见时间（毫秒）
+    /// 首次发现时间（毫秒时间戳）
+    pub first_seen: i64,
+    /// 最后可见时间（毫秒时间戳）
     pub last_seen: Option<i64>,
+    /// 最后上线时间（毫秒时间戳）
+    pub last_online: Option<i64>,
 }
 
 impl From<DbDevice> for Device {
@@ -352,7 +382,9 @@ impl From<DbDevice> for Device {
             avatar_url: db.avatar_url,
             protocol_version: db.protocol_version,
             addresses: db.addresses.and_then(|s| serde_json::from_str(&s).ok()),
+            first_seen: db.first_seen,
             last_seen: db.last_seen,
+            last_online: db.last_online,
         }
     }
 }

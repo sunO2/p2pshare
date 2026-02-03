@@ -729,58 +729,11 @@ class _DeviceListScreenState extends State<DeviceListScreen>
                         isLast: false,
                       ),
                       const SizedBox(height: 12),
-                      // 端口
-                      _buildInfoRow(
-                        icon: Icons.settings_ethernet,
-                        label: '监听端口',
-                        value: '${info.port}',
-                        isLast: false,
-                      ),
+                      // 🔥 端口信息（区分 IPv4 和 IPv6）
+                      _buildPortsSection(info.addresses),
                       const SizedBox(height: 12),
-                      // IP 地址列表
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.router,
-                                  size: 16, color: Colors.grey[600]),
-                              const SizedBox(width: 8),
-                              Text(
-                                'IP 地址',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          if (info.addresses.isEmpty)
-                            Text(
-                              '无可用地址',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            )
-                          else
-                            ...info.addresses.map((addr) {
-                              return Padding(
-                                padding: const EdgeInsets.only(left: 24, bottom: 2),
-                                child: Text(
-                                  addr,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: const Color(0xFF333333),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                        ],
-                      ),
+                      // 🔥 IP 地址列表（区分 IPv4 和 IPv6，支持换行）
+                      _buildIPsSection(info.addresses),
                       const SizedBox(height: 12),
                       // 提示信息
                       Container(
@@ -813,6 +766,163 @@ class _DeviceListScreenState extends State<DeviceListScreen>
           ),
         );
       },
+    );
+  }
+
+  /// 🔥 从地址列表中提取端口信息
+  ///
+  /// 地址格式示例：
+  /// - IPv4: /ip4/192.168.1.100/tcp/12345
+  /// - IPv6: /ip6/::1/tcp/23456
+  ///
+  /// 返回: (IPv4 端口列表, IPv6 端口列表)
+  static (List<int>, List<int>) _extractPorts(List<String> addresses) {
+    final ipv4Ports = <int>[];
+    final ipv6Ports = <int>[];
+
+    for (final addr in addresses) {
+      // 解析 multiaddr 格式: /ip4/xxx/tcp/port 或 /ip6/xxx/tcp/port
+      final parts = addr.split('/');
+      if (parts.length >= 5) {
+        final protocol = parts[1]; // ip4 或 ip6
+        final transport = parts[3]; // tcp 或 udp
+        final portStr = parts[4]; // 端口号
+
+        if (transport == 'tcp') {
+          final port = int.tryParse(portStr);
+          if (port != null && port > 0) {
+            if (protocol == 'ip4') {
+              if (!ipv4Ports.contains(port)) {
+                ipv4Ports.add(port);
+              }
+            } else if (protocol == 'ip6') {
+              if (!ipv6Ports.contains(port)) {
+                ipv6Ports.add(port);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 排序以便显示
+    ipv4Ports.sort();
+    ipv6Ports.sort();
+
+    return (ipv4Ports, ipv6Ports);
+  }
+
+  /// 🔥 构建端口信息区域（区分 IPv4 和 IPv6）
+  Widget _buildPortsSection(List<String> addresses) {
+    final (ipv4Ports, ipv6Ports) = _extractPorts(addresses);
+
+    // 如果都没有端口，显示未知
+    if (ipv4Ports.isEmpty && ipv6Ports.isEmpty) {
+      return _buildInfoRow(
+        icon: Icons.settings_ethernet,
+        label: '监听端口',
+        value: '未知',
+        isLast: false,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 端口标题行
+        Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3D8A5A).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.settings_ethernet, size: 16, color: Color(0xFF3D8A5A)),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '监听端口',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // IPv4 端口
+        if (ipv4Ports.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 44),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    'IPv4',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  ipv4Ports.map((p) => p.toString()).join(', '),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF333333),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (ipv6Ports.isNotEmpty) const SizedBox(height: 4),
+        ],
+        // IPv6 端口
+        if (ipv6Ports.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 44),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                  ),
+                  child: const Text(
+                    'IPv6',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.purple,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  ipv6Ports.map((p) => p.toString()).join(', '),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF333333),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -860,6 +970,178 @@ class _DeviceListScreenState extends State<DeviceListScreen>
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  /// 🔥 从地址列表中提取 IP 地址
+  ///
+  /// 地址格式示例：
+  /// - IPv4: /ip4/192.168.1.100/tcp/12345
+  /// - IPv6: /ip6/::1/tcp/23456 或 /ip6/fe80::1/tcp/23456
+  ///
+  /// 返回: (IPv4 地址列表, IPv6 地址列表)
+  static (List<String>, List<String>) _extractIPs(List<String> addresses) {
+    final ipv4Addresses = <String>[];
+    final ipv6Addresses = <String>[];
+
+    for (final addr in addresses) {
+      // 解析 multiaddr 格式: /ip4/xxx/tcp/port 或 /ip6/xxx/tcp/port
+      final parts = addr.split('/');
+      if (parts.length >= 2) {
+        final protocol = parts[1]; // ip4 或 ip6
+
+        if (protocol == 'ip4' && parts.length > 2) {
+          final ip = parts[2];
+          if (ip.isNotEmpty && !ipv4Addresses.contains(ip)) {
+            ipv4Addresses.add(ip);
+          }
+        } else if (protocol == 'ip6' && parts.length > 2) {
+          final ip = parts[2];
+          if (ip.isNotEmpty && !ipv6Addresses.contains(ip)) {
+            ipv6Addresses.add(ip);
+          }
+        }
+      }
+    }
+
+    // 排序以便显示
+    ipv4Addresses.sort();
+    ipv6Addresses.sort();
+
+    return (ipv4Addresses, ipv6Addresses);
+  }
+
+  /// 🔥 构建 IP 地址信息区域（区分 IPv4 和 IPv6，支持换行）
+  Widget _buildIPsSection(List<String> addresses) {
+    final (ipv4Addresses, ipv6Addresses) = _extractIPs(addresses);
+
+    // 如果都没有 IP 地址，显示未知
+    if (ipv4Addresses.isEmpty && ipv6Addresses.isEmpty) {
+      return _buildInfoRow(
+        icon: Icons.router,
+        label: 'IP 地址',
+        value: '未知',
+        isLast: false,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // IP 地址标题行
+        Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3D8A5A).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.router, size: 16, color: Color(0xFF3D8A5A)),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'IP 地址',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // IPv4 地址
+        if (ipv4Addresses.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 44),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: ipv4Addresses.map((ip) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        'IPv4',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        ip,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF333333),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+          if (ipv6Addresses.isNotEmpty) const SizedBox(height: 4),
+        ],
+        // IPv6 地址（支持换行）
+        if (ipv6Addresses.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 44),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: ipv6Addresses.map((ip) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                      ),
+                      child: const Text(
+                        'IPv6',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.purple,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        ip,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF333333),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
       ],
     );
   }

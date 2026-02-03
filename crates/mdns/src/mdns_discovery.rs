@@ -408,7 +408,37 @@ impl MdnsServiceDiscovery {
 
                 tracing::info!("📡 发现服务: {} at {:?}", peer_id_str, addresses);
 
-                // ⭐ 优化：过滤和排序地址，只连接最合适的地址
+                // ========================================================================
+                // 地址过滤和选择策略
+                // ========================================================================
+                //
+                // 为什么需要地址过滤？
+                // ------------------
+                // 1. mDNS 广播可能包含多个地址（如 WiFi IP、以太网 IP、127.0.0.1 等）
+                // 2. 我们只需要连接到"可达"的地址，避免无效连接尝试
+                // 3. 同一子网内的设备通常可以直接通信，跨子网则需要路由支持
+                //
+                // 为什么只连接同一子网？
+                // ----------------------
+                // 1. ✅ 本地 P2P 场景下，同子网设备可以直接通信（无需路由）
+                // 2. ✅ 避免尝试连接不可达的地址（如 VPN 虚拟 IP、容器网桥 IP）
+                // 3. ✅ 减少 "Connection refused" 错误，加快设备发现速度
+                // 4. ✅ 避免安全风险（不主动连接到不明网络）
+                //
+                // 优先级策略：
+                // -----------
+                // 1. 同一子网的 IPv4 地址（优先级 0 - 最高）
+                // 2. 其他地址被跳过（不尝试连接）
+                //
+                // 注意事项：
+                // ---------
+                // 如果两个设备在同一 WiFi 但不同子网（如 192.168.1.x vs 192.168.0.x），
+                // 它们可能无法互相发现。这是预期行为，因为：
+                // - 不同子网通常意味着不同的网络隔离（VLAN、AP 隔离等）
+                // - 如果需要跨子网通信，应该通过路由器中继或手动添加地址
+                //
+                // ========================================================================
+
                 let mut filtered_addrs: Vec<(libp2p::Multiaddr, u32)> = Vec::new();
                 use std::net::IpAddr;
 
@@ -417,11 +447,11 @@ impl MdnsServiceDiscovery {
                     let (ip_addr, original_port) = match scoped_ip {
                         mdns_sd::ScopedIp::V4(v4) => (std::net::IpAddr::V4(*v4.addr()), port),
                         mdns_sd::ScopedIp::V6(v6) => {
-                            tracing::debug!("跳过 IPv6 地址: {:?}", v6.addr());
+                            tracing::debug!("⏭️ 跳过 IPv6 地址: {:?}（暂不支持）", v6.addr());
                             continue;
                         }
                         _ => {
-                            tracing::debug!("跳过未知类型的地址: {:?}", scoped_ip);
+                            tracing::debug!("⏭️ 跳过未知类型的地址: {:?}", scoped_ip);
                             continue;
                         }
                     };
@@ -432,27 +462,50 @@ impl MdnsServiceDiscovery {
                         _ => continue,
                     };
 
-                    // 🔥 临时禁用子网过滤（用于调试）
-                    // 原因：可能因为子网过滤导致同 WiFi 不同子网的设备无法发现
+                    // ✅ 关键：只接受同一子网内的地址
+                    //
+                    // 子网判断原理：
+                    // - 网络地址 = IP 地址 & 子网掩码
+                    // - 两个 IP 在同一子网当且仅当它们的网络地址相同
+                    // - 例如：192.168.1.100/24 和 192.168.1.200/24 在同一子网
+                    //
                     let is_same_subnet = self.is_same_subnet(ip_addr_v4);
-                    if !is_same_subnet {
-                        tracing::warn!("⚠️ 跨子网地址（仍接受）: {}", ip_addr);
-                        send_log("WARN", "mdns_discovery", format!("⚠️ 跨子网地址（仍接受）: {}", ip_addr));
-                        // 不跳过，继续处理
-                    }
+                    if is_same_subnet {
+                        tracing::debug!("✅ 同子网地址: {}（接受）", ip_addr_v4);
 
-                    // 转换为 Multiaddr
-                    let socket_addr = std::net::SocketAddr::new(ip_addr, original_port);
-                    if let Ok(multiaddr) = self.socket_addr_to_multiaddr(&socket_addr, original_port) {
-                        // 同一子网内的 IP 都使用相同优先级
-                        filtered_addrs.push((multiaddr, 0));
+                        // 转换为 Multiaddr，优先级设为 0（最高）
+                        let socket_addr = std::net::SocketAddr::new(ip_addr, original_port);
+                        if let Ok(multiaddr) = self.socket_addr_to_multiaddr(&socket_addr, original_port) {
+                            filtered_addrs.push((multiaddr, 0));
+                        }
+                    } else {
+                        // ⏭️ 跳过跨子网地址（不尝试连接）
+                        tracing::debug!("⏭️ 跨子网地址: {}（跳过，不在同一子网）", ip_addr_v4);
+                        send_log("DEBUG", "mdns_discovery",
+                            format!("⏭️ 跳过跨子网地址: {} | 不与本机任何接口在同一子网", ip_addr_v4));
+                        // 不添加到 filtered_addrs，直接跳过
                     }
                 }
 
-                // 按优先级排序
+                // 按优先级排序（从小到大）
                 filtered_addrs.sort_by_key(|(_, priority)| *priority);
 
-                // 只使用第一个（最佳）地址
+                // ⚠️ 只使用第一个地址（最佳地址）
+                //
+                // 为什么不尝试所有地址？
+                // --------------------
+                // 1. mDNS 广播的多个地址通常指向同一设备的不同网卡
+                // 2. 如果一个地址失败，其他地址也很可能失败（同一设备）
+                // 3. 尝试多个地址会：
+                //    - 增加连接延迟（需要等待超时）
+                //    - 产生大量 "Connection refused" 错误日志
+                //    - 浪费资源
+                // 4. 只连接最佳地址（同子网、私有 IP）效率最高
+                //
+                // 如果需要尝试多个地址怎么办？
+                // -----------------------------
+                // 可以修改为遍历所有 filtered_addrs，依次尝试连接
+                //
                 if let Some((multiaddr, _)) = filtered_addrs.first() {
                     // 检查是否已发现过
                     let peer_key = peer_id.to_string();
@@ -474,7 +527,22 @@ impl MdnsServiceDiscovery {
                         }
                     }
                 } else {
-                    tracing::warn!("⚠️ 节点 {} 没有可用的地址", peer_id_str);
+                    // 没有找到同子网的地址
+                    tracing::warn!("⚠️ 节点 {} 没有可用的同子网地址", peer_id_str);
+                    send_log("WARN", "mdns_discovery",
+                        format!("⚠️ 节点 {} 被跳过 | mDNS 广播了 {} 个地址，但都不与本机在同一子网",
+                            peer_id_str, addresses.len()));
+
+                    // 📋 调试信息：列出所有被跳过的地址
+                    let mut addr_list = Vec::new();
+                    for scoped_ip in addresses.iter() {
+                        if let mdns_sd::ScopedIp::V4(v4) = scoped_ip {
+                            addr_list.push(format!("{}", v4.addr()));
+                        }
+                    }
+                    tracing::debug!("被跳过的地址: {:?}", addr_list);
+                    send_log("DEBUG", "mdns_discovery",
+                        format!("📋 被跳过的地址列表: {:?}", addr_list));
                 }
             }
             ServiceEvent::ServiceRemoved(fullname, _ty) => {
