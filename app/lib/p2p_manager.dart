@@ -933,6 +933,39 @@ class P2PManager {
     }
   }
 
+  /// 验证 Peer ID 格式是否有效
+  ///
+  /// libp2p Peer ID 应该：
+  /// - 不为空
+  /// - 以标准前缀 "12D3KooW" 开头（Identity V0）
+  /// - 只包含 Base58 字符（不含空格、0、O、I、l 等）
+  bool _isValidPeerId(String peerId) {
+    if (peerId.isEmpty) return false;
+
+    // 基本检查：不包含空格
+    if (peerId.contains(' ')) {
+      return false;
+    }
+
+    // 检查标准前缀（libp2p Identity V0）
+    if (!peerId.startsWith('12D3KooW')) {
+      return false;
+    }
+
+    // 检查长度（libp2p Peer ID 通常是 50+ 字符）
+    if (peerId.length < 20) {
+      return false;
+    }
+
+    // Base58 字符集（排除容易混淆的字符）
+    final base58Chars = RegExp(r'^[1-9A-HJ-NP-Za-km-z]+$');
+    if (!base58Chars.hasMatch(peerId)) {
+      return false;
+    }
+
+    return true;
+  }
+
   /// 处理 Flutter mDNS 发现的设备
   void _handleFlutterMdnsDiscovery(Service service) {
     try {
@@ -955,6 +988,14 @@ class P2PManager {
       final localPeerId = getLocalPeerId();
       if (name == localPeerId) {
         _log.d('[Flutter mDNS] 跳过自己的广播: $name');
+        return;
+      }
+
+      // ⭐ 验证 Peer ID 格式
+      // libp2p Peer ID 应该是 Base58 编码，不包含空格等特殊字符
+      // 标准前缀是 12D3KooW
+      if (!_isValidPeerId(name)) {
+        _log.w('[Flutter mDNS] 跳过无效的 Peer ID: "$name" (包含非法字符或格式不正确)');
         return;
       }
 

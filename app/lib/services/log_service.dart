@@ -32,7 +32,7 @@ class LogService {
   // 🔥 实时日志流（tail -f 功能）
   final _realtimeLogController = StreamController<LogLine>.broadcast();
   Timer? _realtimeWatchTimer;
-  int _lastReadPosition = 0; // 上次读取的位置（字节偏移）
+  final _lastReadPositions = <LogType, int>{}; // 每种日志类型的读取位置
   bool _isRealtimeWatching = false; // 是否正在实时监听
 
   /// 日志流
@@ -364,10 +364,14 @@ class LogService {
 
     final watchTypes = types ?? [LogType.flutter, LogType.rust];
     _isRealtimeWatching = true;
-    _lastReadPosition = 0;
 
-    // 使用定时器检查文件变化（每 100ms 检查一次）
-    _realtimeWatchTimer = Timer.periodic(const Duration(milliseconds: 100), (_) async {
+    // 初始化每种类型的读取位置
+    for (final type in watchTypes) {
+      _lastReadPositions[type] = 0;
+    }
+
+    // 使用定时器检查文件变化（每 500ms 检查一次，降低 CPU 占用）
+    _realtimeWatchTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
       if (!_isRealtimeWatching) return;
 
       for (final type in watchTypes) {
@@ -381,7 +385,7 @@ class LogService {
     _isRealtimeWatching = false;
     _realtimeWatchTimer?.cancel();
     _realtimeWatchTimer = null;
-    _lastReadPosition = 0;
+    _lastReadPositions.clear();
   }
 
   /// 检查并流式输出新增的日志行
@@ -412,20 +416,24 @@ class LogService {
       // 获取当前文件大小
       final fileSize = await logFile.length();
 
+      // 获取该类型的上次读取位置
+      final lastReadPosition = _lastReadPositions[type] ?? 0;
+
       // 如果文件变小了（日志被轮转），从头开始读取
-      if (fileSize < _lastReadPosition) {
-        _lastReadPosition = 0;
+      if (fileSize < lastReadPosition) {
+        _lastReadPositions[type] = 0;
       }
 
       // 如果有新增内容
-      if (fileSize > _lastReadPosition) {
+      final currentReadPosition = _lastReadPositions[type] ?? 0;
+      if (fileSize > currentReadPosition) {
         // 打开文件并定位到上次读取位置
         final raf = logFile.openSync(mode: FileMode.read);
         try {
-          raf.setPositionSync(_lastReadPosition);
+          raf.setPositionSync(currentReadPosition);
 
           // 读取新增内容
-          final bufferSize = fileSize - _lastReadPosition;
+          final bufferSize = fileSize - currentReadPosition;
           final buffer = Uint8List(bufferSize);
           final bytesRead = raf.readIntoSync(buffer, 0, bufferSize);
 
@@ -447,7 +455,7 @@ class LogService {
             }
 
             // 更新读取位置
-            _lastReadPosition = raf.positionSync();
+            _lastReadPositions[type] = raf.positionSync();
           }
         } finally {
           raf.closeSync();
