@@ -46,8 +46,14 @@ class DeviceController extends GetxController
   /// Stack Key
   final stackKey = GlobalKey();
 
+  /// 弹出框 Key（用于获取实际尺寸）
+  final popupKey = GlobalKey();
+
   /// Info 按钮位置
   final Rxn<Offset> infoButtonPosition = Rxn<Offset>();
+
+  /// 动画缩放原点（基于弹出框实际尺寸动态计算）
+  final Rxn<FractionalOffset> popupScaleAlignment = Rxn<FractionalOffset>();
 
   // ========== 动画控制器 ==========
 
@@ -57,6 +63,7 @@ class DeviceController extends GetxController
   // ========== 订阅 ==========
 
   eb.P2PEventSubscription<eb.P2PEvent>? eventBusSubscription;
+  eb.P2PEventSubscription<eb.P2PEvent>? serviceReadySubscription;
   StreamSubscription? p2pManagerSubscription;
 
   // ========== 依赖注入 ==========
@@ -83,15 +90,12 @@ class DeviceController extends GetxController
       ),
     );
 
-    // 加载设备列表
-    loadNodes();
+    // 监听服务启动完成事件
+    listenToServiceReady();
 
-    // 监听事件
+    // 监听其他事件
     listenToEvents();
     listenToEventBus();
-
-    // 初始加载服务状态
-    loadInitialServiceStatus();
   }
 
   @override
@@ -104,9 +108,30 @@ class DeviceController extends GetxController
   void onClose() {
     _log.i('[DeviceController] onClose');
     eventBusSubscription?.cancel();
+    serviceReadySubscription?.cancel();
     p2pManagerSubscription?.cancel();
     popupAnimationController.dispose();
     super.onClose();
+  }
+
+  // ========== 服务监听 ==========
+
+  /// 监听服务启动完成事件
+  void listenToServiceReady() {
+    _log.i('[DeviceController] 开始监听服务启动完成事件');
+    serviceReadySubscription = eb.P2PEventBus.instance.subscribe(
+      peerId: '_system_',
+      type: 'service_ready',
+      onData: (event) {
+        _log.i('[DeviceController] 收到服务启动完成事件');
+        // 服务启动完成后再加载数据
+        loadNodes();
+        loadInitialServiceStatus();
+      },
+      errorCallback: (error) {
+        _log.e('[DeviceController] 服务监听错误: $error');
+      },
+    );
   }
 
   // ========== 数据加载 ==========
@@ -141,12 +166,17 @@ class DeviceController extends GetxController
       _log.i('[服务状态初始化] Connection: ${systemStatus.connectionService.health.name} (running: ${systemStatus.connectionService.isRunning})');
       _log.i('[服务状态初始化] connectedPeers: ${systemStatus.connectedPeers}, discoveredPeers: ${systemStatus.discoveredPeers}');
 
-      serviceStatus['mDNS'] = ServiceStatusData(
-        name: systemStatus.mdnsService.name,
-        health: systemStatus.mdnsService.health.name,
-        isRunning: systemStatus.mdnsService.isRunning,
-        message: systemStatus.mdnsService.message,
-      );
+      // ⚠️ 注意：mDNS 状态由 Flutter 端通过 ServiceStatusChangedEvent 单独管理
+      // 不在这里覆盖，避免与 Flutter mDNS 服务状态冲突
+      // 如果 mDNS 状态还没有初始化，设置一个默认的"等待启动"状态
+      if (!serviceStatus.containsKey('mDNS')) {
+        serviceStatus['mDNS'] = ServiceStatusData(
+          name: 'mDNS',
+          health: 'unhealthy',
+          isRunning: false,
+          message: '等待启动...',
+        );
+      }
 
       serviceStatus['Connection'] = ServiceStatusData(
         name: systemStatus.connectionService.name,
@@ -159,6 +189,12 @@ class DeviceController extends GetxController
       discoveredPeers.value = systemStatus.discoveredPeers;
 
       _log.i('服务状态加载完成');
+
+      // ⭐ 服务状态加载后，在下一帧计算 info 按钮位置
+      // 此时占位符已经被渲染到屏幕上
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        calculateInfoButtonPosition();
+      });
     } catch (e) {
       _log.e('加载服务状态失败: $e', e);
     }
@@ -232,6 +268,12 @@ class DeviceController extends GetxController
         serviceStatus[event.service] = event.status;
         _updatePeerCounts();
         _log.i('[ServiceStatus] ${event.service}: ${event.status.health}');
+
+        // ⭐ 当服务状态更新时，重新计算 info 按钮位置
+        // 这确保了首次设置服务状态后，占位符已渲染，可以正确计算位置
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          calculateInfoButtonPosition();
+        });
       }
     });
   }
@@ -292,7 +334,12 @@ class DeviceController extends GetxController
       final info = await _p2p.manager.getBroadcastInfo();
       broadcastInfo.value = info;
       showBroadcastInfoPopup.value = true;
-      popupAnimationController.forward();
+
+      // ⭐ 先让弹出框渲染，然后计算实际尺寸和 alignment，最后开始动画
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        calculatePopupScaleAlignment();
+        popupAnimationController.forward();
+      });
     } catch (e) {
       _log.e('获取广播信息失败: $e', e);
     }
@@ -322,5 +369,51 @@ class DeviceController extends GetxController
     final placeholderLocalPosition = stackBox.globalToLocal(placeholderGlobalPosition);
 
     infoButtonPosition.value = placeholderLocalPosition;
+  }
+
+  /// ⭐ 计算弹出框动画缩放原点（从 info 按钮中心展开）
+  void calculatePopupScaleAlignment() {
+    final RenderBox? stackBox =
+        stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? placeholderBox =
+        infoPlaceholderKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? popupBox =
+        popupKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (stackBox == null || placeholderBox == null || popupBox == null) {
+      return;
+    }
+
+    const popupWidth = 320.0;
+
+    // 获取占位符相对于 Stack 的位置
+    final placeholderGlobalPosition = placeholderBox.localToGlobal(Offset.zero);
+    final placeholderLocalPosition = stackBox.globalToLocal(placeholderGlobalPosition);
+    final placeholderSize = placeholderBox.size;
+
+    // Info 按钮中心点位置
+    final placeholderCenter = Offset(
+      placeholderLocalPosition.dx + placeholderSize.width / 2,
+      placeholderLocalPosition.dy + placeholderSize.height / 2,
+    );
+
+    // 弹出框左上角位置
+    final popupLeft = placeholderLocalPosition.dx + placeholderSize.width - popupWidth + 16;
+    final popupTop = placeholderLocalPosition.dy - 16;
+
+    // info 按钮中心相对于弹出框左上角的偏移
+    final offsetX = placeholderCenter.dx - popupLeft;
+    final offsetY = placeholderCenter.dy - popupTop;
+
+    // 获取弹出框实际高度
+    final popupHeight = popupBox.size.height;
+
+    // 转换为 FractionalOffset
+    popupScaleAlignment.value = FractionalOffset(
+      offsetX / popupWidth,
+      offsetY / popupHeight,
+    );
+
+    _log.d('[PopupScaleAlignment] offset=($offsetX, $offsetY), size=($popupWidth, $popupHeight), alignment=(${offsetX / popupWidth}, ${offsetY / popupHeight})');
   }
 }

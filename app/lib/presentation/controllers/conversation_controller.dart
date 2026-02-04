@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:get/get.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import '../../../bridge/frb_generated.dart';
 import '../../../bridge/types.dart';
 import '../../services/log_service.dart';
+import '../../services/p2p_event_bus.dart' as eb;
 
 /// 会话列表控制器
 ///
@@ -19,6 +21,13 @@ class ConversationController extends GetxController {
   /// 错误信息
   final Rxn<String> error = Rxn<String>();
 
+  /// 服务是否已就绪
+  final serviceReady = false.obs;
+
+  // ========== 订阅 ==========
+
+  eb.P2PEventSubscription<eb.P2PEvent>? serviceReadySubscription;
+
   // ========== 依赖注入 ==========
 
   final LogService _log = Get.find<LogService>();
@@ -29,7 +38,8 @@ class ConversationController extends GetxController {
   void onInit() {
     super.onInit();
     _log.i('[ConversationController] onInit');
-    loadConversations();
+    // 监听服务启动完成事件
+    _listenToServiceReady();
   }
 
   @override
@@ -41,7 +51,28 @@ class ConversationController extends GetxController {
   @override
   void onClose() {
     _log.i('[ConversationController] onClose');
+    serviceReadySubscription?.cancel();
     super.onClose();
+  }
+
+  // ========== 服务监听 ==========
+
+  /// 监听服务启动完成事件
+  void _listenToServiceReady() {
+    _log.i('[ConversationController] 开始监听服务启动完成事件');
+    serviceReadySubscription = eb.P2PEventBus.instance.subscribe(
+      peerId: '_system_',
+      type: 'service_ready',
+      onData: (event) {
+        _log.i('[ConversationController] 收到服务启动完成事件');
+        serviceReady.value = true;
+        // 服务启动完成后再加载数据
+        loadConversations();
+      },
+      errorCallback: (error) {
+        _log.e('[ConversationController] 服务监听错误: $error');
+      },
+    );
   }
 
   // ========== 数据加载 ==========

@@ -828,6 +828,11 @@ class P2PManager {
       _log.i('✅ [mDNS] Flutter mDNS 服务启动完成');
       _log.i('📡 [mDNS] Flutter 负责 mDNS（广播 + 浏览），Rust 负责连接');
 
+      // ⭐ 同时启动 Rust 端的 mDNS 浏览服务，确保设备发现正常工作
+      _log.i('🔄 [mDNS] 启动 Rust 端 mDNS 浏览服务...');
+      await restartDiscovery();
+      _log.i('✅ [mDNS] Rust 端 mDNS 浏览服务启动完成');
+
       // ⚠️ 注意：服务状态由 _startFlutterMdns 在服务启动后发送
     } catch (e, stackTrace) {
       _log.e('❌ [mDNS] 处理连接服务启动事件失败: $e', e, stackTrace);

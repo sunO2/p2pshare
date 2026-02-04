@@ -59,6 +59,9 @@ class _DeviceListScreenState extends State<DeviceListScreen>
   void initState() {
     super.initState();
 
+    // 🔥 调试：打印字段初始化后的状态
+    debugPrint('🔍 [initState] 开始，_serviceStatus keys: ${_serviceStatus.keys.toList()}');
+
     // 🔥 先设置默认的 mDNS 服务状态（确保卡片始终显示）
     _serviceStatus['mDNS'] = ServiceStatusData(
       name: 'mDNS',
@@ -66,6 +69,8 @@ class _DeviceListScreenState extends State<DeviceListScreen>
       isRunning: false,
       message: '等待启动...',
     );
+
+    debugPrint('🔍 [initState] 设置 mDNS 后，keys: ${_serviceStatus.keys.toList()}');
 
     _loadNodes();
     _listenToEvents();
@@ -94,8 +99,10 @@ class _DeviceListScreenState extends State<DeviceListScreen>
 
   /// 🔥 初始加载服务状态（仅一次，之后通过事件更新）
   void _loadInitialServiceStatus() {
+    debugPrint('🔍 [_loadInitialServiceStatus] 开始，keys: ${_serviceStatus.keys.toList()}');
     try {
       final systemStatus = P2PManager.instance.getSystemStatus();
+      debugPrint('🔍 [_loadInitialServiceStatus] getSystemStatus 成功');
       if (mounted) {
         setState(() {
           // ⭐ mDNS 服务已迁移到 Flutter 端
@@ -114,6 +121,7 @@ class _DeviceListScreenState extends State<DeviceListScreen>
           );
           _connectedPeers = systemStatus.connectedPeers;
           _discoveredPeers = systemStatus.discoveredPeers;
+          debugPrint('🔍 [_loadInitialServiceStatus] setState 后，keys: ${_serviceStatus.keys.toList()}');
         });
       }
     } catch (e) {
@@ -133,6 +141,7 @@ class _DeviceListScreenState extends State<DeviceListScreen>
             isRunning: false,
             message: '连接服务未启动',
           );
+          debugPrint('🔍 [_loadInitialServiceStatus] catch setState 后，keys: ${_serviceStatus.keys.toList()}');
         });
       }
     }
@@ -526,12 +535,31 @@ class _DeviceListScreenState extends State<DeviceListScreen>
 
   /// 🔥 构建服务状态显示组件
   Widget _buildServiceStatusSection() {
+    // 🔥 确保 mDNS 状态始终存在（默认占位状态）
+    if (!_serviceStatus.containsKey('mDNS')) {
+      _serviceStatus['mDNS'] = ServiceStatusData(
+        name: 'mDNS',
+        health: 'unhealthy',
+        isRunning: false,
+        message: '等待启动...',
+      );
+    }
+
+    // 如果还是空的（什么都没有），就返回空
     if (_serviceStatus.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final mdnsStatus = _serviceStatus['mDNS'];
     final connectionStatus = _serviceStatus['Connection'];
+
+    // 🔥 再次确保 mdnsStatus 不为 null（防御性编程）
+    final finalMdnsStatus = mdnsStatus ?? ServiceStatusData(
+      name: 'mDNS',
+      health: 'unhealthy',
+      isRunning: false,
+      message: '等待启动...',
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -568,14 +596,14 @@ class _DeviceListScreenState extends State<DeviceListScreen>
           // 服务状态卡片
           Row(
             children: [
-              if (mdnsStatus != null)
-                Expanded(
-                  child: _buildServiceStatusCard(
-                    title: 'mDNS',
-                    status: mdnsStatus,
-                  ),
+              // 🔥 mDNS 卡片始终显示（使用 finalMdnsStatus 确保不为 null）
+              Expanded(
+                child: _buildServiceStatusCard(
+                  title: 'mDNS',
+                  status: finalMdnsStatus,
                 ),
-              if (mdnsStatus != null && connectionStatus != null)
+              ),
+              if (connectionStatus != null)
                 const SizedBox(width: 12),
               if (connectionStatus != null)
                 Expanded(

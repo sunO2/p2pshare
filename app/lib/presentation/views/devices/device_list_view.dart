@@ -493,106 +493,112 @@ class DeviceListView extends GetView<DeviceController> {
 
       const popupWidth = 320.0;
 
+      // 弹出框左上角位置
+      final popupLeft = placeholderLocalPosition.dx + placeholderSize.width - popupWidth + 16;
+      final popupTop = placeholderLocalPosition.dy - 16;
+
       return AnimatedBuilder(
         animation: controller.popupAnimationController,
         builder: (context, child) {
           return Positioned(
-            // 位置：往右 16，往上 16
-            left: placeholderLocalPosition.dx + placeholderSize.width - popupWidth + 16,
-            top: placeholderLocalPosition.dy - 16,
+            left: popupLeft,
+            top: popupTop,
             child: Transform.scale(
               scale: controller.scaleAnimation.value,
-              alignment: Alignment.topRight,
-              child: GestureDetector(
-                onTap: () {},
-                child: Container(
-                  width: popupWidth,
-                  padding: const EdgeInsets.all(16),
+              // ⭐ 使用动态计算的 alignment（基于弹出框实际尺寸）
+              alignment: controller.popupScaleAlignment.value ?? const FractionalOffset(0.9, 0.1),
+              child: child,
+            ),
+          );
+        },
+        child: GestureDetector(
+          onTap: () {},
+          child: Container(
+            key: controller.popupKey, // ⭐ 添加 GlobalKey 用于获取实际尺寸
+            width: popupWidth,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.cardBackground,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 标题栏
+                Row(
+                  children: [
+                    Icon(Icons.wifi_tethering, color: theme.statusGreen, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      '广播信息',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: theme.iconColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Peer ID
+                _buildInfoRow(
+                  context,
+                  icon: Icons.fingerprint,
+                  label: 'Peer ID',
+                  value: info.peerId,
+                  isLast: false,
+                ),
+                const SizedBox(height: 12),
+                // 设备名称
+                _buildInfoRow(
+                  context,
+                  icon: Icons.router,
+                  label: '设备名称',
+                  value: info.deviceName,
+                  isLast: false,
+                ),
+                const SizedBox(height: 12),
+                // 端口信息（区分 IPv4 和 IPv6）
+                _buildPortsSection(context, info.addresses),
+                const SizedBox(height: 12),
+                // IP 地址列表（区分 IPv4 和 IPv6，支持换行）
+                _buildIPsSection(context, info.addresses),
+                const SizedBox(height: 12),
+                // 提示信息
+                Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: theme.cardBackground,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                    color: theme.statusGreenBgLight,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  child: Row(
                     children: [
-                      // 标题栏
-                      Row(
-                        children: [
-                          Icon(Icons.wifi_tethering, color: theme.statusGreen, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            '广播信息',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: theme.iconColor,
-                            ),
+                      Icon(Icons.info_outline, size: 14, color: theme.statusGreen),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'mDNS 广播用于发现同一网络中的其他设备',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.statusGreen,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Peer ID
-                      _buildInfoRow(
-                        context,
-                        icon: Icons.fingerprint,
-                        label: 'Peer ID',
-                        value: info.peerId,
-                        isLast: false,
-                      ),
-                      const SizedBox(height: 12),
-                      // 设备名称
-                      _buildInfoRow(
-                        context,
-                        icon: Icons.router,
-                        label: '设备名称',
-                        value: info.deviceName,
-                        isLast: false,
-                      ),
-                      const SizedBox(height: 12),
-                      // 端口信息（区分 IPv4 和 IPv6）
-                      _buildPortsSection(context, info.addresses),
-                      const SizedBox(height: 12),
-                      // IP 地址列表（区分 IPv4 和 IPv6，支持换行）
-                      _buildIPsSection(context, info.addresses),
-                      const SizedBox(height: 12),
-                      // 提示信息
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: theme.statusGreenBgLight,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline, size: 14, color: theme.statusGreen),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'mDNS 广播用于发现同一网络中的其他设备',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: theme.statusGreen,
-                                ),
-                              ),
-                            ),
-                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-          );
-        },
+          ),
+        ),
       );
     });
   }
