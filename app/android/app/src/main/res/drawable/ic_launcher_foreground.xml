@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- P2P 局域网通信图标 -->
+    <!-- 两个设备节点通过波浪线连接，象征 P2P 通信 -->
+
+    <!-- 左侧节点 -->
+    <circle
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,54 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0"/>
+
+    <!-- 右侧节点 -->
+    <circle
+        android:fillColor="#FFFFFF"
+        android:pathData="M78,54 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0"/>
+
+    <!-- 连接线（P2P 连接） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,54 L66,54 L66,54"/>
+
+    <!-- 顶部信号波（代表信号传输/局域网） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,38 L54,32 L58,38 L56,38 L56,42 L52,42 L52,38 Z"/>
+
+    <!-- 底部信号波 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,70 L54,76 L58,70 L56,70 L56,66 L52,66 L52,70 Z"/>
+
+    <!-- 中间小圆点（数据传输） -->
+    <circle
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54 m-4,0 a4,4 0 1,1 8,0 a4,4 0 1,1 -8,0"/>
+</vector>

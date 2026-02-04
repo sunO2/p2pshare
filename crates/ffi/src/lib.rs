@@ -15,8 +15,9 @@ use tokio::runtime::Runtime;
 use mdns::{
     NodeManager, NodeManagerConfig,
     HealthCheckConfig, UserInfo,
-    IdentityManager, P2PManager, P2PManagerConfig, set_log_callback, send_log as mdns_send_log,
+    IdentityManager, P2PManager, P2PManagerConfig, set_log_callback,
 };
+use mdns::send_log;
 use mdns::global_config::GlobalConfig;
 
 mod types;
@@ -226,13 +227,20 @@ pub fn internal_init(device_name: String, work_dir: String) -> Result<(), String
             send_event_to_stream(event);
         });
 
-        // 🔥 重新设置日志回调，但只处理特定事件（MDNS_STARTED, SERVICE_STATUS）
+        // 🔥 重新设置日志回调，但只处理特定事件（CONNECTION_STARTED, SERVICE_READY, SERVICE_STATUS）
         // 普通日志（INFO, DEBUG, WARN, ERROR）不再发送到 Flutter
         mdns::set_log_callback(|level, target, message| {
             // 只处理特定事件类型
-            if level == "MDNS_STARTED" || level == "SERVICE_STATUS" {
+            let event_type = match level.as_ref() {
+                "CONNECTION_STARTED" => Some(10),  // ConnectionStarted=10
+                "SERVICE_READY" => Some(12),        // ServiceReady=12
+                "SERVICE_STATUS" => Some(11),       // ServiceStatus=11
+                _ => None,
+            };
+
+            if let Some(et) = event_type {
                 let event = bridge::P2PBridgeEvent {
-                    event_type: if level == "MDNS_STARTED" { 10 } else { 11 }, // MDNSStarted=10, ServiceStatus=11
+                    event_type: et,
                     data: message,
                 };
                 send_event_to_stream(event);
@@ -304,7 +312,7 @@ pub fn internal_init(device_name: String, work_dir: String) -> Result<(), String
             .with_listen_addresses(listen_addresses.clone());
 
         // 设置数据库路径
-        mdns_send_log("INFO", "ffi", format!("  聊天数据库路径: {:?}", chat_db_path));
+        send_log("INFO", "ffi", format!("  聊天数据库路径: {:?}", chat_db_path));
         p2p_manager_config = p2p_manager_config.with_chat_db_path(chat_db_path);
 
         let p2p_manager = match P2PManager::new(p2p_manager_config).await {
@@ -382,18 +390,80 @@ pub fn internal_start() -> Result<(), String> {
             if let Some(ref p2p_manager_arc) = resources.p2p_manager {
                 tracing::info!("使用 P2PManager 服务分离架构启动");
 
-                // 启动所有服务（MdnsDiscoveryService + ConnectionService）
-                let start_result = runtime.block_on(async {
+                // ⚠️ 注意：mDNS 服务已迁移到 Flutter 端
+                // Rust 端只启动连接服务，并返回监听地址给 Flutter
+                let start_result: Result<(Vec<libp2p::Multiaddr>, String, String), String> = runtime.block_on(async {
                     let mut pm = p2p_manager_arc.lock().await;
-                    pm.start_all().await
+                    let listeners = pm.start_all().await.map_err(|e| e.to_string())?;
+                    let local_peer_id = pm.local_peer_id_string();
+                    let device_name = pm.device_name().to_string();
+                    Ok((listeners, local_peer_id, device_name))
                 });
 
-                if let Err(e) = start_result {
-                    // 新架构启动失败，直接返回错误
-                    tracing::error!("服务分离架构启动失败: {:?}", e);
-                    return Err(format!("启动服务失败: {:?}", e));
+                let (listeners, local_peer_id, device_name) = match start_result {
+                    Ok(data) => data,
+                    Err(e) => {
+                        tracing::error!("连接服务启动失败: {}", e);
+                        return Err(format!("启动连接服务失败: {}", e));
+                    }
+                };
+
+                // 从监听地址中提取端口和 IP 地址
+                let port = listeners.first()
+                    .and_then(|addr: &libp2p::Multiaddr| {
+                        addr.iter().find_map(|p| {
+                            if let libp2p::multiaddr::Protocol::Tcp(p) = p {
+                                Some(p)
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or(0);
+
+                // 从 multiaddr 中提取纯 IP 地址列表
+                let addresses: Vec<String> = listeners.iter()
+                    .filter_map(|addr: &libp2p::Multiaddr| {
+                        for protocol in addr.iter() {
+                            match protocol {
+                                libp2p::multiaddr::Protocol::Ip4(ipv4) => {
+                                    return Some(ipv4.to_string());
+                                }
+                                libp2p::multiaddr::Protocol::Ip6(ipv6) => {
+                                    return Some(ipv6.to_string());
+                                }
+                                _ => continue,
+                            }
+                        }
+                        None
+                    })
+                    .collect();
+
+                tracing::info!("连接服务已启动: PeerID={}, Port={}", local_peer_id, port);
+
+                // 📡 发送 CONNECTION_STARTED 事件到 Flutter
+                // Flutter 收到此事件后，会启动完整的 mDNS 服务（广播 + 浏览）
+                let service_type = "_localp2p._tcp".to_string();
+                if let Err(e) = send_connection_started_event_to_flutter(
+                    local_peer_id.clone(),
+                    device_name.clone(),
+                    port,
+                    service_type,
+                    addresses.clone(),
+                ) {
+                    tracing::warn!("发送 CONNECTION_STARTED 事件到 Flutter 失败: {:?}", e);
                 }
 
+                // 🎉 发送 SERVICE_READY 事件到 Flutter
+                // Rust 端所有服务已启动完成，Flutter 可以安全调用依赖服务的功能
+                if let Err(e) = send_service_ready_event_to_flutter(
+                    local_peer_id,
+                    device_name,
+                    port,
+                    addresses,
+                ) {
+                    tracing::warn!("发送 SERVICE_READY 事件到 Flutter 失败: {:?}", e);
+                }
 
                 // ⚠️ 关键：克隆 P2PManager 的 Arc 引用，不消耗所有权
                 let p2p_manager = p2p_manager_arc.clone();
@@ -1547,6 +1617,72 @@ pub fn poll_events() -> Vec<bridge::P2PEvent> {
 // ============================================================================
 // 外部 mDNS 发现（Flutter mDNS 辅助）
 // ============================================================================
+
+/// 📡 发送连接服务启动事件到 Flutter
+///
+/// 此函数在连接服务启动时被调用，
+/// 将事件转发到 Flutter 端，让 Flutter 启动完整的 mDNS 服务（广播 + 浏览）
+pub fn send_connection_started_event_to_flutter(
+    local_peer_id: String,
+    device_name: String,
+    port: u16,
+    service_type: String,
+    addresses: Vec<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use serde_json::json;
+
+    // 构建事件数据
+    let event_data = json!({
+        "local_peer_id": local_peer_id,
+        "device_name": device_name,
+        "port": port,
+        "service_type": service_type,
+        "addresses": addresses,
+    });
+
+    tracing::info!("📡 [FFI] 发送 CONNECTION_STARTED 事件到 Flutter: {}", event_data);
+
+    // 通过全局日志回调发送
+    send_log("CONNECTION_STARTED", "p2p_manager", event_data.to_string());
+
+    Ok(())
+}
+
+/// 🔥 发送所有服务启动完成事件到 Flutter
+///
+/// 当 Rust 连接服务启动完成后调用此函数，
+/// 向 Flutter 端发送 SERVICE_READY 事件，表示所有 P2P 服务已就绪
+///
+/// 此事件适用于：
+/// - Flutter 应用：通过 EventBus 广播，UI 层可以安全调用依赖服务的功能
+/// - TUI 应用：可以直接监听此事件来初始化 TUI 功能
+pub fn send_service_ready_event_to_flutter(
+    local_peer_id: String,
+    device_name: String,
+    port: u16,
+    addresses: Vec<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use serde_json::json;
+
+    // 构建事件数据
+    let event_data = json!({
+        "local_peer_id": local_peer_id,
+        "device_name": device_name,
+        "port": port,
+        "addresses": addresses,
+        "services": {
+            "connection": true,
+        },
+        "message": "所有服务已完全启动",
+    });
+
+    tracing::info!("🎉 [FFI] 发送 SERVICE_READY 事件到 Flutter: {}", event_data);
+
+    // 通过全局日志回调发送
+    send_log("SERVICE_READY", "p2p_manager", event_data.to_string());
+
+    Ok(())
+}
 
 /// 报告外部发现的设备（由 Flutter mDNS 发现）
 ///

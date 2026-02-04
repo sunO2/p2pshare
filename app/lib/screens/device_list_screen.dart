@@ -23,7 +23,15 @@ class _DeviceListScreenState extends State<DeviceListScreen>
   StreamSubscription? _p2pManagerSubscription;
 
   // 🔥 服务状态相关（事件推送模式）
-  final Map<String, ServiceStatusData> _serviceStatus = {};
+  // ⭐ 初始化时就设置默认状态，确保卡片始终显示
+  Map<String, ServiceStatusData> _serviceStatus = {
+    'mDNS': ServiceStatusData(
+      name: 'mDNS',
+      health: 'unhealthy',
+      isRunning: false,
+      message: '等待启动...',
+    ),
+  };
   int _connectedPeers = 0;
   int _discoveredPeers = 0;
 
@@ -50,6 +58,15 @@ class _DeviceListScreenState extends State<DeviceListScreen>
   @override
   void initState() {
     super.initState();
+
+    // 🔥 先设置默认的 mDNS 服务状态（确保卡片始终显示）
+    _serviceStatus['mDNS'] = ServiceStatusData(
+      name: 'mDNS',
+      health: 'unhealthy',
+      isRunning: false,
+      message: '等待启动...',
+    );
+
     _loadNodes();
     _listenToEvents();
     _listenToEventBus();
@@ -81,12 +98,13 @@ class _DeviceListScreenState extends State<DeviceListScreen>
       final systemStatus = P2PManager.instance.getSystemStatus();
       if (mounted) {
         setState(() {
-          // 转换 ServiceStatusJson -> ServiceStatusData
+          // ⭐ mDNS 服务已迁移到 Flutter 端
+          // 无论 Rust 端返回什么，都添加默认的 mDNS 服务状态（待启动状态）
           _serviceStatus['mDNS'] = ServiceStatusData(
-            name: systemStatus.mdnsService.name,
-            health: systemStatus.mdnsService.health.name,
-            isRunning: systemStatus.mdnsService.isRunning,
-            message: systemStatus.mdnsService.message,
+            name: 'mDNS',
+            health: 'unhealthy',
+            isRunning: false,
+            message: '等待启动...',
           );
           _serviceStatus['Connection'] = ServiceStatusData(
             name: systemStatus.connectionService.name,
@@ -100,6 +118,23 @@ class _DeviceListScreenState extends State<DeviceListScreen>
       }
     } catch (e) {
       debugPrint('Failed to load initial service status: $e');
+      // 即使加载失败，也要添加默认状态
+      if (mounted) {
+        setState(() {
+          _serviceStatus['mDNS'] = ServiceStatusData(
+            name: 'mDNS',
+            health: 'unhealthy',
+            isRunning: false,
+            message: '等待启动...',
+          );
+          _serviceStatus['Connection'] = ServiceStatusData(
+            name: 'Connection',
+            health: 'unhealthy',
+            isRunning: false,
+            message: '连接服务未启动',
+          );
+        });
+      }
     }
   }
 

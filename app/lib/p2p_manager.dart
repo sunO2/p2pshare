@@ -626,14 +626,19 @@ class P2PManager {
         }
         break;
 
-      case 10: // MDNS_STARTED
-        _log.i('🎯 MDNS 启动事件: ${event.data}');
-        _handleMdnsStarted(event.data);
+      case 10: // CONNECTION_STARTED (原 MDNS_STARTED)
+        _log.i('📡 连接服务启动事件: ${event.data}');
+        _handleConnectionStarted(event.data);
         break;
 
       case 11: // SERVICE_STATUS
         _log.i('📊 服务状态变化: ${event.data}');
         _handleServiceStatusChanged(event.data);
+        break;
+
+      case 12: // SERVICE_READY
+        _log.i('🎉 所有服务启动完成: ${event.data}');
+        _handleServiceReady(event.data);
         break;
 
       // ⚠️ case 9 (Rust 日志) 已移除 - Rust 日志现在直接写入文件
@@ -729,9 +734,9 @@ class P2PManager {
       case 'TRACE':
         logService.t('[$target] $message');
         break;
-      case 'MDNS_STARTED':
-        // 🧪 特殊处理：mDNS 启动事件（测试用）
-        _handleMdnsStarted(message);
+      case 'CONNECTION_STARTED':
+        // 📡 特殊处理：连接服务启动事件（异步执行）
+        unawaited(_handleConnectionStarted(message));
         logService.i('[$target] $message');
         break;
       case 'SERVICE_STATUS':
@@ -778,41 +783,54 @@ class P2PManager {
     }
   }
 
-  /// 处理 mDNS 启动事件（测试用）
-  void _handleMdnsStarted(String message) {
-    _log.i('🧪 [DEBUG] 收到 mDNS 启动事件');
-    _log.i('🧪 [DEBUG] 原始消息: $message');
+  /// 处理连接服务启动事件（启动 Flutter mDNS 服务）
+  ///
+  /// Rust 端连接服务启动后，Flutter 端需要：
+  /// 1. 启动 mDNS 广播（让其他设备能发现本设备）
+  /// 2. 启动 mDNS 设备浏览（发现网络中的其他设备）
+  /// 3. 将发现的设备发送给 Rust 端进行连接
+  /// 4. 发送 mDNS 服务状态到 UI（更新服务卡片）
+  Future<void> _handleConnectionStarted(String message) async {
+    _log.i('📡 [mDNS] 收到连接服务启动事件，启动 Flutter mDNS 服务');
+    _log.i('📡 [mDNS] 原始消息: $message');
 
     try {
       // 解析 JSON 数据
-      // 格式：{"local_peer_id":"...","port":12345,"service_type":"..."}
+      // 格式：{"local_peer_id":"...","device_name":"...","port":12345,"service_type":"...","addresses":[...]}
       final data = _parseJsonOrNull(message);
       if (data == null) {
-        _log.e('❌ [DEBUG] 无法解析 mDNS 启动数据: $message');
+        _log.e('❌ [mDNS] 无法解析连接服务启动数据: $message');
         return;
       }
 
-      _log.i('✅ [DEBUG] JSON 解析成功: $data');
+      _log.i('✅ [mDNS] JSON 解析成功: $data');
 
       final localPeerId = data['local_peer_id'] as String? ?? '';
+      final deviceName = data['device_name'] as String? ?? '';
       final port = data['port'] as int? ?? 0;
       final serviceType = data['service_type'] as String? ?? '';
+      final addresses = data['addresses'] as List<dynamic>?;
 
-      _log.i('📋 [DEBUG] mDNS 参数解析:');
+      _log.i('📋 [mDNS] 参数解析:');
       _log.i('  - Peer ID: $localPeerId');
+      _log.i('  - Device Name: $deviceName');
       _log.i('  - Port: $port');
       _log.i('  - Service Type: $serviceType');
+      _log.i('  - Addresses: $addresses');
 
-      // ⭐ 启动 Flutter mDNS 广播（只注册，不浏览）
-      _log.i('🚀 [DEBUG] 调用 _startFlutterMdnsBroadcastOnly...');
-      _startFlutterMdnsBroadcastOnly(
+      // ⭐ 启动完整的 Flutter mDNS 服务（广播 + 浏览）
+      _log.i('🚀 [mDNS] 启动 Flutter mDNS 完整服务（广播 + 浏览）...');
+      await _startFlutterMdns(
         name: localPeerId,
         port: port,
         serviceType: serviceType,
       );
-      _log.i('✅ [DEBUG] _startFlutterMdnsBroadcastOnly 调用完成');
+      _log.i('✅ [mDNS] Flutter mDNS 服务启动完成');
+      _log.i('📡 [mDNS] Flutter 负责 mDNS（广播 + 浏览），Rust 负责连接');
+
+      // ⚠️ 注意：服务状态由 _startFlutterMdns 在服务启动后发送
     } catch (e, stackTrace) {
-      _log.e('❌ [DEBUG] 处理 mDNS 启动事件失败: $e', e, stackTrace);
+      _log.e('❌ [mDNS] 处理连接服务启动事件失败: $e', e, stackTrace);
     }
   }
 
@@ -848,6 +866,10 @@ class P2PManager {
         },
       );
 
+      // ⭐ 发送 mDNS 服务状态到 UI（更新服务卡片）
+      // 在服务真正启动后发送状态，确保状态准确
+      _sendMdnsServiceStatusToFlutter(isRunning: success);
+
       if (success) {
         _log.i('[Flutter mDNS] 辅助服务启动成功');
       } else {
@@ -855,54 +877,54 @@ class P2PManager {
       }
     } catch (e, stackTrace) {
       _log.e('[Flutter mDNS] 启动失败: $e', e, stackTrace);
+      // 启动失败时发送失败状态
+      _sendMdnsServiceStatusToFlutter(isRunning: false);
     }
   }
 
-  /// 🧪 临时测试：仅启动 Flutter mDNS 广播（注册服务，不浏览）
+  /// 仅启动 Flutter mDNS 广播（注册服务，不浏览设备）
   ///
-  /// 测试目的：
-  /// - 验证 Flutter 能否正常发送 mDNS 广播
-  /// - 验证 Rust 能否接收到 Flutter 发送的广播
+  /// 用途：
+  /// - 当 Rust 端已经处理 mDNS 设备浏览时，Flutter 只需要辅助广播
+  /// - 避免重复的设备浏览（Rust 和 Flutter 都在浏览会产生重复）
   Future<void> _startFlutterMdnsBroadcastOnly({
     required String name,
     required int port,
     required String serviceType,
   }) async {
-    _log.i('🧪 [DEBUG] Flutter mDNS 测试: 开始');
-    _log.i('🧪 [DEBUG] Flutter mDNS 测试: Peer ID: $name, Port: $port, Service: $serviceType');
+    _log.i('[Flutter mDNS] 启动辅助广播服务（仅广播，不浏览）');
+    _log.i('[Flutter mDNS] Peer ID: $name, Port: $port, Service: $serviceType');
 
     try {
-      _log.i('🔍 [DEBUG] Flutter mDNS 测试: 获取 FlutterMdnsService 实例...');
       final mdnsService = FlutterMdnsService.instance;
 
       // 如果已经在运行，先停止
       if (mdnsService.isRunning) {
-        _log.d('[Flutter mDNS 测试] 服务已在运行，先停止');
+        _log.d('[Flutter mDNS] 服务已在运行，先停止');
         await mdnsService.stop();
       }
 
-      _log.i('🔍 [DEBUG] Flutter mDNS 测试: 准备调用 registerService...');
+      _log.d('[Flutter mDNS] 准备调用 registerService...');
 
-      // ⭐ 只注册服务（发送广播），不浏览（不接收）
+      // ⭐ 只注册服务（发送广播），不浏览（不接收设备）
       final success = await mdnsService.registerService(
         name: name,
         port: port,
         serviceType: serviceType,
       );
 
-      _log.i('🔍 [DEBUG] Flutter mDNS 测试: registerService 返回: $success');
+      _log.d('[Flutter mDNS] registerService 返回: $success');
 
       if (success) {
-        _log.i('[Flutter mDNS 测试] ✓ 广播注册成功');
-        _log.i('[Flutter mDNS 测试] 现在 Rust 应该能接收到这个广播');
-        debugPrint('✓ [Flutter mDNS 测试] 广播注册成功，等待 Rust 接收...');
+        _log.i('[Flutter mDNS] ✓ 广播注册成功');
+        _log.i('[Flutter mDNS] Rust 端将负责设备浏览和连接');
+        debugPrint('✓ [Flutter mDNS] 广播注册成功');
       } else {
-        _log.e('[Flutter mDNS 测试] ✗ 广播注册失败');
-        debugPrint('✗ [Flutter mDNS 测试] 广播注册失败');
+        _log.e('[Flutter mDNS] ✗ 广播注册失败');
+        debugPrint('✗ [Flutter mDNS] 广播注册失败');
       }
     } catch (e, stackTrace) {
-      _log.e('[Flutter mDNS 测试] 启动失败: $e', e, stackTrace);
-      debugPrint('✗ [Flutter mDNS 测试] 异常: $e');
+      _log.e('[Flutter mDNS] 启动失败: $e', e, stackTrace);
     }
   }
 
@@ -931,28 +953,66 @@ class P2PManager {
         return;
       }
 
-      // ⭐ 获取 IP 地址
-      String? ip;
-
-      // 优先使用 addresses
-      if (addresses != null && addresses.isNotEmpty) {
-        ip = addresses.first.address;
-        _log.d('[Flutter mDNS] 使用 addresses: $ip');
-      }
-      // 其次使用 host
-      else if (host.isNotEmpty && host != 'localhost') {
-        ip = host;
-        _log.d('[Flutter mDNS] 使用 host: $ip');
-      }
-
       // ⭐ 构造 multiaddr 格式
-      String address;
-      if (ip != null && ip.isNotEmpty && ip != 'localhost') {
-        address = '/ip4/$ip/tcp/$port';
-      } else {
-        // 降级：使用本地网络地址
-        address = '/ip4/0.0.0.0/tcp/$port';
-        _log.w('[Flutter mDNS] 未获取到有效 IP，使用 $address');
+      String? address;
+
+      // 优先使用 addresses 列表（包含 IPv4 和 IPv6 地址）
+      if (addresses != null && addresses.isNotEmpty) {
+        // 首先尝试找 IPv4 地址（优先）
+        for (var addr in addresses) {
+          final ip = addr.address;
+          _log.d('[Flutter mDNS] 检查地址: $ip');
+
+          // 跳过 localhost 和回环地址
+          if (ip == '127.0.0.1' || ip == '::1') {
+            continue;
+          }
+
+          // 简单判断 IPv4（不包含冒号）vs IPv6（包含冒号）
+          if (!ip.contains(':')) {
+            address = '/ip4/$ip/tcp/$port';
+            _log.i('[Flutter mDNS] 使用 IPv4 地址: $address');
+            break; // 找到 IPv4，直接使用
+          }
+        }
+
+        // 如果没有找到 IPv4，尝试使用 IPv6
+        if (address == null) {
+          for (var addr in addresses) {
+            final ip = addr.address;
+            _log.d('[Flutter mDNS] 检查 IPv6 地址: $ip');
+
+            // 跳过 localhost 和回环地址
+            if (ip == '::1' || ip.startsWith('fe80:')) {
+              continue;
+            }
+
+            // 使用 IPv6
+            if (ip.contains(':')) {
+              address = '/ip6/$ip/tcp/$port';
+              _log.i('[Flutter mDNS] 使用 IPv6 地址: $address');
+              break;
+            }
+          }
+        }
+      }
+
+      // 如果没有找到地址，尝试使用 host
+      if (address == null && host.isNotEmpty && host != 'localhost') {
+        // 简单的 IPv4/IPv6 判断
+        if (host.contains(':')) {
+          address = '/ip6/$host/tcp/$port';
+          _log.d('[Flutter mDNS] 使用 host (IPv6): $address');
+        } else {
+          address = '/ip4/$host/tcp/$port';
+          _log.d('[Flutter mDNS] 使用 host (IPv4): $address');
+        }
+      }
+
+      // 如果仍然没有有效地址，记录警告
+      if (address == null) {
+        _log.w('[Flutter mDNS] 未获取到有效 IP 地址，跳过此设备');
+        return;
       }
 
       // ⭐ 调用 Rust 端的接口，让 Rust 去连接
@@ -998,6 +1058,83 @@ class P2PManager {
       debugPrint('[Flutter mDNS] 设备离线: $peerId');
     } catch (e, stackTrace) {
       _log.e('[Flutter mDNS] 处理离线事件失败: $e', e, stackTrace);
+    }
+  }
+
+  /// 📡 发送 mDNS 服务状态到 Flutter UI（更新服务卡片）
+  ///
+  /// 此函数向事件流发送 mDNS 服务状态变化事件，
+  /// UI 层会监听此事件并更新 mDNS 服务卡片的状态显示
+  void _sendMdnsServiceStatusToFlutter({required bool isRunning}) {
+    _log.i('📊 [mDNS] 发送 mDNS 服务状态到 UI: running=$isRunning');
+
+    try {
+      // 构造服务状态数据
+      final statusData = ServiceStatusData(
+        name: 'mDNS',
+        health: isRunning ? 'healthy' : 'unhealthy',
+        isRunning: isRunning,
+        message: isRunning ? 'Flutter mDNS 服务运行中' : 'Flutter mDNS 服务未运行',
+      );
+
+      // 发送服务状态变化事件
+      _eventController.add(
+        ServiceStatusChangedEvent(
+          service: 'mDNS',
+          status: statusData,
+        ),
+      );
+
+      _log.i('✅ [mDNS] 服务状态已发送到 UI');
+    } catch (e, stackTrace) {
+      _log.e('[mDNS] 发送服务状态失败: $e', e, stackTrace);
+    }
+  }
+
+  /// 🔥 处理 Rust 端发送的服务启动完成事件
+  ///
+  /// 当 Rust 连接服务启动完成后，Rust 会发送 SERVICE_READY 事件
+  /// Flutter 收到此事件后，通过 EventBus 广播给所有订阅者
+  ///
+  /// 使用示例：
+  /// ```dart
+  /// P2PEventBus.instance.onServiceReady.listen((event) {
+  ///   // 服务已完全启动，可以安全地调用依赖服务的功能
+  ///   print('All services ready!');
+  /// });
+  /// ```
+  void _handleServiceReady(String message) {
+    _log.i('🎉 [Service] 处理服务启动完成事件');
+
+    try {
+      // 解析 Rust 事件数据
+      final data = _parseJsonOrNull(message);
+      if (data == null) {
+        _log.w('[Service] 无法解析服务启动完成事件: $message');
+        return;
+      }
+
+      // 通过 EventBus 发送服务启动完成事件
+      P2PEventBus.instance.emit(
+        peerId: '_system_',
+        type: 'service_ready',
+        data: {
+          'timestamp': DateTime.now().toIso8601String(),
+          'local_peer_id': data['local_peer_id'],
+          'device_name': data['device_name'],
+          'port': data['port'],
+          'addresses': data['addresses'],
+          'services': {
+            'connection': true, // Rust 连接服务已启动
+            // 注意：mDNS 服务状态由 Flutter 端单独管理
+          },
+          'message': '所有服务已完全启动',
+        },
+      );
+
+      _log.i('✅ [Service] 服务启动完成事件已发送到 EventBus');
+    } catch (e, stackTrace) {
+      _log.e('[Service] 处理服务启动完成事件失败: $e', e, stackTrace);
     }
   }
 

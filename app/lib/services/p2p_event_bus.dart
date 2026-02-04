@@ -345,6 +345,21 @@ class P2PEventBus {
   Stream<P2PEvent> get onAnyMessage => onType('message');
   Stream<P2PEvent> get onAnyTyping => onType('typing');
 
+  // ========== 服务相关事件 ==========
+
+  /// 🔥 监听所有服务启动完成事件
+  /// 当 Rust 连接服务和 Flutter mDNS 服务都启动完成后触发
+  /// 由于 EventBus 有最后事件缓存，新订阅者会立即收到当前状态
+  ///
+  /// 使用示例：
+  /// ```dart
+  /// P2PEventBus.instance.onServiceReady.listen((event) {
+  ///   // 服务已完全启动，可以安全地调用依赖服务的功能
+  ///   print('All services ready: ${event.data}');
+  /// });
+  /// ```
+  Stream<P2PEvent> get onServiceReady => on(peerId: '_system_', type: 'service_ready');
+
   Stream<P2PEvent> once({String? peerId, String? type}) =>
       on(peerId: peerId, type: type).take(1);
 

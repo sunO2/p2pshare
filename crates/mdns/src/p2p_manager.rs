@@ -463,54 +463,47 @@ impl P2PManager {
     }
 
     /// 启动所有服务（服务分离架构）
-    pub async fn start_all(&mut self) -> Result<(), MdnsError> {
+    ///
+    /// ⚠️ 注意：mDNS 服务已迁移到 Flutter 端
+    /// Rust 端只负责：
+    /// 1. 启动连接服务（处理 TCP 连接、Identify、Ping、聊天）
+    /// 2. 接收 Flutter 端通过 FFI 发来的设备发现事件
+    pub async fn start_all(&mut self) -> Result<Vec<Multiaddr>, MdnsError> {
         tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
-        tracing::info!("║ 🚀 [P2PManager] 启动所有服务（服务分离架构）");
+        tracing::info!("║ 🚀 [P2PManager] 启动连接服务");
+        tracing::info!("║ ℹ️  mDNS 服务已迁移到 Flutter 端");
         tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
 
-        if self.mdns_running || self.connection_running {
-            return Err(MdnsError::SwarmBuild("服务已在运行".to_string()));
+        if self.connection_running {
+            return Err(MdnsError::SwarmBuild("连接服务已在运行".to_string()));
         }
 
-        send_log("INFO", "p2p_manager", "🚀 正在启动所有服务（服务分离架构）...".to_string());
+        send_log("INFO", "p2p_manager", "🚀 正在启动连接服务...".to_string());
+        send_log("INFO", "p2p_manager", "ℹ️  mDNS 服务已迁移到 Flutter 端".to_string());
 
-        // 先启动连接服务（接收者先就绪）
+        // 启动连接服务
         tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
-        tracing::info!("║ 📊 [步骤 1/3] 启动连接服务（ConnectionService）");
+        tracing::info!("║ 🔗 [步骤 1/1] 启动连接服务（ConnectionService）");
         tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
-        send_log("INFO", "p2p_manager", "📊 步骤 1/3: 启动连接服务...".to_string());
 
         let listeners = self.start_connection().await?;
 
-        tracing::info!("✓ [步骤 1/3] 连接服务启动成功");
+        tracing::info!("✓ [步骤 1/1] 连接服务启动成功");
         tracing::info!("  └─ 监听地址: {:?}", listeners);
         for addr in &listeners {
             send_log("INFO", "p2p_manager", format!("  └─ 监听地址: {}", addr));
         }
 
-        // 再启动 mDNS 服务（传递 ConnectionService 的监听地址）
-        // 注意：mDNS 服务内部会在开始浏览前等待 500ms（在后台任务中，不阻塞 FFI）
-        tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
-        tracing::info!("║ 📡 [步骤 2/2] 启动 mDNS 服务（MdnsDiscoveryService）");
-        tracing::info!("║ 传递连接服务地址给 mDNS 服务广播");
-        tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
-        send_log("INFO", "p2p_manager", "📡 步骤 2/2: 启动 mDNS 服务...".to_string());
-
-        self.start_mdns(listeners).await?;
-
-        tracing::info!("✓ [步骤 3/3] mDNS 服务启动成功");
-        tracing::info!("  └─ UDP 5353: mDNS 广播端口");
-        tracing::info!("  └─ mDNS 将广播连接服务的地址");
-
-        send_log("INFO", "p2p_manager", "✅ 所有服务已启动（服务分离架构）".to_string());
+        send_log("INFO", "p2p_manager", "✅ 连接服务已启动".to_string());
 
         tracing::info!("╔═══════════════════════════════════════════════════════════════════════════════");
-        tracing::info!("║ ✅ [P2PManager] 所有服务启动完成");
-        tracing::info!("║  ┌─ ConnectionService: 运行中 (处理 TCP 连接、Identify、Ping、聊天)");
-        tracing::info!("║  └─ MdnsDiscoveryService: 运行中 (处理 mDNS 广播)");
+        tracing::info!("║ ✅ [P2PManager] 连接服务启动完成");
+        tracing::info!("║  └─ ConnectionService: 运行中 (处理 TCP 连接、Identify、Ping、聊天)");
+        tracing::info!("║  └─ mDNS: 由 Flutter 端负责 (设备发现和广播)");
         tracing::info!("╚═══════════════════════════════════════════════════════════════════════════════");
 
-        Ok(())
+        // 返回监听地址，供 Flutter 端使用
+        Ok(listeners)
     }
 
     /// 启动所有服务（兼容模式：使用 ManagedDiscovery）
