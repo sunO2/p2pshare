@@ -9,9 +9,12 @@ import '../../presentation/views/chat/chat_view.dart';
 import '../../presentation/bindings/chat_binding.dart';
 import '../../presentation/views/settings/settings_view.dart';
 import '../../presentation/bindings/settings_binding.dart';
-
-// 临时引用旧页面，后续逐步迁移
-import '../../screens/device_detail_screen.dart';
+import '../../presentation/views/device_detail/device_detail_view.dart';
+import '../../presentation/bindings/device_detail_binding.dart';
+import '../../presentation/views/debug/logs_viewer_view.dart';
+import '../../presentation/bindings/logs_viewer_binding.dart';
+import '../../presentation/views/peer_settings/peer_settings_view.dart';
+import '../../presentation/bindings/peer_settings_binding.dart';
 
 /// 路由名称常量
 class Routes {
@@ -21,6 +24,8 @@ class Routes {
   static const chat = '/chat';
   static const settings = '/settings';
   static const deviceDetail = '/device-detail';
+  static const logsViewer = '/logs-viewer';
+  static const peerSettings = '/peer-settings';
 }
 
 /// GetX 路由配置
@@ -72,12 +77,27 @@ class AppPages {
       transition: Transition.fadeIn,
     ),
 
-    // 设备详情页面
+    // 设备详情页面（使用新的 GetX MVVM 架构）
     GetPage(
       name: Routes.deviceDetail,
-      page: () => DeviceDetailScreen(
-        peerId: Get.parameters['peerId'] ?? '',
-      ),
+      page: () => const DeviceDetailView(),
+      binding: DeviceDetailBinding(),
+      transition: Transition.rightToLeft,
+    ),
+
+    // 日志查看器页面
+    GetPage(
+      name: Routes.logsViewer,
+      page: () => const LogsViewerView(),
+      binding: LogsViewerBinding(),
+      transition: Transition.rightToLeft,
+    ),
+
+    // 设备设置页面
+    GetPage(
+      name: Routes.peerSettings,
+      page: () => const PeerSettingsView(),
+      binding: PeerSettingsBinding(),
       transition: Transition.rightToLeft,
     ),
   ];

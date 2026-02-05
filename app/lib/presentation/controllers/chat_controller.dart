@@ -47,7 +47,7 @@ class ChatController extends GetxController
 
   // ========== 订阅 ==========
 
-  eb.P2PEventSubscription<eb.P2PEvent>? statusSubscription;
+  StreamSubscription<eb.P2PEvent>? statusSubscription;
   StreamSubscription<eb.P2PEvent>? extendedMessageSubscription;
 
   // ========== 配置 ==========
@@ -316,63 +316,72 @@ class ChatController extends GetxController
 
   /// 监听事件总线
   void listenToEventBus() {
-    // 订阅状态变化
-    statusSubscription = eb.P2PEventBus.instance.subscribe(
-      peerId: peerId,
-      onData: (event) {
-        if (event.type == 'online' || event.type == 'offline') {
-          final status = event.data?['status'];
-          if (event.type == 'offline') {
-            isOnline.value = false;
-            statusText.value = '离线';
-          } else if (status != null && status is String) {
-            // status 应该是 String 类型（用户在线状态）
-            final statusStr = status.toLowerCase();
-            isOnline.value = statusStr != '离线' && statusStr != 'offline';
-            statusText.value = status;
-          } else {
-            isOnline.value = true;
-            statusText.value = '在线';
-          }
+    _log.i('[ChatController] 开始监听事件总线 - peerId: $peerId');
+
+    // 🔥 只订阅 online 和 offline 事件（不订阅所有事件）
+    statusSubscription = eb.P2PEventBus.instance
+        .on(peerId: peerId)
+        .where((event) => event.type == 'online' || event.type == 'offline')
+        .listen((event) {
+      _log.d('[ChatController] 状态事件: ${event.type}, data: ${event.data}');
+      if (event.type == 'offline') {
+        isOnline.value = false;
+        statusText.value = '离线';
+      } else {
+        // online 事件，从 data 中获取 status
+        final status = event.data?['status'];
+        if (status != null && status is String) {
+          final statusStr = status.toLowerCase();
+          isOnline.value = statusStr != '离线' && statusStr != 'offline';
+          statusText.value = status;
+        } else {
+          isOnline.value = true;
+          statusText.value = '在线';
         }
-      },
-    );
+      }
+    });
+
+    _log.i('[ChatController] 状态订阅已创建');
 
     // 🔥 监听扩展消息事件（包含 extra 字段）
     extendedMessageSubscription = eb.P2PEventBus.instance
         .on(peerId: peerId, type: 'extended_message')
         .listen((event) {
+      _log.i('[ChatController] 🔥 收到扩展消息事件: type=${event.type}, peerId=${event.peerId}');
+
       final messageData = event.data;
+      _log.d('[ChatController] 消息数据类型: ${messageData.runtimeType}');
+
       if (messageData is Map<String, dynamic>) {
         try {
+          _log.d('[ChatController] 消息数据: $messageData');
           final msg = ChatMessageData.fromJson(
             _convertToMessageJson(messageData),
             _getLocalPeerId(),
           );
+          _log.i('[ChatController] 消息解析成功，插入到列表: ${msg.id}');
           messages.insert(0, msg);
         } catch (e, stackTrace) {
           _log.e('[ChatController] 解析扩展消息失败: $e', e, stackTrace);
         }
+      } else {
+        _log.w('[ChatController] 消息数据格式错误，期望 Map<String, dynamic>，实际: ${messageData.runtimeType}');
       }
     });
+
+    _log.i('[ChatController] 扩展消息订阅已创建');
   }
 
   // ========== 状态加载 ==========
 
   /// 加载当前状态
   void loadCurrentStatus() {
-    final currentData = eb.P2PEventBus.instance.getCurrentData(peerId);
-    if (currentData != null) {
-      final status = currentData['status'];
-      if (status != null && status is String) {
-        final statusLower = status.toLowerCase();
-        isOnline.value = statusLower != '离线' && statusLower != 'offline';
-        statusText.value = isOnline.value ? status : '离线';
-      }
-    } else {
-      isOnline.value = eb.P2PEventBus.instance.isOnline(peerId);
-      statusText.value = isOnline.value ? '在线' : '离线';
-    }
+    // 🔥 不再使用 getCurrentData()，因为它会被消息事件污染
+    // 改为直接查询 EventBus 的 isOnline 方法
+    isOnline.value = eb.P2PEventBus.instance.isOnline(peerId);
+    statusText.value = isOnline.value ? '在线' : '离线';
+
+    _log.d('[ChatController] 初始状态加载: ${statusText.value}');
   }
 
   // ========== 导航操作 ==========
@@ -382,6 +391,17 @@ class ChatController extends GetxController
     Get.toNamed(
       '/device-detail',
       parameters: {'peerId': peerId},
+    );
+  }
+
+  /// 打开设备设置
+  void openSettings() {
+    Get.toNamed(
+      '/peer-settings',
+      parameters: {
+        'peerId': peerId,
+        'peerName': peerName,
+      },
     );
   }
 }

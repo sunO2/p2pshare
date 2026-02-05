@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import '../../data/providers/p2p_provider.dart';
 import '../../services/storage_service.dart';
 import '../../services/log_service.dart';
+import '../../services/peer_config_service.dart';
 
 /// 全局依赖注入
 ///
@@ -14,6 +15,9 @@ class InitialBindings extends Bindings {
 
     // 注入存储服务
     Get.lazyPut<StorageService>(() => StorageService.instance, fenix: true);
+
+    // 🔥 注入设备配置服务
+    Get.lazyPut<PeerConfigService>(() => PeerConfigService(), fenix: true);
 
     // 注入 P2P Provider（核心服务）
     Get.lazyPut<P2PProvider>(() => P2PProvider(), fenix: true);

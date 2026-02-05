@@ -4,8 +4,7 @@ import 'package:get/get.dart';
 import '../../../p2p_manager.dart';
 import '../../../services/log_service.dart';
 import '../../../services/storage_service.dart';
-import '../views/debug/logs_viewer_view.dart';
-import '../bindings/logs_viewer_binding.dart';
+import '../../app/routes/app_pages.dart';
 
 /// 设置页面控制器
 ///
@@ -179,10 +178,7 @@ class SettingsController extends GetxController {
 
   /// 查看日志
   void showLogs() {
-    Get.to(
-      () => const LogsViewerView(),
-      binding: LogsViewerBinding(),
-    );
+    Get.toNamed(Routes.logsViewer);
     loadLogInfo();
   }
 

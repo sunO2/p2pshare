@@ -5,13 +5,13 @@ import 'package:get/get.dart';
 import '../../../services/log_service.dart';
 import '../../../widgets/unified_app_bar.dart';
 
-/// 日志查看器页面控制器
+/// 日志查看器页面控制器（优化版）
 class LogsViewerController extends GetxController {
   /// 最大日志行数限制（防止内存溢出）
-  static const maxLogLines = 1000;
+  static const maxLogLines = 500;
 
   /// UI 更新节流时间（毫秒）
-  static const uiUpdateThrottleMs = 200;
+  static const uiUpdateThrottleMs = 300;
 
   /// 选中的日期
   final selectedDate = ''.obs;
@@ -26,23 +26,29 @@ class LogsViewerController extends GetxController {
   Timer? _uiUpdateTimer;
   bool _pendingUpdate = false;
 
-  /// 自动滚动
-  final autoScroll = true.obs;
-
   /// 显示 Flutter 日志
   final showFlutterLogs = true.obs;
 
-  /// 显示 Rust 日志（默认关闭，仅显示 Flutter 日志提升性能）
+  /// 显示 Rust 日志（默认关闭）
   final showRustLogs = false.obs;
 
   /// 是否正在实时监听
-  final isRealtimeWatching = false.obs;
+  final isRealtimeWatching = true.obs;
 
   /// 滚动控制器
   late final ScrollController scrollController;
 
   /// 实时日志订阅
   StreamSubscription<LogLine>? realtimeSubscription;
+
+  /// 🔥 缓存：已加载的原始日志（按类型分组）
+  final Map<LogType, List<String>> _cachedLogs = {
+    LogType.flutter: [],
+    LogType.rust: [],
+  };
+
+  /// 🔥 是否已加载过历史日志
+  final Set<LogType> _loadedTypes = {};
 
   final LogService _log = Get.find<LogService>();
 
@@ -56,7 +62,9 @@ class LogsViewerController extends GetxController {
   @override
   void onReady() {
     super.onReady();
-    // 页面准备完成后触发一次更新，确保 UI 正确显示
+    // 🔥 启动实时监听，不加载历史日志
+    startRealtimeWatch();
+    // 触发一次 UI 更新
     _scheduleUpdate();
   }
 
@@ -75,7 +83,7 @@ class LogsViewerController extends GetxController {
       return;
     }
 
-    update(['logs']); // 只更新日志列表
+    update(['logs']);
 
     _uiUpdateTimer = Timer(Duration(milliseconds: uiUpdateThrottleMs), () {
       if (_pendingUpdate) {
@@ -92,64 +100,54 @@ class LogsViewerController extends GetxController {
       availableDates.assignAll(dates);
       if (dates.isNotEmpty) {
         selectedDate.value = dates.first;
-        await loadInitialLogs();
-        startRealtimeWatch();
       }
     } catch (e) {
       _log.e('Failed to load dates: $e', e);
     }
   }
 
-  /// 加载初始日志
-  Future<void> loadInitialLogs() async {
-    if (selectedDate.value.isEmpty) return;
+  /// 🔥 从缓存重建显示的日志列表（不读取文件）
+  void _rebuildDisplayLogs() {
+    logLines.clear();
 
-    try {
-      final lines = <LogLine>[];
+    // 从缓存中按类型过滤
+    final allLogs = <LogLine>[];
 
-      // 加载 Flutter 日志
-      if (showFlutterLogs.value) {
-        final flutterLogs = await _log.getLogsByDate(selectedDate.value, LogType.flutter);
-        lines.addAll(flutterLogs.map((log) => LogLine(
-              content: log,
-              type: LogType.flutter,
-              timestamp: DateTime.now(),
-            )).toList());
+    if (showFlutterLogs.value) {
+      for (final log in _cachedLogs[LogType.flutter]!) {
+        allLogs.add(LogLine(
+          content: log,
+          type: LogType.flutter,
+          timestamp: _parseLogTimestamp(log),
+        ));
       }
-
-      // 加载 Rust 日志（如果启用）
-      if (showRustLogs.value) {
-        final rustLogs = await _log.getLogsByDate(selectedDate.value, LogType.rust);
-        lines.addAll(rustLogs.map((log) => LogLine(
-              content: log,
-              type: LogType.rust,
-              timestamp: DateTime.now(),
-            )).toList());
-      }
-
-      // 按时间戳倒序排序（新→旧），这样 reverse 模式下视觉上才是旧→新
-      lines.sort((a, b) => _parseLogTimestamp(b.content).compareTo(_parseLogTimestamp(a.content)));
-
-      // 限制日志行数（保留最新的）
-      if (lines.length > maxLogLines) {
-        lines.removeRange(maxLogLines, lines.length);
-      }
-
-      logLines.clear();
-      logLines.addAll(lines);
-
-      _scheduleUpdate();
-
-      // reverse 模式下，新日志自动显示在底部，无需手动滚动
-    } catch (e) {
-      _log.e('Failed to load logs: $e', e);
     }
+
+    if (showRustLogs.value) {
+      for (final log in _cachedLogs[LogType.rust]!) {
+        allLogs.add(LogLine(
+          content: log,
+          type: LogType.rust,
+          timestamp: _parseLogTimestamp(log),
+        ));
+      }
+    }
+
+    // 按时间戳排序（新→旧）
+    allLogs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    // 限制行数
+    if (allLogs.length > maxLogLines) {
+      allLogs.removeRange(maxLogLines, allLogs.length);
+    }
+
+    logLines.addAll(allLogs);
+    _scheduleUpdate();
   }
 
   /// 从日志内容解析时间戳
   DateTime _parseLogTimestamp(String logContent) {
     try {
-      // 日志格式: [2026-02-04 12:34:56.789] ...
       final timeMatch = RegExp(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\]').firstMatch(logContent);
       if (timeMatch != null) {
         return DateTime.parse(timeMatch.group(1)!.replaceAll(' ', 'T'));
@@ -162,35 +160,60 @@ class LogsViewerController extends GetxController {
   Future<void> changeDate(String? newDate) async {
     if (newDate == null || newDate == selectedDate.value) return;
 
-    final wasWatching = isRealtimeWatching.value;
-    if (wasWatching) {
-      stopRealtimeWatch();
-    }
+    // 清空缓存
+    _cachedLogs[LogType.flutter] = [];
+    _cachedLogs[LogType.rust] = [];
+    _loadedTypes.clear();
 
     selectedDate.value = newDate;
     logLines.clear();
     _scheduleUpdate();
-    await loadInitialLogs();
-
-    if (wasWatching) {
-      startRealtimeWatch();
-    }
   }
 
-  /// 刷新日志
-  Future<void> refreshLogs() async {
-    final wasWatching = isRealtimeWatching.value;
-    if (wasWatching) {
-      stopRealtimeWatch();
+  /// 🔥 加载历史日志（只加载未加载过的类型）
+  Future<void> loadHistoryLogs() async {
+    if (selectedDate.value.isEmpty) return;
+
+    final typesToLoad = <LogType>[];
+    if (showFlutterLogs.value && !_loadedTypes.contains(LogType.flutter)) {
+      typesToLoad.add(LogType.flutter);
     }
+    if (showRustLogs.value && !_loadedTypes.contains(LogType.rust)) {
+      typesToLoad.add(LogType.rust);
+    }
+
+    if (typesToLoad.isEmpty) {
+      // 已全部加载，只需重建显示
+      _rebuildDisplayLogs();
+      return;
+    }
+
+    // 🔥 异步加载，不阻塞 UI
+    for (final type in typesToLoad) {
+      try {
+        final logs = await _log.getLogsByDate(selectedDate.value, type);
+        _cachedLogs[type] = logs;
+        _loadedTypes.add(type);
+      } catch (e) {
+        _log.e('Failed to load logs for $type: $e', e);
+      }
+    }
+
+    // 加载完成后重建显示
+    _rebuildDisplayLogs();
+  }
+
+  /// 🔥 刷新日志（清空缓存并重新加载）
+  Future<void> refreshLogs() async {
+    // 清空缓存
+    _cachedLogs[LogType.flutter] = [];
+    _cachedLogs[LogType.rust] = [];
+    _loadedTypes.clear();
 
     logLines.clear();
     _scheduleUpdate();
-    await loadInitialLogs();
 
-    if (wasWatching) {
-      startRealtimeWatch();
-    }
+    await loadHistoryLogs();
   }
 
   /// 开始实时监听
@@ -206,26 +229,33 @@ class LogsViewerController extends GetxController {
 
     _log.startRealtimeWatch(selectedDate.value, types: types);
 
-    realtimeSubscription = _log.realtimeLogStream.listen((logLine) {
-      // 过滤
-      if (logLine.type == LogType.flutter && !showFlutterLogs.value) return;
-      if (logLine.type == LogType.rust && !showRustLogs.value) return;
+    realtimeSubscription = _log.realtimeLogStream.listen(
+      (logLine) {
+        // 🔥 实时日志也加入缓存
+        _cachedLogs[logLine.type]!.insert(0, logLine.content);
 
-      // reverse 模式下，新日志插入到开头（索引 0），视觉上会显示在底部
-      logLines.insert(0, logLine);
+        // 限制缓存大小
+        if (_cachedLogs[logLine.type]!.length > maxLogLines * 2) {
+          _cachedLogs[logLine.type]!.removeLast();
+        }
 
-      // 限制日志行数（移除最后的）
-      if (logLines.length > maxLogLines) {
-        logLines.removeLast();
-      }
+        // 过滤显示
+        if (logLine.type == LogType.flutter && !showFlutterLogs.value) return;
+        if (logLine.type == LogType.rust && !showRustLogs.value) return;
 
-      // 触发 UI 更新（带节流）
-      _scheduleUpdate();
+        logLines.insert(0, logLine);
 
-      // 使用 reverse 后新日志自动在底部可见，无需手动滚动
-    }, onError: (error) {
-      _log.e('Realtime log stream error: $error', error);
-    });
+        // 限制显示行数
+        if (logLines.length > maxLogLines) {
+          logLines.removeLast();
+        }
+
+        _scheduleUpdate();
+      },
+      onError: (error) {
+        _log.e('Realtime log stream error: $error', error);
+      },
+    );
   }
 
   /// 停止实时监听
@@ -245,38 +275,30 @@ class LogsViewerController extends GetxController {
     }
   }
 
-  /// 切换 Flutter 日志显示
+  /// 🔥 切换 Flutter 日志显示（只重建显示，不重新读取文件）
   Future<void> toggleFlutterLogs() async {
-    final wasWatching = isRealtimeWatching.value;
-
-    if (wasWatching) {
-      stopRealtimeWatch();
-    }
-
     showFlutterLogs.value = !showFlutterLogs.value;
-    logLines.clear();
-    _scheduleUpdate();
-    await loadInitialLogs();
 
-    if (wasWatching) {
+    // 重建显示列表
+    _rebuildDisplayLogs();
+
+    // 重启实时监听以更新监听的日志类型
+    if (isRealtimeWatching.value) {
+      stopRealtimeWatch();
       startRealtimeWatch();
     }
   }
 
-  /// 切换 Rust 日志显示
+  /// 🔥 切换 Rust 日志显示（只重建显示，不重新读取文件）
   Future<void> toggleRustLogs() async {
-    final wasWatching = isRealtimeWatching.value;
-
-    if (wasWatching) {
-      stopRealtimeWatch();
-    }
-
     showRustLogs.value = !showRustLogs.value;
-    logLines.clear();
-    _scheduleUpdate();
-    await loadInitialLogs();
 
-    if (wasWatching) {
+    // 重建显示列表
+    _rebuildDisplayLogs();
+
+    // 重启实时监听以更新监听的日志类型
+    if (isRealtimeWatching.value) {
+      stopRealtimeWatch();
       startRealtimeWatch();
     }
   }
@@ -299,7 +321,6 @@ class LogsViewerView extends GetView<LogsViewerController> {
   const LogsViewerView({super.key});
 
   @override
-  // 使用 tag 来查找通过 HomeBinding 注册的控制器
   String get tag => 'logs_viewer';
 
   @override
@@ -336,6 +357,7 @@ class LogsViewerView extends GetView<LogsViewerController> {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: controller.refreshLogs,
+              tooltip: '加载历史日志',
             ),
           ],
         );
@@ -451,8 +473,8 @@ class LogsViewerView extends GetView<LogsViewerController> {
   Widget _buildLogList(BuildContext context) {
     return GetBuilder<LogsViewerController>(
       id: 'logs',
+      tag: tag,
       builder: (controller) {
-        // 过滤逻辑已在控制器中处理，这里直接显示所有日志
         if (controller.logLines.isEmpty) {
           return Center(
             child: Column(
@@ -461,37 +483,90 @@ class LogsViewerView extends GetView<LogsViewerController> {
                 Icon(Icons.description_outlined, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
-                  '暂无日志',
+                  '正在监听实时日志...',
                   style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '点击右上角刷新按钮加载历史日志',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
               ],
             ),
           );
         }
 
-        return ListView.builder(
-          controller: controller.scrollController,
-          padding: const EdgeInsets.all(8),
-          reverse: true, // 反转列表，新日志在底部
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: ScrollConfiguration(
+            behavior: MaterialScrollBehavior().copyWith(overscroll: false),
+            child: ListView.builder(
+              controller: controller.scrollController,
+            padding: const EdgeInsets.all(8),
+          reverse: true,
           itemCount: controller.logLines.length,
           itemBuilder: (context, index) {
             final logLine = controller.logLines[index];
             return _buildLogItemWidget(logLine);
           },
+        ),
+          ),
         );
       },
     );
   }
 
-  /// 构建单个日志项 Widget（极简样式）
+  /// 构建单个日志项 Widget
   Widget _buildLogItemWidget(LogLine logLine) {
-    return SelectableText(
-      logLine.content,
-      style: TextStyle(
-        fontSize: 12,
-        fontFamily: 'monospace',
-        height: 1.4,
+    final color = logLine.type == LogType.rust ? Colors.orange : Colors.blue;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 类型标识
+          Container(
+            width: 4,
+            height: 12,
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 日志内容
+          Expanded(
+            child: SelectableText(
+              logLine.content,
+              style: TextStyle(
+                fontSize: 11,
+                fontFamily: 'monospace',
+                height: 1.4,
+                color: _getLogColor(logLine.content),
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// 根据日志内容获取颜色
+  Color _getLogColor(String content) {
+    final lower = content.toLowerCase();
+    if (lower.contains('[error]') || lower.contains('[exception]')) {
+      return Colors.red[700]!;
+    }
+    if (lower.contains('[warn]')) {
+      return Colors.orange[700]!;
+    }
+    if (lower.contains('[info]') || lower.contains('[i]')) {
+      return Colors.black87;
+    }
+    if (lower.contains('[debug]') || lower.contains('[d]')) {
+      return Colors.grey[700]!;
+    }
+    return Colors.black87;
   }
 }

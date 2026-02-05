@@ -288,9 +288,13 @@ class DeviceListView extends GetView<DeviceController> {
   }
 
   Widget _buildDeviceList() {
-    return Obx(() => ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      itemCount: controller.filteredNodes.length,
+    return Obx(() => ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: ScrollConfiguration(
+        behavior: MaterialScrollBehavior().copyWith(overscroll: false),
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: controller.filteredNodes.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final node = controller.filteredNodes[index];
@@ -301,6 +305,8 @@ class DeviceListView extends GetView<DeviceController> {
           onChatTap: () => controller.openChat(node),
         );
       },
+    ),
+      ),
     ));
   }
 

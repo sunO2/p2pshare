@@ -155,17 +155,23 @@ class ConversationListView extends GetView<ConversationController> {
       return RefreshIndicator(
         onRefresh: controller.refreshConversations,
         color: theme.statusGreen,
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          itemCount: controller.sortedConversations.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final conversation = controller.sortedConversations[index];
-            return _ConversationTile(
-              conversation: conversation,
-              onTap: () => controller.openChat(conversation),
-            );
-          },
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: ScrollConfiguration(
+            behavior: MaterialScrollBehavior().copyWith(overscroll: false),
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            itemCount: controller.sortedConversations.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final conversation = controller.sortedConversations[index];
+              return _ConversationTile(
+                conversation: conversation,
+                onTap: () => controller.openChat(conversation),
+              );
+            },
+          ),
+          ),
         ),
       );
     });
@@ -198,16 +204,25 @@ class _ConversationTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 头像
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: theme.statusGreen,
-              child: Text(
-                peerName.isNotEmpty ? peerName[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+            // 🔥 头像 - 点击跳转到设备详情
+            GestureDetector(
+              onTap: () {
+                // 跳转到设备详情页面
+                Get.toNamed(
+                  '/device-detail',
+                  parameters: {'peerId': conversation.peerId},
+                );
+              },
+              child: CircleAvatar(
+                radius: 28,
+                backgroundColor: theme.statusGreen,
+                child: Text(
+                  peerName.isNotEmpty ? peerName[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),

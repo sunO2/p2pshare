@@ -76,8 +76,9 @@ class P2PEventSubscription<T> {
 
   /// 检查当前是否在线
   bool get isOnline {
-    final status = currentData?['status'];
-    return status != '离线' && status != 'offline';
+    // 🔥 使用 EventBus 的独立状态缓存（不依赖 currentData）
+    if (_peerId == null) return false;
+    return _eventBus.isOnline(_peerId);
   }
 
   Future<void> cancel() => _subscription.cancel();
@@ -97,9 +98,22 @@ class _P2PStateCache {
   final Map<String, P2PEvent> _latestByPeer = {};
   final Map<String, P2PEvent> _latestByPeerAndType = {};
 
+  /// 🔥 单独缓存用户在线状态（不被消息事件覆盖）
+  final Map<String, String?> _userStatus = {};
+
   void update(String peerId, String type, P2PEvent event) {
     _latestByPeer[peerId] = event;
     _latestByPeerAndType['$peerId:$type'] = event;
+
+    // 🔥 如果是状态相关事件（online/offline/info_changed），单独缓存 status
+    if (type == 'online' || type == 'offline' || type == 'info_changed') {
+      if (event.data?.containsKey('status') == true) {
+        final status = event.data!['status'];
+        if (status is String) {
+          _userStatus[peerId] = status;
+        }
+      }
+    }
   }
 
   P2PEvent? getByPeer(String peerId) => _latestByPeer[peerId];
@@ -107,11 +121,15 @@ class _P2PStateCache {
   P2PEvent? getByPeerAndType(String peerId, String type) =>
       _latestByPeerAndType['$peerId:$type'];
 
+  /// 🔥 获取缓存的用户在线状态（独立于事件缓存）
+  String getUserStatus(String peerId) => _userStatus[peerId] ?? '';
+
   void removePeer(String peerId) {
     _latestByPeer.remove(peerId);
     _latestByPeerAndType.removeWhere(
       (key, value) => key.startsWith('$peerId:'),
     );
+    _userStatus.remove(peerId);
   }
 
   Map<String, dynamic> toJson() => {
@@ -149,7 +167,7 @@ class P2PEventBus {
     Map<String, dynamic>? data,
   }) {
     final event = P2PEvent(peerId: peerId, type: type, data: data);
-    _log.d('[EventBus] Emitting: $event');
+    _log.i('[EventBus] 🔥 Emitting: peerId=$peerId, type=$type');
     _controller.add(event);
   }
 
@@ -175,13 +193,18 @@ class P2PEventBus {
 
   /// 检查指定 peerId 是否在线
   bool isOnline(String peerId) {
+    // 🔥 优先使用独立的状态缓存（不会被消息事件污染）
+    final userStatus = _cache.getUserStatus(peerId);
+    if (userStatus.isNotEmpty) {
+      final statusLower = userStatus.toLowerCase();
+      return statusLower != '离线' && statusLower != 'offline';
+    }
+
+    // 回退到事件缓存检查
     final event = getLatestEventByPeer(peerId);
     if (event == null) return false;
     if (event.type == 'offline') return false;
-    if (event.data?.containsKey('status') == true) {
-      final status = event.data!['status'];
-      if (status == '离线' || status == 'offline') return false;
-    }
+
     return true;
   }
 

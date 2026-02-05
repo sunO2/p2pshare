@@ -55,9 +55,10 @@ class ChatView extends GetView<ChatController> {
           subtitleWidget: isOnline
               ? const OnlineStatusIndicator(text: '在线')
               : OfflineStatusIndicator(text: statusText),
+          // 🔥 settings 按钮替代 info 按钮
           actions: [
             GestureDetector(
-              onTap: controller.openDeviceDetail,
+              onTap: controller.openSettings,
               child: Container(
                 width: 36,
                 height: 36,
@@ -66,7 +67,7 @@ class ChatView extends GetView<ChatController> {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  Icons.info_outline,
+                  Icons.settings,
                   size: 18,
                   color: theme.iconColor,
                 ),
@@ -77,8 +78,6 @@ class ChatView extends GetView<ChatController> {
       }),
     );
   }
-
-  // 这个方法已被移除，逻辑合并到 _buildAppBar 中
 
   /// 构建消息区域
   Widget _buildMessagesArea(BuildContext context) {
@@ -119,12 +118,16 @@ class ChatView extends GetView<ChatController> {
           );
         }
 
-        return ListView.separated(
-          padding: const EdgeInsets.only(top: 16, bottom: 16),
-          reverse: true,
-          controller: controller.scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: ScrollConfiguration(
+            behavior: MaterialScrollBehavior().copyWith(overscroll: false),
+            child: ListView.separated(
+              padding: const EdgeInsets.only(top: 16, bottom: 16),
+            reverse: true,
+            controller: controller.scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
           itemCount: controller.messages.length + (controller.hasMore.value ? 1 : 0),
           itemBuilder: (context, index) {
             // 加载更多指示器
@@ -158,16 +161,16 @@ class ChatView extends GetView<ChatController> {
               );
             }
 
+            // 获取消息
             final message = controller.messages[index];
-            if (message.isSelf) {
-              return ChatBubbleSent(message: message);
-            } else {
-              return ChatBubbleReceived(
-                message: message,
-                peerName: controller.peerName,
-              );
-            }
+            final isSelf = message.isSelf;
+
+            return isSelf
+                ? ChatBubbleSent(key: ValueKey(message.id), message: message)
+                : ChatBubbleReceived(key: ValueKey(message.id), message: message);
           },
+        ),
+          ),
         );
       }),
     );
@@ -177,181 +180,77 @@ class ChatView extends GetView<ChatController> {
   Widget _buildInputArea(BuildContext context) {
     final theme = context.customTheme;
     return Container(
-      constraints: const BoxConstraints(minHeight: 0, maxHeight: 120),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: theme.scaffoldBackground,
-        border: Border(top: BorderSide(color: theme.dividerColor)),
+        border: Border(
+          top: BorderSide(color: theme.dividerColor),
+        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // 附件按钮
-          GestureDetector(
-            onTap: () => _showAttachmentMenu(context),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: theme.cardBackground,
-                borderRadius: const BorderRadius.all(Radius.circular(8)),
-              ),
-              child: Icon(
-                Icons.add,
-                size: 24,
-                color: theme.iconColor,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: controller.messageController,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              minLines: 1,
-              maxLines: null,
-              decoration: InputDecoration(
-                hintText: '输入消息...',
-                hintStyle: TextStyle(fontSize: 15, color: theme.iconColorLight),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: theme.statusGreen),
-                  borderRadius: const BorderRadius.all(Radius.circular(8)),
-                ),
-                border: OutlineInputBorder(
-                  borderSide: BorderSide(color: theme.statusGreen),
-                  borderRadius: const BorderRadius.all(Radius.circular(8)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: theme.statusGreen),
-                  borderRadius: const BorderRadius.all(Radius.circular(8)),
-                ),
-              ),
-              onSubmitted: (text) => controller.sendMessage(text),
-            ),
-          ),
-          const SizedBox(width: 12),
-          GestureDetector(
-            onTap: () => controller.sendMessage(controller.messageController.text),
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
+      child: SafeArea(
+        top: false,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // 文件按钮
+            IconButton(
+              onPressed: controller.sendFileMessage,
+              icon: Icon(
+                Icons.add_circle_outline,
                 color: theme.statusGreen,
-                shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.send, size: 20, color: Colors.white),
+              tooltip: '发送文件',
             ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  /// 显示附件菜单
-  void _showAttachmentMenu(BuildContext context) {
-    final theme = context.customTheme;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: theme.cardBackground,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
+            // 输入框
+            Expanded(
+              child: Container(
                 decoration: BoxDecoration(
-                  color: theme.dividerColor,
-                  borderRadius: const BorderRadius.all(Radius.circular(2)),
+                  color: theme.searchBackground,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  controller: controller.messageController,
+                  maxLines: 5,
+                  minLines: 1,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: theme.iconColor,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: '输入消息...',
+                    hintStyle: TextStyle(fontSize: 15),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => controller.sendMessage(controller.messageController.text),
                 ),
               ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildAttachmentItem(
-                    context,
-                    icon: Icons.insert_drive_file,
-                    label: '文件',
-                    onTap: () {
-                      Navigator.pop(context);
-                      controller.sendFileMessage();
-                    },
-                  ),
-                  _buildAttachmentItem(
-                    context,
-                    icon: Icons.image,
-                    label: '图片',
-                    onTap: () {
-                      Navigator.pop(context);
-                      controller.sendImageMessage();
-                    },
-                  ),
-                  _buildAttachmentItem(
-                    context,
-                    icon: Icons.videocam,
-                    label: '视频',
-                    onTap: () {
-                      Navigator.pop(context);
-                      controller.sendVideoMessage();
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+            ),
 
-  /// 构建附件项
-  Widget _buildAttachmentItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final theme = context.customTheme;
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: theme.dividerColor.withOpacity(0.3),
-              shape: BoxShape.circle,
+            const SizedBox(width: 8),
+
+            // 发送按钮
+            GestureDetector(
+              onTap: () => controller.sendMessage(controller.messageController.text),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: theme.statusGreen,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.send,
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ),
             ),
-            child: Icon(
-              icon,
-              size: 28,
-              color: theme.iconColor,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: theme.iconColor,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

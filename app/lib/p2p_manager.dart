@@ -638,21 +638,24 @@ class P2PManager {
           final messageData = jsonDecode(event.data) as Map<String, dynamic>;
           final senderPeerId = messageData['senderPeerId'] as String?;
 
-          // 🔥 标准化 status 字段为字符串（如果存在）
-          if (messageData.containsKey('status')) {
-            messageData['status'] = _normalizeStatus(messageData['status']);
-          }
-
           if (senderPeerId != null) {
             _log.message('RECEIVED_EXTENDED', senderPeerId, event.data);
             _eventController.add(
               ExtendedMessageReceivedEvent(senderPeerId, event.data),
             );
+
+            // 🔥 移除用户相关的字段，只保留纯消息数据
+            // status 可能是用户在线状态（String），不是消息状态（int）
+            final messageOnlyData = Map<String, dynamic>.from(messageData);
+            messageOnlyData.remove('status');
+            messageOnlyData.remove('nickname');
+            messageOnlyData.remove('avatarUrl');
+
             // 转发到 EventBus
             P2PEventBus.instance.emit(
               peerId: senderPeerId,
               type: 'extended_message',
-              data: messageData,
+              data: messageOnlyData,
             );
           } else {
             _log.w('ExtendedMessageReceived 事件但无法解析: ${event.data}');

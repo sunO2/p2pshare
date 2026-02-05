@@ -36,8 +36,12 @@ class SettingsView extends GetView<SettingsController> {
     return Container(
       color: theme.scaffoldBackground,
       padding: const EdgeInsets.all(24),
-      child: ListView(
-        children: [
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: ScrollConfiguration(
+          behavior: MaterialScrollBehavior().copyWith(overscroll: false),
+          child: ListView(
+            children: [
           // Profile Card
           _buildProfileCard(context),
           const SizedBox(height: 20),
@@ -65,6 +69,8 @@ class SettingsView extends GetView<SettingsController> {
           const SizedBox(height: 12),
           _buildDebugCard(context),
         ],
+          ),
+        ),
       ),
     );
   }
