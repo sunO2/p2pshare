@@ -299,6 +299,10 @@ class LogsViewerView extends GetView<LogsViewerController> {
   const LogsViewerView({super.key});
 
   @override
+  // 使用 tag 来查找通过 HomeBinding 注册的控制器
+  String get tag => 'logs_viewer';
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: _buildAppBar(context),

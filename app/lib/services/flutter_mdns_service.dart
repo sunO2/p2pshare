@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'package:nsd/nsd.dart' as nsd_pkg;
 import 'package:nsd/nsd.dart'
     show
@@ -21,7 +22,9 @@ class FlutterMdnsService {
   static FlutterMdnsService get instance =>
       _instance ??= FlutterMdnsService._();
 
-  FlutterMdnsService._();
+  FlutterMdnsService._() {
+    _log.i('[Flutter mDNS] 📍 FlutterMdnsService 实例创建, Isolate: ${Isolate.current.debugName}');
+  }
 
   final _log = LogService.instance;
 
@@ -33,14 +36,34 @@ class FlutterMdnsService {
   /// 是否正在运行
   bool get isRunning => _isRunning;
 
+  /// 应用生命周期状态
+  String _appLifecycleState = 'unknown';
+
+  /// 更新应用生命周期状态
+  void updateLifecycleState(String state) {
+    final oldState = _appLifecycleState;
+    _appLifecycleState = state;
+    _log.i('[Flutter mDNS] 🔄 生命周期状态变化: $oldState -> $state, Isolate: ${Isolate.current.debugName}');
+  }
+
+  /// 获取当前时间戳（毫秒）
+  String _timestamp() {
+    return DateTime.now().millisecondsSinceEpoch.toString();
+  }
+
   /// 注册 mDNS 服务（广播自己的存在）
   Future<bool> registerService({
     required String name,
     required int port,
     required String serviceType,
   }) async {
+    final startTime = DateTime.now();
+    _log.i('[Flutter mDNS] [${_timestamp()}] 📝 注册服务请求: $name@$port ($serviceType)');
+    _log.i('[Flutter mDNS] 📍 当前状态: isRunning=$_isRunning, lifecycle=$_appLifecycleState, Isolate: ${Isolate.current.debugName}');
+    _log.i('[Flutter mDNS] 🔧 调用栈: ${StackTrace.current.toString().split('\n').take(3).join('\n')}');
+
     try {
-      _log.i('[Flutter mDNS] 注册服务请求: $name@$port ($serviceType)');
+      _log.d('[Flutter mDNS] [${_timestamp()}] ⏳ 开始处理服务类型...');
 
       // nsd 库期望服务类型格式: "_localp2p._tcp" (不带 .local. 后缀)
       String nsdServiceType = serviceType;
@@ -50,17 +73,54 @@ class FlutterMdnsService {
         nsdServiceType = nsdServiceType.substring(0, nsdServiceType.length - 6);
       }
 
-      _log.d('[Flutter mDNS] 转换后的服务类型: $nsdServiceType');
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅ 转换后的服务类型: "$nsdServiceType" (原始: "$serviceType")');
+
+      // 检查服务名称长度（Android mDNS 限制）
+      if (name.length > 63) {
+        _log.w('[Flutter mDNS] ⚠️ 服务名称过长 (${name.length} 字符)，Android mDNS 限制 63 字符');
+        final truncatedName = name.substring(0, 63);
+        _log.i('[Flutter mDNS] 🔧 使用截断后的名称: $truncatedName');
+        name = truncatedName;
+      }
+
+      _log.i('[Flutter mDNS] [${_timestamp()}] 🔧 创建 Service 对象...');
 
       // nsd 支持注册服务
       final service = Service(name: name, type: nsdServiceType, port: port);
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅ Service 对象创建完成: $service');
 
-      _registration = await nsd_pkg.register(service);
-      _log.i('[Flutter mDNS] 服务注册成功: $_registration');
+      _log.i('[Flutter mDNS] [${_timestamp()}] ⏳ 开始调用 nsd.register()...');
+      _log.i('[Flutter mDNS] 🔧 此调用可能会阻塞，将在注册完成后或超时后继续');
+
+      // 添加超时保护
+      final registrationResult = await nsd_pkg.register(service).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+          _log.e('[Flutter mDNS] [${_timestamp()}] ⏰ 注册超时！等待时间: ${elapsed}ms');
+          _log.e('[Flutter mDNS] 🔍 超时详情: service=$service, lifecycle=$_appLifecycleState, isRunning=$_isRunning');
+          throw TimeoutException('mDNS 服务注册超时 (${elapsed}ms)', const Duration(seconds: 10));
+        },
+      );
+
+      _registration = registrationResult;
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅ 服务注册成功！耗时: ${elapsed}ms');
+      _log.i('[Flutter mDNS] 📦 Registration 对象: $_registration');
       _isRunning = true;
+
       return true;
+    } on TimeoutException catch (e, stackTrace) {
+      _log.e('[Flutter mDNS] [${_timestamp()}] ⏰ 注册超时异常: $e', e, stackTrace);
+      _log.e('[Flutter mDNS] 🔍 超时时状态: lifecycle=$_appLifecycleState, isRunning=$_isRunning');
+      _isRunning = false;
+      return false;
     } catch (e, stackTrace) {
-      _log.e('[Flutter mDNS] 注册服务失败: $e', e, stackTrace);
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      _log.e('[Flutter mDNS] [${_timestamp()}] ❌ 注册服务失败 (耗时 ${elapsed}ms): $e', e, stackTrace);
+      _log.e('[Flutter mDNS] 🔍 失败时状态: lifecycle=$_appLifecycleState, isRunning=$_isRunning');
+      _isRunning = false;
       return false;
     }
   }
@@ -139,14 +199,43 @@ class FlutterMdnsService {
     required Function(Service) onDeviceFound,
     Function(String)? onDeviceLost,
   }) async {
-    _log.i('[Flutter mDNS] 完整启动: $name@$port ($serviceType)');
+    final startTime = DateTime.now();
+    _log.i('[Flutter mDNS] [${_timestamp()}] 🚀 完整启动开始: $name@$port ($serviceType)');
+    _log.i('[Flutter mDNS] 📍 启动状态: lifecycle=$_appLifecycleState, isRunning=$_isRunning, Isolate: ${Isolate.current.debugName}');
+
+    // 🔥 等待应用生命周期状态变为 'resumed'（确保应用完全准备好）
+    // 如果 lifecycle 是 'unknown'，说明 HomeScreen.initState() 还没执行完成
+    int waitCount = 0;
+    while (_appLifecycleState == 'unknown' && waitCount < 50) {
+      // 等待 100ms
+      await Future.delayed(const Duration(milliseconds: 100));
+      waitCount++;
+
+      if (waitCount % 10 == 1) {
+        _log.d('[Flutter mDNS] [${_timestamp()}] ⏳ 等待 lifecycle 状态... ($waitCount/50)');
+      }
+    }
+
+    if (_appLifecycleState == 'unknown') {
+      _log.w('[Flutter mDNS] [${_timestamp()}] ⚠️ lifecycle 仍为 unknown，继续启动（可能 Headless 运行）');
+    } else {
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅ lifecycle 状态已就绪: $_appLifecycleState (等待 ${waitCount * 100}ms)');
+    }
 
     try {
-      // 1. 注册服务（广播自己的存在）
-      await registerService(name: name, port: port, serviceType: serviceType);
+      // 步骤 1: 注册服务（广播自己的存在）
+      _log.i('[Flutter mDNS] [${_timestamp()}] 📝 步骤 1/2: 开始注册服务...');
+      final registerSuccess = await registerService(name: name, port: port, serviceType: serviceType);
 
-      // 2. 开始浏览（发现其他设备）
-      _log.i('[Flutter mDNS] 开始浏览其他设备');
+      if (!registerSuccess) {
+        _log.e('[Flutter mDNS] [${_timestamp()}] ❌ 步骤 1 失败：服务注册失败，终止启动流程');
+        return false;
+      }
+
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅ 步骤 1 完成：服务注册成功');
+
+      // 步骤 2: 开始浏览（发现其他设备）
+      _log.i('[Flutter mDNS] [${_timestamp()}] 📝 步骤 2/2: 开始浏览服务...');
 
       // nsd 库期望服务类型格式: "_localp2p._tcp" (不带 .local. 后缀)
       String nsdServiceType = serviceType;
@@ -156,35 +245,68 @@ class FlutterMdnsService {
         nsdServiceType = nsdServiceType.substring(0, nsdServiceType.length - 6);
       }
 
-      _log.d('[Flutter mDNS] 转换后的服务类型: $nsdServiceType');
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅ 浏览服务类型: "$nsdServiceType"');
 
       _discovery = await nsd_pkg.startDiscovery(
         nsdServiceType,
         autoResolve: true,
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+          _log.e('[Flutter mDNS] [${_timestamp()}] ⏰ 浏览启动超时！等待时间: ${elapsed}ms');
+          throw TimeoutException('mDNS 浏览启动超时 (${elapsed}ms)', const Duration(seconds: 10));
+        },
       );
+
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅ Discovery 对象创建成功: $_discovery');
 
       // 添加服务监听器
       _discovery!.addServiceListener((service, status) {
-        _log.i('[Flutter mDNS] 服务状态变化: ${service.name} - $status');
+        _log.i('[Flutter mDNS] [${_timestamp()}] 🔔 服务状态变化: ${service.name} - $status');
 
         if (status == ServiceStatus.found) {
-          _log.i('[Flutter mDNS] 发现设备: ${service.name}');
+          _log.i('[Flutter mDNS] [${_timestamp()}] 📱 发现设备: ${service.name}');
           onDeviceFound(service);
         } else if (status == ServiceStatus.lost) {
-          _log.i('[Flutter mDNS] 设备离线: ${service.name}');
+          _log.i('[Flutter mDNS] [${_timestamp()}] 📱 设备离线: ${service.name}');
           onDeviceLost?.call(service.name ?? '');
         }
       });
 
+      _log.i('[Flutter mDNS] [${_timestamp()}] 🎉 浏览启动成功，服务监听器已添加');
+
       _isRunning = true;
-      _log.i('[Flutter mDNS] 浏览启动成功');
+      final totalElapsed = DateTime.now().difference(startTime).inMilliseconds;
+
+      _log.i('[Flutter mDNS] [${_timestamp()}] ✅✅✅ 完整启动成功！总耗时: ${totalElapsed}ms');
+      _log.i('[Flutter mDNS] 📊 启动摘要: lifecycle=$_appLifecycleState, isRunning=$_isRunning, port=$port');
+
       return true;
-    } catch (e, stackTrace) {
-      _log.e('[Flutter mDNS] 启动失败: $e', e, stackTrace);
+    } on TimeoutException catch (e, stackTrace) {
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      _log.e('[Flutter mDNS] [${_timestamp()}] ⏰ 启动超时 (耗时 ${elapsed}ms): $e', e, stackTrace);
+      _log.e('[Flutter mDNS] 🔍 超时时状态: lifecycle=$_appLifecycleState, isRunning=$_isRunning');
       _isRunning = false;
-      await _serviceListenerSubscription?.cancel();
-      _serviceListenerSubscription = null;
+      await _cleanup();
+      return false;
+    } catch (e, stackTrace) {
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      _log.e('[Flutter mDNS] [${_timestamp()}] ❌ 启动失败 (耗时 ${elapsed}ms): $e', e, stackTrace);
+      _log.e('[Flutter mDNS] 🔍 失败时状态: lifecycle=$_appLifecycleState, isRunning=$_isRunning');
+      _isRunning = false;
+      await _cleanup();
       return false;
     }
+  }
+
+  /// 清理资源
+  Future<void> _cleanup() async {
+    _log.i('[Flutter mDNS] [${_timestamp()}] 🧹 开始清理资源...');
+    await _serviceListenerSubscription?.cancel();
+    _serviceListenerSubscription = null;
+    _discovery = null;
+    _registration = null;
+    _log.i('[Flutter mDNS] [${_timestamp()}] ✅ 清理完成');
   }
 }

@@ -47,18 +47,29 @@ impl MessageType {
 }
 
 /// 通用消息内容（JSON 序列化）
+///
+/// 使用 Extra Map 模式：
+/// - msg_type: 消息类型
+/// - text: 仅文本消息使用
+/// - extra: 所有类型特定的扩展数据（Map 结构）
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MessageContent {
     /// 消息类型
     pub msg_type: MessageType,
-    /// 文本内容
+    /// 文本内容（仅文本消息使用）
     pub text: Option<String>,
-    /// 文件信息
-    pub file_info: Option<FileInfo>,
-    /// 红包信息
-    pub red_packet: Option<RedPacketInfo>,
-    /// 扩展字段（JSON）
-    pub extra: Option<serde_json::Value>,
+    /// 扩展字段（Map 结构，所有类型特定的数据）
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl Default for MessageContent {
+    fn default() -> Self {
+        Self {
+            msg_type: MessageType::Unknown,
+            text: None,
+            extra: serde_json::Map::new(),
+        }
+    }
 }
 
 impl MessageContent {
@@ -67,64 +78,52 @@ impl MessageContent {
         Self {
             msg_type: MessageType::Text,
             text: Some(text),
-            file_info: None,
-            red_packet: None,
-            extra: None,
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// 创建文件消息（extra 包含文件信息）
+    pub fn file(extra: serde_json::Map<String, serde_json::Value>) -> Self {
+        Self {
+            msg_type: MessageType::File,
+            text: None,
+            extra,
         }
     }
 
     /// 创建图片消息
-    pub fn image(file_info: FileInfo) -> Self {
+    pub fn image(extra: serde_json::Map<String, serde_json::Value>) -> Self {
         Self {
             msg_type: MessageType::Image,
             text: None,
-            file_info: Some(file_info),
-            red_packet: None,
-            extra: None,
+            extra,
         }
     }
 
     /// 创建视频消息
-    pub fn video(file_info: FileInfo) -> Self {
+    pub fn video(extra: serde_json::Map<String, serde_json::Value>) -> Self {
         Self {
             msg_type: MessageType::Video,
             text: None,
-            file_info: Some(file_info),
-            red_packet: None,
-            extra: None,
-        }
-    }
-
-    /// 创建文件消息
-    pub fn file(file_info: FileInfo) -> Self {
-        Self {
-            msg_type: MessageType::File,
-            text: None,
-            file_info: Some(file_info),
-            red_packet: None,
-            extra: None,
+            extra,
         }
     }
 
     /// 创建音频消息
-    pub fn audio(file_info: FileInfo) -> Self {
+    pub fn audio(extra: serde_json::Map<String, serde_json::Value>) -> Self {
         Self {
             msg_type: MessageType::Audio,
             text: None,
-            file_info: Some(file_info),
-            red_packet: None,
-            extra: None,
+            extra,
         }
     }
 
     /// 创建红包消息
-    pub fn red_packet(red_packet: RedPacketInfo) -> Self {
+    pub fn red_packet(extra: serde_json::Map<String, serde_json::Value>) -> Self {
         Self {
             msg_type: MessageType::RedPacket,
             text: None,
-            file_info: None,
-            red_packet: Some(red_packet),
-            extra: None,
+            extra,
         }
     }
 
@@ -133,10 +132,66 @@ impl MessageContent {
         Self {
             msg_type: MessageType::System,
             text: Some(text),
-            file_info: None,
-            red_packet: None,
-            extra: None,
+            extra: serde_json::Map::new(),
         }
+    }
+
+    /// 从 extra 中获取字段
+    pub fn get_extra(&self, key: &str) -> Option<&serde_json::Value> {
+        self.extra.get(key)
+    }
+
+    /// 从 extra 中获取字符串字段
+    pub fn get_extra_str(&self, key: &str) -> Option<&str> {
+        self.extra.get(key).and_then(|v| v.as_str())
+    }
+
+    /// 从 extra 中获取 i64 字段
+    pub fn get_extra_i64(&self, key: &str) -> Option<i64> {
+        self.extra.get(key).and_then(|v| v.as_i64())
+    }
+
+    /// 从 extra 中获取 i32 字段
+    pub fn get_extra_i32(&self, key: &str) -> Option<i32> {
+        self.extra.get(key).and_then(|v| v.as_i64()).map(|v| v as i32)
+    }
+
+    /// 构建包含文件信息的 extra map
+    pub fn file_extra(
+        file_id: String,
+        file_name: String,
+        file_size: i64,
+        mime_type: String,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut extra = serde_json::Map::new();
+        extra.insert("fileId".to_string(), serde_json::Value::String(file_id));
+        extra.insert("fileName".to_string(), serde_json::Value::String(file_name));
+        extra.insert("fileSize".to_string(), serde_json::Value::Number(serde_json::Number::from(file_size)));
+        extra.insert("mimeType".to_string(), serde_json::Value::String(mime_type));
+        extra
+    }
+
+    /// 为 extra 添加可选字段
+    pub fn with_optional_extra_fields(
+        mut extra: serde_json::Map<String, serde_json::Value>,
+        thumbnail: Option<String>,
+        duration: Option<i32>,
+        width: Option<i32>,
+        height: Option<i32>,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        if let Some(t) = thumbnail {
+            extra.insert("thumbnail".to_string(), serde_json::Value::String(t));
+        }
+        if let Some(d) = duration {
+            extra.insert("duration".to_string(), serde_json::Value::Number(serde_json::Number::from(d)));
+        }
+        if let Some(w) = width {
+            extra.insert("width".to_string(), serde_json::Value::Number(serde_json::Number::from(w)));
+        }
+        if let Some(h) = height {
+            extra.insert("height".to_string(), serde_json::Value::Number(serde_json::Number::from(h)));
+        }
+        extra
     }
 }
 
@@ -194,6 +249,24 @@ impl FileInfo {
         self.height = Some(height);
         self
     }
+
+    /// 转换为 extra Map
+    pub fn to_extra_map(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut extra = MessageContent::file_extra(
+            self.file_id.clone(),
+            self.file_name.clone(),
+            self.file_size,
+            self.mime_type.clone(),
+        );
+        extra = MessageContent::with_optional_extra_fields(
+            extra,
+            self.thumbnail.clone(),
+            self.duration,
+            self.width,
+            self.height,
+        );
+        extra
+    }
 }
 
 /// 红包信息
@@ -228,6 +301,19 @@ impl RedPacketInfo {
         self.greeting = Some(greeting);
         self
     }
+
+    /// 转换为 extra Map
+    pub fn to_extra_map(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut extra = serde_json::Map::new();
+        extra.insert("packetId".to_string(), serde_json::Value::String(self.packet_id.clone()));
+        extra.insert("amount".to_string(), serde_json::Value::Number(serde_json::Number::from(self.amount)));
+        extra.insert("count".to_string(), serde_json::Value::Number(serde_json::Number::from(self.count)));
+        extra.insert("packetType".to_string(), serde_json::Value::Number(serde_json::Number::from(self.packet_type)));
+        if let Some(ref greeting) = self.greeting {
+            extra.insert("greeting".to_string(), serde_json::Value::String(greeting.clone()));
+        }
+        extra
+    }
 }
 
 /// 聊天消息类型
@@ -260,7 +346,7 @@ impl ChatMessage {
         Self::Message(GeneralMessage {
             id: uuid::Uuid::new_v4().to_string(),
             sender_peer_id: String::new(),
-            content: MessageContent::image(file_info),
+            content: MessageContent::image(file_info.to_extra_map()),
             timestamp: chrono::Utc::now().timestamp_millis(),
             reply_to: None,
         })
@@ -271,7 +357,7 @@ impl ChatMessage {
         Self::Message(GeneralMessage {
             id: uuid::Uuid::new_v4().to_string(),
             sender_peer_id: String::new(),
-            content: MessageContent::video(file_info),
+            content: MessageContent::video(file_info.to_extra_map()),
             timestamp: chrono::Utc::now().timestamp_millis(),
             reply_to: None,
         })
@@ -282,7 +368,7 @@ impl ChatMessage {
         Self::Message(GeneralMessage {
             id: uuid::Uuid::new_v4().to_string(),
             sender_peer_id: String::new(),
-            content: MessageContent::file(file_info),
+            content: MessageContent::file(file_info.to_extra_map()),
             timestamp: chrono::Utc::now().timestamp_millis(),
             reply_to: None,
         })
@@ -293,7 +379,7 @@ impl ChatMessage {
         Self::Message(GeneralMessage {
             id: uuid::Uuid::new_v4().to_string(),
             sender_peer_id: String::new(),
-            content: MessageContent::audio(file_info),
+            content: MessageContent::audio(file_info.to_extra_map()),
             timestamp: chrono::Utc::now().timestamp_millis(),
             reply_to: None,
         })
@@ -304,7 +390,7 @@ impl ChatMessage {
         Self::Message(GeneralMessage {
             id: uuid::Uuid::new_v4().to_string(),
             sender_peer_id: String::new(),
-            content: MessageContent::red_packet(red_packet),
+            content: MessageContent::red_packet(red_packet.to_extra_map()),
             timestamp: chrono::Utc::now().timestamp_millis(),
             reply_to: None,
         })

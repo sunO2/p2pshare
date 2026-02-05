@@ -1575,6 +1575,7 @@ impl SseDecode for crate::types::MessageJson {
         let mut var_status = <i32>::sse_decode(deserializer);
         let mut var_isDeleted = <bool>::sse_decode(deserializer);
         let mut var_isRevoked = <bool>::sse_decode(deserializer);
+        let mut var_extra = <Option<String>>::sse_decode(deserializer);
         return crate::types::MessageJson {
             id: var_id,
             conversation_id: var_conversationId,
@@ -1586,6 +1587,7 @@ impl SseDecode for crate::types::MessageJson {
             status: var_status,
             is_deleted: var_isDeleted,
             is_revoked: var_isRevoked,
+            extra: var_extra,
         };
     }
 }
@@ -1988,6 +1990,7 @@ impl flutter_rust_bridge::IntoDart for crate::types::MessageJson {
             self.status.into_into_dart().into_dart(),
             self.is_deleted.into_into_dart().into_dart(),
             self.is_revoked.into_into_dart().into_dart(),
+            self.extra.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2302,6 +2305,7 @@ impl SseEncode for crate::types::MessageJson {
         <i32>::sse_encode(self.status, serializer);
         <bool>::sse_encode(self.is_deleted, serializer);
         <bool>::sse_encode(self.is_revoked, serializer);
+        <Option<String>>::sse_encode(self.extra, serializer);
     }
 }
 

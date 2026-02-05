@@ -151,16 +151,27 @@ impl ChatManager {
                 let peer_id_str = target.to_string();
                 let conversation = db.get_or_create_conversation(&peer_id_str, None).await?;
 
-                // 序列化消息内容
+                // 序列化消息内容（包含 msg_type, text, extra 的完整 JSON）
                 let content_json = serde_json::to_string(&content)
                     .map_err(|e| ChatError::Serialization(e.to_string()))?;
 
-                let db_message = DbMessage::new(
+                // 序列化 extra 字段单独存储（便于查询）
+                let extra_json = if !content.extra.is_empty() {
+                    Some(serde_json::to_string(&content.extra)
+                        .unwrap_or_else(|_| "{}".to_string()))
+                } else {
+                    None
+                };
+
+                let mut db_message = DbMessage::new(
                     conversation.id.clone(),
                     self.local_peer_id.to_string(),
                     msg_type,
                     content_json,
                 );
+
+                // 设置 extra 字段
+                db_message.extra = extra_json;
 
                 // 插入消息到数据库
                 let _ = db.insert_message(db_message).await;
@@ -248,12 +259,23 @@ impl ChatManager {
                     let content_json = serde_json::to_string(&content)
                         .unwrap_or_else(|_| "{}".to_string());
 
-                    let db_message = DbMessage::new(
+                    // 🔥 序列化 extra 字段单独存储（便于查询）
+                    let extra_json = if !content.extra.is_empty() {
+                        Some(serde_json::to_string(&content.extra)
+                            .unwrap_or_else(|_| "{}".to_string()))
+                    } else {
+                        None
+                    };
+
+                    let mut db_message = DbMessage::new(
                         conversation.id.clone(),
                         sender_id,
                         msg_type,
                         content_json,
                     );
+
+                    // 🔥 设置 extra 字段
+                    db_message.extra = extra_json;
 
                     let _ = db.insert_message(db_message).await;
 

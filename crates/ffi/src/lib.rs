@@ -227,6 +227,16 @@ pub fn internal_init(device_name: String, work_dir: String) -> Result<(), String
             send_event_to_stream(event);
         });
 
+        // 🔥 设置扩展消息回调（接收完整 JSON 消息，包含 extra 字段）
+        mdns::set_chat_message_callback(|message_json| {
+            // 直接发送扩展消息事件到 Flutter（JSON 格式已在 connection_service 中构造好）
+            let event = bridge::P2PBridgeEvent {
+                event_type: 20, // ExtendedMessageReceived (新的消息类型)
+                data: message_json,
+            };
+            send_event_to_stream(event);
+        });
+
         // 🔥 重新设置日志回调，但只处理特定事件（CONNECTION_STARTED, SERVICE_READY, SERVICE_STATUS）
         // 普通日志（INFO, DEBUG, WARN, ERROR）不再发送到 Flutter
         mdns::set_log_callback(|level, target, message| {
@@ -1876,6 +1886,8 @@ pub async fn internal_get_messages(
                 status: m.status,
                 is_deleted: m.is_deleted,
                 is_revoked: m.is_revoked,
+                // 🔥 包含 extra 字段
+                extra: m.extra,
             }
         }).collect();
 
@@ -1919,21 +1931,84 @@ pub async fn internal_get_messages_by_peer(
             tracing::info!("💬 [FFI] 消息: id={}, sender={}, type={}, content={}",
                 m.id, m.sender_peer_id, m.message_type,
                 m.content.chars().take(50).collect::<String>());
+
+            // 解析 content JSON（MessageContent 格式）
+            // 数据库中的 content 是序列化的 MessageContent: {"msg_type":1,"text":"hello","extra":{}}
+            let (actual_content, actual_extra) = if let Ok(content_obj) = serde_json::from_str::<serde_json::Value>(&m.content) {
+                if let Some(obj) = content_obj.as_object() {
+                    // 提取 text 字段作为实际内容
+                    let text = obj.get("text")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    // extra 字段优先使用数据库的 extra，否则使用 content 中的 extra
+                    let extra = if let Some(db_extra) = &m.extra {
+                        Some(db_extra.clone())
+                    } else if let Some(extra_val) = obj.get("extra") {
+                        if extra_val.is_object() && !extra_val.as_object().unwrap().is_empty() {
+                            Some(serde_json::to_string(extra_val).unwrap_or_default())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    (text, extra)
+                } else {
+                    (m.content.clone(), m.extra)
+                }
+            } else {
+                (m.content.clone(), m.extra)
+            };
+
             types::MessageJson {
                 id: m.id,
                 conversation_id: m.conversation_id,
                 sender_peer_id: m.sender_peer_id,
                 message_type: m.message_type,
-                content: m.content,
+                content: actual_content,
                 timestamp: m.timestamp,
                 reply_to_id: m.reply_to_id,
                 status: m.status,
                 is_deleted: m.is_deleted,
                 is_revoked: m.is_revoked,
+                // 🔥 包含 extra 字段
+                extra: actual_extra,
             }
         }).collect();
 
         Ok(result)
+    }
+}
+
+/// 发送扩展消息（同步版本，用于 spawn_blocking）
+fn internal_send_message_ex_sync(
+    target_peer_id: String,
+    message_type: i32,
+    content: String,
+    extra: Option<String>,
+) -> Result<String, String> {
+    unsafe {
+        if DISCOVERY_RESOURCES.is_none() {
+            return Err("P2P not initialized".to_string());
+        }
+
+        let resources = DISCOVERY_RESOURCES.as_ref().unwrap();
+        let p2p_manager = resources.p2p_manager.as_ref()
+            .ok_or("P2PManager not available. Call p2p_start() first.")?;
+
+        // 在当前线程的 runtime 中发送消息
+        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
+
+        let result = runtime.block_on(async move {
+            let pm = p2p_manager.lock().await;
+            pm.send_chat_message(target_peer_id, message_type, content, extra).await
+                .map_err(|e| e.to_string())
+        });
+
+        result
     }
 }
 
@@ -1944,34 +2019,53 @@ pub async fn internal_send_message_ex(
     content: String,
     extra: Option<String>,
 ) -> Result<String, String> {
-    unsafe {
-        if P2P_INSTANCE.is_none() {
-            return Err("Not initialized".to_string());
+    tokio::task::spawn_blocking(move || {
+        internal_send_message_ex_sync(target_peer_id, message_type, content, extra)
+    })
+    .await
+    .map_err(|e| format!("Join error: {:?}", e))?
+}
+
+/// 从 JSON 构建 MessageContent（辅助函数）
+///
+/// 根据 message_type 决定 content 的语义：
+/// - 文本消息: content = 文本内容，extra = None
+/// - 文件消息: content = 空，extra = 文件信息 JSON
+fn message_content_from_json(
+    message_type: i32,
+    content: String,
+    extra: Option<String>,
+) -> Result<mdns::chat::message::MessageContent, String> {
+    use mdns::chat::message::MessageType;
+    use serde_json::{Value, Map};
+
+    let msg_type = MessageType::from_i32(message_type);
+
+    let mut extra_map: Map<String, Value> = Map::new();
+
+    // 解析 extra JSON（如果提供）
+    if let Some(extra_str) = extra {
+        if !extra_str.trim().is_empty() {
+            if let Ok(extra_obj) = serde_json::from_str::<Value>(&extra_str) {
+                if let Value::Object(map) = extra_obj {
+                    extra_map = map;
+                }
+            }
         }
-
-        let (response_tx, response_rx) = tokio::sync::oneshot::channel();
-
-        let command = P2PCommand::SendMessage {
-            target_peer_id,
-            message: content.clone(),  // 暂时使用简单消息
-            response_tx,
-        };
-
-        let instance = P2P_INSTANCE.as_ref().unwrap().lock().unwrap();
-        if let Err(_) = instance.command_tx.send(command) {
-            return Err("Failed to send command".to_string());
-        }
-        drop(instance);
-
-        let runtime = RUNTIME.as_ref().ok_or("No runtime")?;
-        let result = runtime.block_on(async {
-            response_rx.await
-                .map_err(|e| format!("Response error: {:?}", e))
-                .and_then(|r| r)
-        });
-
-        result
     }
+
+    // 根据 message_type 决定 text 字段的值
+    let text = if msg_type == MessageType::Text || msg_type == MessageType::System {
+        Some(content)
+    } else {
+        None
+    };
+
+    Ok(mdns::chat::message::MessageContent {
+        msg_type,
+        text,
+        extra: extra_map,
+    })
 }
 
 /// 标记消息为已读

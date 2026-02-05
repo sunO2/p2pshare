@@ -23,8 +23,9 @@ use tokio::sync::mpsc;
 /// 全局聊天事件回调（可选）
 /// 由 FFI 层设置，用于将聊天事件发送到 Flutter
 static mut CHAT_EVENT_CALLBACK: Option<Box<dyn Fn(String, String) + Send + Sync>> = None;
+static mut CHAT_MESSAGE_CALLBACK: Option<Box<dyn Fn(String) + Send + Sync>> = None;
 
-/// 设置聊天事件回调
+/// 设置聊天事件回调（简单版，仅传递文本）
 ///
 /// # Safety
 /// 此函数应在初始化时调用一次
@@ -33,6 +34,20 @@ where
     F: Fn(String, String) + Send + Sync + 'static,
 {
     CHAT_EVENT_CALLBACK = Some(Box::new(callback));
+}
+
+/// 设置聊天消息回调（扩展版，传递完整 JSON 消息）
+///
+/// # Arguments
+/// * `callback` - 接收 JSON 字符串格式的完整消息
+///
+/// # Safety
+/// 此函数应在初始化时调用一次
+pub unsafe fn set_chat_message_callback<F>(callback: F)
+where
+    F: Fn(String) + Send + Sync + 'static,
+{
+    CHAT_MESSAGE_CALLBACK = Some(Box::new(callback));
 }
 
 /// 连接服务配置
@@ -476,7 +491,36 @@ impl ConnectionService {
                         // 调用全局回调函数（如果已设置）
                         unsafe {
                             if let Some(callback) = CHAT_EVENT_CALLBACK.as_ref() {
-                                callback(from_str, content_str);
+                                callback(from_str.clone(), content_str);
+                            }
+
+                            // 🔥 调用扩展消息回调，传递完整 JSON 消息
+                            if let Some(msg_callback) = CHAT_MESSAGE_CALLBACK.as_ref() {
+                                if let super::chat::ChatMessage::Message(ref msg) = message {
+                                    // 直接构造 JSON 字符串（与 FFI 层的 MessageJson 格式一致）
+                                    use serde_json::json;
+                                    let extra_json = if msg.content.extra.is_empty() {
+                                        serde_json::Value::Null
+                                    } else {
+                                        serde_json::Value::String(serde_json::to_string(&msg.content.extra).unwrap_or_default())
+                                    };
+                                    let id_str = msg.id.clone();
+                                    let text_str = msg.content.text.clone().unwrap_or_default();
+                                    let msg_json = json!({
+                                        "id": id_str,
+                                        "conversationId": "",
+                                        "senderPeerId": from_str,
+                                        "messageType": msg.content.msg_type as i32,
+                                        "content": text_str,
+                                        "timestamp": msg.timestamp,
+                                        "replyToId": serde_json::Value::Null,
+                                        "status": 0,
+                                        "isDeleted": false,
+                                        "isRevoked": false,
+                                        "extra": extra_json,
+                                    }).to_string();
+                                    msg_callback(msg_json);
+                                }
                             }
                         }
                     }

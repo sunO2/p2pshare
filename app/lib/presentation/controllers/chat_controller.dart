@@ -8,6 +8,7 @@ import '../../../bridge/types.dart';
 import '../../../services/p2p_event_bus.dart' as eb;
 import '../../services/log_service.dart';
 import '../../data/models/chat_message_model.dart';
+import 'package:uuid/uuid.dart';
 
 /// 聊天控制器
 ///
@@ -41,14 +42,13 @@ class ChatController extends GetxController
 
   // ========== 控制器 ==========
 
-  late final TextEditingController messageController;
-  late final ScrollController scrollController;
+  late TextEditingController messageController;
+  late ScrollController scrollController;
 
   // ========== 订阅 ==========
 
   eb.P2PEventSubscription<eb.P2PEvent>? statusSubscription;
-  StreamSubscription<eb.P2PEvent>? messageSubscription;
-  StreamSubscription? p2pManagerSubscription;
+  StreamSubscription<eb.P2PEvent>? extendedMessageSubscription;
 
   // ========== 配置 ==========
 
@@ -58,6 +58,7 @@ class ChatController extends GetxController
   // ========== 依赖注入 ==========
 
   final LogService _log = Get.find<LogService>();
+  final Uuid _uuid = const Uuid();
 
   // ========== 生命周期 ==========
 
@@ -66,15 +67,21 @@ class ChatController extends GetxController
     super.onInit();
     _log.i('[ChatController] onInit - peerId: $peerId, peerName: $peerName');
 
-    messageController = TextEditingController();
-    scrollController = ScrollController();
+    // 防止重复初始化（onInit 可能被多次调用）
+    if (!_lateInitialized) {
+      messageController = TextEditingController();
+      scrollController = ScrollController();
+      _lateInitialized = true;
+    }
 
     loadCurrentStatus();
     loadHistoricalMessages();
-    listenToEvents();
     listenToEventBus();
     setupScrollListener();
   }
+
+  // 是否已初始化 late 字段
+  bool _lateInitialized = false;
 
   @override
   void onReady() {
@@ -86,8 +93,7 @@ class ChatController extends GetxController
   void onClose() {
     _log.i('[ChatController] onClose');
     statusSubscription?.cancel();
-    messageSubscription?.cancel();
-    p2pManagerSubscription?.cancel();
+    extendedMessageSubscription?.cancel();
     messageController.dispose();
     scrollController.dispose();
     super.onClose();
@@ -105,7 +111,7 @@ class ChatController extends GetxController
 
     try {
       final beforeTimestamp = loadMore && messages.isNotEmpty
-          ? messages.last.timestamp.millisecondsSinceEpoch
+          ? messages.last.timestamp
           : null;
 
       final result = await RustLib.instance.api
@@ -118,7 +124,7 @@ class ChatController extends GetxController
       _log.i('[ChatController] 返回 ${result.length} 条消息');
 
       final newMessages = result
-          .map((msg) => _parseMessageJson(msg))
+          .map((msg) => ChatMessageData.fromJson(msg, _getLocalPeerId()))
           .toList();
 
       if (loadMore) {
@@ -144,37 +150,6 @@ class ChatController extends GetxController
     }
   }
 
-  /// 解析消息 JSON
-  ChatMessageData _parseMessageJson(MessageJson msg) {
-    String displayText = '';
-    try {
-      final contentJson = jsonDecode(msg.content);
-      if (msg.messageType == 1) {
-        displayText = contentJson['text'] ?? '';
-      } else if (msg.messageType == 2) {
-        displayText = '[图片]';
-      } else if (msg.messageType == 3) {
-        displayText = '[视频]';
-      } else if (msg.messageType == 4) {
-        displayText = '[文件]';
-      } else if (msg.messageType == 5) {
-        displayText = '[音频]';
-      } else {
-        displayText = '[未知消息]';
-      }
-    } catch (e) {
-      displayText = msg.content;
-    }
-
-    final isSelf = msg.senderPeerId == _getLocalPeerId();
-
-    return ChatMessageData(
-      message: displayText,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(msg.timestamp.toInt()),
-      isSelf: isSelf,
-    );
-  }
-
   /// 获取本地 Peer ID
   String _getLocalPeerId() {
     try {
@@ -187,32 +162,112 @@ class ChatController extends GetxController
   // ========== 消息发送 ==========
 
   /// 发送消息
-  Future<void> sendMessage(String text) async {
-    if (text.trim().isEmpty) return;
+  Future<void> sendMessage(
+    String text, {
+    Map<String, dynamic>? extra,
+  }) async {
+    if (text.trim().isEmpty && extra == null) return;
 
     try {
-      await P2PManager.instance.sendMessage(peerId, text);
-    } catch (e) {
-      _log.e('[ChatController] 发送消息失败: $e', e);
+      // 构造消息
+      final messageType = (extra == null)
+          ? MessageType.text
+          : _getMessageTypeFromExtra(extra);
+
+      // content 字段：文本消息直接传文本，其他类型传空或描述
+      final content = (messageType == MessageType.text)
+          ? text
+          : '';
+
+      // extra 字段：序列化为 JSON 字符串
+      final extraJson = (extra != null)
+          ? jsonEncode(extra)
+          : null;
+
+      await RustLib.instance.api.localp2PFfiBridgeP2PSendMessageEx(
+        targetPeerId: peerId,
+        messageType: messageType,
+        content: content,
+        extra: extraJson,
+      );
+
+      messageController.clear();
+
+      // 立即添加到本地消息列表
+      messages.insert(
+        0,
+        ChatMessageData(
+          id: _uuid.v4(), // 临时 ID
+          conversationId: '',
+          senderPeerId: _getLocalPeerId(),
+          messageType: messageType,
+          content: content,
+          extra: extra != null ? MessageExtra(extra) : null,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          isSelf: true,
+        ),
+      );
+    } catch (e, stackTrace) {
+      _log.e('[ChatController] 发送消息失败: $e', e, stackTrace);
       Get.snackbar(
         '发送失败',
         e.toString(),
         snackPosition: SnackPosition.BOTTOM,
       );
-      return;
     }
+  }
 
-    messageController.clear();
+  /// 从 extra 推断消息类型
+  int _getMessageTypeFromExtra(Map<String, dynamic> extra) {
+    final mimeType = extra['mimeType'] as String?;
+    if (mimeType == null) return MessageType.text;
 
-    // 立即添加到本地消息列表
-    messages.insert(
-      0,
-      ChatMessageData(
-        message: text,
-        timestamp: DateTime.now(),
-        isSelf: true,
-      ),
-    );
+    if (mimeType.startsWith('image/')) return MessageType.image;
+    if (mimeType.startsWith('video/')) return MessageType.video;
+    if (mimeType.startsWith('audio/')) return MessageType.audio;
+    return MessageType.file;
+  }
+
+  /// 模拟发送文件消息
+  Future<void> sendFileMessage() async {
+    // 模拟文件数据
+    final fileExtra = {
+      'fileId': _uuid.v4(),
+      'fileName': '示例文档.pdf',
+      'fileSize': 1024000, // 1MB
+      'mimeType': 'application/pdf',
+    };
+
+    await sendMessage('', extra: fileExtra);
+  }
+
+  /// 模拟发送图片消息
+  Future<void> sendImageMessage() async {
+    final imageExtra = {
+      'fileId': _uuid.v4(),
+      'fileName': '示例图片.jpg',
+      'fileSize': 204800, // 200KB
+      'mimeType': 'image/jpeg',
+      'width': 1920,
+      'height': 1080,
+    };
+
+    await sendMessage('', extra: imageExtra);
+  }
+
+  /// 模拟发送视频消息
+  Future<void> sendVideoMessage() async {
+    final videoExtra = {
+      'fileId': _uuid.v4(),
+      'fileName': '示例视频.mp4',
+      'fileSize': 5120000, // 5MB
+      'mimeType': 'video/mp4',
+      'duration': 60, // 60秒
+      'width': 1280,
+      'height': 720,
+    };
+
+    await sendMessage('', extra: videoExtra);
   }
 
   // ========== 事件监听 ==========
@@ -242,33 +297,26 @@ class ChatController extends GetxController
     });
   }
 
-  /// 监听 P2P 事件
-  void listenToEvents() {
-    p2pManagerSubscription = P2PManager.instance.eventStream.listen((event) {
-      if (event is MessageReceivedEvent && event.from == peerId) {
-        messages.insert(
-          0,
-          ChatMessageData(
-            message: event.message,
-            timestamp: DateTime.fromMillisecondsSinceEpoch(event.timestamp),
-            isSelf: false,
-          ),
-        );
-      } else if (event is MessageSentEvent && event.to == peerId) {
-        messages.insert(
-          0,
-          ChatMessageData(
-            message: '(sent)',
-            timestamp: DateTime.now(),
-            isSelf: true,
-          ),
-        );
-      }
-    });
+  /// 将 Map<String, dynamic> 转换为 MessageJson
+  MessageJson _convertToMessageJson(Map<String, dynamic> data) {
+    return MessageJson(
+      id: data['id'] as String? ?? '',
+      conversationId: data['conversationId'] as String? ?? '',
+      senderPeerId: data['senderPeerId'] as String? ?? '',
+      messageType: data['messageType'] as int? ?? 1,
+      content: data['content'] as String? ?? '',
+      timestamp: data['timestamp'] as int? ?? 0,
+      replyToId: data['replyToId'] as String?,
+      status: data['status'] as int? ?? 0,
+      isDeleted: data['isDeleted'] as bool? ?? false,
+      isRevoked: data['isRevoked'] as bool? ?? false,
+      extra: data['extra'] as String?,
+    );
   }
 
   /// 监听事件总线
   void listenToEventBus() {
+    // 订阅状态变化
     statusSubscription = eb.P2PEventBus.instance.subscribe(
       peerId: peerId,
       onData: (event) {
@@ -277,10 +325,11 @@ class ChatController extends GetxController
           if (event.type == 'offline') {
             isOnline.value = false;
             statusText.value = '离线';
-          } else if (status != null) {
-            final statusStr = status.toString().toLowerCase();
+          } else if (status != null && status is String) {
+            // status 应该是 String 类型（用户在线状态）
+            final statusStr = status.toLowerCase();
             isOnline.value = statusStr != '离线' && statusStr != 'offline';
-            statusText.value = status ?? '在线';
+            statusText.value = status;
           } else {
             isOnline.value = true;
             statusText.value = '在线';
@@ -289,24 +338,20 @@ class ChatController extends GetxController
       },
     );
 
-    messageSubscription = eb.P2PEventBus.instance
-        .on(peerId: peerId, type: 'message')
+    // 🔥 监听扩展消息事件（包含 extra 字段）
+    extendedMessageSubscription = eb.P2PEventBus.instance
+        .on(peerId: peerId, type: 'extended_message')
         .listen((event) {
       final messageData = event.data;
       if (messageData is Map<String, dynamic>) {
-        final message = messageData['message'] as String?;
-        final timestamp = messageData['timestamp'] as int?;
-        if (message != null) {
-          messages.insert(
-            0,
-            ChatMessageData(
-              message: message,
-              timestamp: timestamp != null
-                  ? DateTime.fromMillisecondsSinceEpoch(timestamp)
-                  : DateTime.now(),
-              isSelf: false,
-            ),
+        try {
+          final msg = ChatMessageData.fromJson(
+            _convertToMessageJson(messageData),
+            _getLocalPeerId(),
           );
+          messages.insert(0, msg);
+        } catch (e, stackTrace) {
+          _log.e('[ChatController] 解析扩展消息失败: $e', e, stackTrace);
         }
       }
     });
@@ -319,10 +364,10 @@ class ChatController extends GetxController
     final currentData = eb.P2PEventBus.instance.getCurrentData(peerId);
     if (currentData != null) {
       final status = currentData['status'];
-      if (status != null) {
-        final statusStr = status.toString().toLowerCase();
-        isOnline.value = statusStr != '离线' && statusStr != 'offline';
-        statusText.value = isOnline.value ? (status ?? '在线') : '离线';
+      if (status != null && status is String) {
+        final statusLower = status.toLowerCase();
+        isOnline.value = statusLower != '离线' && statusLower != 'offline';
+        statusText.value = isOnline.value ? status : '离线';
       }
     } else {
       isOnline.value = eb.P2PEventBus.instance.isOnline(peerId);

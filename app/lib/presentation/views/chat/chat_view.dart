@@ -12,6 +12,10 @@ class ChatView extends GetView<ChatController> {
   const ChatView({super.key});
 
   @override
+  // 使用动态 tag，基于 peerId 生成唯一标识
+  String get tag => 'chat_controller_${Get.parameters['peerId'] ?? 'unknown'}';
+
+  @override
   Widget build(BuildContext context) {
     final theme = context.customTheme;
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -182,6 +186,24 @@ class ChatView extends GetView<ChatController> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // 附件按钮
+          GestureDetector(
+            onTap: () => _showAttachmentMenu(context),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: theme.cardBackground,
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
+              ),
+              child: Icon(
+                Icons.add,
+                size: 24,
+                color: theme.iconColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: TextField(
               controller: controller.messageController,
@@ -224,6 +246,109 @@ class ChatView extends GetView<ChatController> {
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.send, size: 20, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示附件菜单
+  void _showAttachmentMenu(BuildContext context) {
+    final theme = context.customTheme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: theme.cardBackground,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.dividerColor,
+                  borderRadius: const BorderRadius.all(Radius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildAttachmentItem(
+                    context,
+                    icon: Icons.insert_drive_file,
+                    label: '文件',
+                    onTap: () {
+                      Navigator.pop(context);
+                      controller.sendFileMessage();
+                    },
+                  ),
+                  _buildAttachmentItem(
+                    context,
+                    icon: Icons.image,
+                    label: '图片',
+                    onTap: () {
+                      Navigator.pop(context);
+                      controller.sendImageMessage();
+                    },
+                  ),
+                  _buildAttachmentItem(
+                    context,
+                    icon: Icons.videocam,
+                    label: '视频',
+                    onTap: () {
+                      Navigator.pop(context);
+                      controller.sendVideoMessage();
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建附件项
+  Widget _buildAttachmentItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final theme = context.customTheme;
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: theme.dividerColor.withOpacity(0.3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              size: 28,
+              color: theme.iconColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.iconColor,
             ),
           ),
         ],

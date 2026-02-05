@@ -374,7 +374,7 @@ impl ChatDatabase for SqliteChatDatabase {
         let rows = if let Some(before_ts) = before_timestamp {
             sqlx::query(
                 "SELECT id, conversation_id, sender_peer_id, message_type, content,
-                        timestamp, reply_to_id, status, is_deleted, is_revoked
+                        timestamp, reply_to_id, status, is_deleted, is_revoked, extra
                  FROM messages
                  WHERE conversation_id = ?1 AND timestamp < ?2 AND is_deleted = 0
                  ORDER BY timestamp DESC
@@ -388,7 +388,7 @@ impl ChatDatabase for SqliteChatDatabase {
         } else {
             sqlx::query(
                 "SELECT id, conversation_id, sender_peer_id, message_type, content,
-                        timestamp, reply_to_id, status, is_deleted, is_revoked
+                        timestamp, reply_to_id, status, is_deleted, is_revoked, extra
                  FROM messages
                  WHERE conversation_id = ?1 AND is_deleted = 0
                  ORDER BY timestamp DESC
@@ -413,13 +413,14 @@ impl ChatDatabase for SqliteChatDatabase {
             status: row.get::<i32, _>("status"),
             is_deleted: row.get::<i32, _>("is_deleted") != 0,
             is_revoked: row.get::<i32, _>("is_revoked") != 0,
+            extra: row.try_get("extra").ok(),
         }).collect())
     }
 
     async fn get_message(&self, message_id: &str) -> Result<Option<Message>, ChatError> {
         let row = sqlx::query(
             "SELECT id, conversation_id, sender_peer_id, message_type, content,
-                    timestamp, reply_to_id, status, is_deleted, is_revoked
+                    timestamp, reply_to_id, status, is_deleted, is_revoked, extra
              FROM messages
              WHERE id = ?1"
         )
@@ -440,6 +441,7 @@ impl ChatDatabase for SqliteChatDatabase {
                 status: row.get("status"),
                 is_deleted: row.get::<i32, _>("is_deleted") != 0,
                 is_revoked: row.get::<i32, _>("is_revoked") != 0,
+                extra: row.try_get("extra").ok(),
             }))
         } else {
             Ok(None)

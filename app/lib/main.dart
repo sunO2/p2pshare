@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'bridge/frb_generated.dart';
 import 'app/app.dart';
+import 'services/log_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,5 +17,12 @@ void main() async {
     print('[FRB Warmup] 预热失败（忽略）: $e');
   }
 
-  runApp(const App());
+  // 🔥 使用 runZonedGuarded 捕获所有未处理的异步错误
+  // 注意：Flutter 框架错误和平台错误会在 LogService.init() 中自动安装
+  runZonedGuarded(
+    () {
+      runApp(const App());
+    },
+    LogService.handleAsyncError, // 异步错误由 LogService 处理
+  );
 }

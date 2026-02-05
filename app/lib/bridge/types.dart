@@ -139,6 +139,9 @@ class MessageJson {
   final bool isDeleted;
   final bool isRevoked;
 
+  /// 扩展字段（JSON Map 字符串）- 用于存储文件信息等额外数据
+  final String? extra;
+
   const MessageJson({
     required this.id,
     required this.conversationId,
@@ -150,6 +153,7 @@ class MessageJson {
     required this.status,
     required this.isDeleted,
     required this.isRevoked,
+    this.extra,
   });
 
   @override
@@ -163,7 +167,8 @@ class MessageJson {
       replyToId.hashCode ^
       status.hashCode ^
       isDeleted.hashCode ^
-      isRevoked.hashCode;
+      isRevoked.hashCode ^
+      extra.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -179,5 +184,6 @@ class MessageJson {
           replyToId == other.replyToId &&
           status == other.status &&
           isDeleted == other.isDeleted &&
-          isRevoked == other.isRevoked;
+          isRevoked == other.isRevoked &&
+          extra == other.extra;
 }

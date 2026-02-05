@@ -176,6 +176,8 @@ pub struct Message {
     pub is_deleted: bool,
     /// 是否已撤回
     pub is_revoked: bool,
+    /// 扩展数据（JSON）
+    pub extra: Option<String>,
 }
 
 impl From<DbMessage> for Message {
@@ -191,6 +193,7 @@ impl From<DbMessage> for Message {
             status: db.status as i32,
             is_deleted: db.is_deleted,
             is_revoked: db.is_revoked,
+            extra: db.extra,
         }
     }
 }

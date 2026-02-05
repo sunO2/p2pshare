@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart' as p;
@@ -27,6 +28,7 @@ class LogService {
   late _FileLogOutput _logOutput; // 保存 output 引用，用于更新 sink
   final _logsController = StreamController<String>.broadcast();
   bool _initialized = false;
+  bool _globalErrorHandlersInstalled = false; // 是否已安装全局错误处理器
   String? _workDir; // 保存工作目录引用
 
   // 🔥 实时日志流（tail -f 功能）
@@ -93,6 +95,9 @@ class LogService {
 
       _initialized = true;
 
+      // 🔥 安装全局错误处理器（在 LogService 初始化完成后）
+      _installGlobalErrorHandlers();
+
       // 写入启动日志
       _logger.i('════════════════════════════════════════════════════════════');
       _logger.i('应用启动 - ${DateTime.now()}');
@@ -114,6 +119,9 @@ class LogService {
         ),
       );
       _initialized = true;
+
+      // 即使初始化失败，也安装全局错误处理器（使用控制台输出）
+      _installGlobalErrorHandlers();
     }
   }
 
@@ -349,6 +357,42 @@ class LogService {
       await _realtimeLogController.close();
       _initialized = false;
     }
+  }
+
+  // ================================================================
+  // 🔥 全局错误处理（在 LogService 初始化完成后安装）
+  // ================================================================
+
+  /// 安装全局错误处理器
+  void _installGlobalErrorHandlers() {
+    if (_globalErrorHandlersInstalled) return;
+
+    // 1. 捕获 Flutter 框架内的错误
+    FlutterError.onError = (details) {
+      e('[FlutterError] ${details.exception}', details.exception, details.stack);
+    };
+
+    // 2. 捕获平台级别的错误
+    PlatformDispatcher.instance.onError = (error, stack) {
+      e('[PlatformError] $error', error, stack);
+      return true; // 返回 true 表示已处理
+    };
+
+    _globalErrorHandlersInstalled = true;
+    _logger.i('全局错误处理器已安装');
+  }
+
+  /// 处理异步错误（在 main.dart 的 runZonedGuarded 中使用）
+  static void handleAsyncError(Object error, StackTrace stackTrace) {
+    final instance = LogService.instance;
+    if (!instance._initialized) {
+      // 如果 LogService 还没初始化，使用控制台输出
+      print('[AsyncError - 未初始化] $error');
+      print('Stack trace: $stackTrace');
+      return;
+    }
+
+    instance.e('[AsyncError] 全局异步错误: $error', error, stackTrace);
   }
 
   // ================================================================

@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../data/providers/p2p_provider.dart';
 import '../../services/storage_service.dart';
 import '../../services/log_service.dart';
+import '../../services/flutter_mdns_service.dart';
 import '../../../p2p_manager.dart';
 import '../views/devices/device_list_view.dart';
 import '../views/conversations/conversation_list_view.dart';
@@ -36,6 +37,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   final P2PProvider _p2p = Get.find<P2PProvider>();
   final LogService _log = Get.find<LogService>();
   final StorageService _storage = Get.find<StorageService>();
+  final FlutterMdnsService _mdnsService = FlutterMdnsService.instance;
 
   // ========== 生命周期 ==========
 
@@ -44,6 +46,11 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     super.onInit();
     _log.i('[HomeController] onInit');
     WidgetsBinding.instance.addObserver(this);
+
+    // 🔥 设置初始生命周期状态（在 Controller 初始化时立即设置）
+    _mdnsService.updateLifecycleState('resumed');
+
+    // 开始初始化
     _initialize();
   }
 
@@ -63,6 +70,9 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _log.i('[HomeController] 应用生命周期变化: $state');
+
+    // 🔥 通知 mDNS 服务生命周期状态变化
+    _mdnsService.updateLifecycleState(state.name);
 
     switch (state) {
       case AppLifecycleState.resumed:
@@ -297,3 +307,4 @@ class _FilePlaceholderScreen extends StatelessWidget {
     );
   }
 }
+

@@ -1447,8 +1447,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   MessageJson dco_decode_message_json(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return MessageJson(
       id: dco_decode_String(arr[0]),
       conversationId: dco_decode_String(arr[1]),
@@ -1460,6 +1460,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       status: dco_decode_i_32(arr[7]),
       isDeleted: dco_decode_bool(arr[8]),
       isRevoked: dco_decode_bool(arr[9]),
+      extra: dco_decode_opt_String(arr[10]),
     );
   }
 
@@ -1830,6 +1831,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_status = sse_decode_i_32(deserializer);
     var var_isDeleted = sse_decode_bool(deserializer);
     var var_isRevoked = sse_decode_bool(deserializer);
+    var var_extra = sse_decode_opt_String(deserializer);
     return MessageJson(
       id: var_id,
       conversationId: var_conversationId,
@@ -1841,6 +1843,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       status: var_status,
       isDeleted: var_isDeleted,
       isRevoked: var_isRevoked,
+      extra: var_extra,
     );
   }
 
@@ -2214,6 +2217,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.status, serializer);
     sse_encode_bool(self.isDeleted, serializer);
     sse_encode_bool(self.isRevoked, serializer);
+    sse_encode_opt_String(self.extra, serializer);
   }
 
   @protected

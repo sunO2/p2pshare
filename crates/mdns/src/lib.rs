@@ -49,7 +49,7 @@ pub mod global_config;
 
 pub use config::{MdnsConfig, ServiceInfo};
 pub use node::{VerifiedNode, NodeManager, NodeManagerConfig, NodeStatus};
-pub use connection_service::{ConnectionService, ConnectionServiceConfig, set_chat_event_callback};
+pub use connection_service::{ConnectionService, ConnectionServiceConfig, set_chat_event_callback, set_chat_message_callback};
 pub use p2p_manager::{P2PManager, P2PManagerConfig};
 pub use mdns_discovery::{MdnsServiceDiscovery, MdnsDiscoveryError, DeviceMetadata};
 pub use managed_discovery::{

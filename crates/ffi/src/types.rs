@@ -85,6 +85,8 @@ pub struct MessageJson {
     pub status: i32,
     pub is_deleted: bool,
     pub is_revoked: bool,
+    /// 扩展字段（JSON Map 字符串）- 用于存储文件信息等额外数据
+    pub extra: Option<String>,
 }
 
 /// 文件元数据

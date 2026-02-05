@@ -656,6 +656,79 @@ impl P2PManager {
         }
     }
 
+    /// 发送聊天消息（支持多种类型，使用 extra map）
+    ///
+    /// # Arguments
+    /// * `target_peer_id` - 目标节点的 Peer ID
+    /// * `message_type` - 消息类型 (1=Text, 2=Image, 3=Video, 4=File, 5=Audio, etc.)
+    /// * `content` - 内容字符串（文本消息直接传文本，其他类型传空或描述）
+    /// * `extra` - 扩展数据 JSON 字符串（文件信息等）
+    pub async fn send_chat_message(
+        &self,
+        target_peer_id: String,
+        message_type: i32,
+        content: String,
+        extra: Option<String>,
+    ) -> Result<String, MdnsError> {
+        use libp2p::PeerId;
+        use crate::chat::{ChatMessage, message::{MessageType, MessageContent}};
+        use serde_json::{Map, Value};
+
+        let peer_id = target_peer_id.parse::<PeerId>()
+            .map_err(|e| MdnsError::SwarmBuild(format!("无效的 Peer ID: {}", e)))?;
+
+        // 构造 MessageContent
+        let msg_type = MessageType::from_i32(message_type);
+
+        // 解析 extra JSON
+        let mut extra_map: Map<String, Value> = Map::new();
+        if let Some(extra_str) = extra {
+            if !extra_str.trim().is_empty() {
+                if let Ok(extra_obj) = serde_json::from_str::<Value>(&extra_str) {
+                    if let Value::Object(map) = extra_obj {
+                        extra_map = map;
+                    }
+                }
+            }
+        }
+
+        // 根据 message_type 决定 text 字段
+        let text = if msg_type == MessageType::Text || msg_type == MessageType::System {
+            Some(content.clone())
+        } else {
+            None
+        };
+
+        let message_content = MessageContent {
+            msg_type,
+            text,
+            extra: extra_map,
+        };
+
+        // 创建并发送消息
+        let msg = ChatMessage::Message(crate::chat::message::GeneralMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            sender_peer_id: String::new(), // 会在 send 时设置
+            content: message_content,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            reply_to: None,
+        });
+
+        let message_id = msg.id().unwrap_or("").to_string();
+
+        // 通过 ConnectionService 发送
+        if let Some(connection_service) = &self.connection_service {
+            let service = connection_service.lock().await;
+            if let Some(chat_manager) = service.chat_manager() {
+                chat_manager.send(peer_id, msg).await
+                    .map_err(|e| MdnsError::SwarmBuild(format!("发送消息失败: {}", e)))?;
+                return Ok(message_id);
+            }
+        }
+
+        Err(MdnsError::SwarmBuild("聊天服务未运行".to_string()))
+    }
+
     /// 获取所有会话列表
     pub async fn get_conversations(&self) -> Result<Vec<crate::chat::database::models::Conversation>, MdnsError> {
         if let Some(connection_service) = &self.connection_service {

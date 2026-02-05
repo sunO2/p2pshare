@@ -3,7 +3,6 @@ import '../controllers/home_controller.dart';
 import '../controllers/device_controller.dart';
 import '../controllers/conversation_controller.dart';
 import '../controllers/settings_controller.dart';
-import '../views/debug/logs_viewer_view.dart';
 
 /// 首页依赖注入
 ///
@@ -29,8 +28,5 @@ class HomeBinding extends Bindings {
     } catch (e) {
       // 忽略错误
     }
-
-    // 日志查看器使用 lazyPut，因为它是按需打开的
-    Get.lazyPut<LogsViewerController>(() => LogsViewerController());
   }
 }

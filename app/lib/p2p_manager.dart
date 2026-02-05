@@ -104,6 +104,13 @@ class MessageReceivedEvent extends P2PEvent {
   MessageReceivedEvent(this.from, this.message, this.timestamp);
 }
 
+/// 扩展消息接收事件（包含完整的消息数据，包括 extra 字段）
+class ExtendedMessageReceivedEvent extends P2PEvent {
+  final String from;
+  final String messageJson; // 完整的 MessageJson JSON 字符串
+  ExtendedMessageReceivedEvent(this.from, this.messageJson);
+}
+
 class MessageSentEvent extends P2PEvent {
   final String to;
   final String messageId;
@@ -626,6 +633,35 @@ class P2PManager {
         }
         break;
 
+      case 20: // ExtendedMessageReceived - 扩展消息（包含 extra 字段）
+        try {
+          final messageData = jsonDecode(event.data) as Map<String, dynamic>;
+          final senderPeerId = messageData['senderPeerId'] as String?;
+
+          // 🔥 标准化 status 字段为字符串（如果存在）
+          if (messageData.containsKey('status')) {
+            messageData['status'] = _normalizeStatus(messageData['status']);
+          }
+
+          if (senderPeerId != null) {
+            _log.message('RECEIVED_EXTENDED', senderPeerId, event.data);
+            _eventController.add(
+              ExtendedMessageReceivedEvent(senderPeerId, event.data),
+            );
+            // 转发到 EventBus
+            P2PEventBus.instance.emit(
+              peerId: senderPeerId,
+              type: 'extended_message',
+              data: messageData,
+            );
+          } else {
+            _log.w('ExtendedMessageReceived 事件但无法解析: ${event.data}');
+          }
+        } catch (e) {
+          _log.e('ExtendedMessageReceived 事件解析失败: $e', e);
+        }
+        break;
+
       case 10: // CONNECTION_STARTED (原 MDNS_STARTED)
         _log.i('📡 连接服务启动事件: ${event.data}');
         _handleConnectionStarted(event.data);
@@ -704,6 +740,22 @@ class P2PManager {
     final match = RegExp(r'"status":"([^"]*)"').firstMatch(data);
     final value = match?.group(1);
     return (value == null || value == 'null') ? null : value;
+  }
+
+  /// 🔥 标准化 status 值为字符串
+  ///
+  /// 处理多种输入情况：
+  /// - String: "在线" → "在线"
+  /// - int: 0 → "离线", 1 → "在线"
+  /// - null → null
+  String? _normalizeStatus(dynamic status) {
+    if (status == null) return null;
+    if (status is String) return status.isEmpty ? null : status;
+    if (status is int) {
+      // 假设 0=离线, 1=在线
+      return status == 0 ? '离线' : '在线';
+    }
+    return status.toString();
   }
 
   String? _extractAvatarUrl(String data) {
